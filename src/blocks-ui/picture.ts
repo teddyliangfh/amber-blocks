@@ -1,6 +1,7 @@
 import { clusters, groupSize } from '../core';
 import type { BenchState, Cell, Hue, UnitId } from '../core';
 import { hueFor } from '../content';
+import { mergedClusters } from './merge';
 
 export interface PicturedBlock {
   readonly unitId: UnitId;
@@ -25,7 +26,9 @@ function isHead(cell: Cell, cells: ReadonlyArray<Cell>): boolean {
 // What a finished mat looks like, coloured the way the stage colours it: a
 // partner in its own number's colour, loose blocks in the colour of the
 // cluster they make (AC-37), one face per partner or cluster on its top-left
-// block. Pure, so the album can draw a mat without the stage's gestures.
+// block; pieces joined into one number are that number's one character, as on
+// a right mat (Phase 20 F1: the 8 brick is one cyan 8). Pure, so the album can
+// draw a mat without the stage's gestures.
 export function pictureOf(state: BenchState): Picture {
   const grouped = new Map<UnitId, { readonly hue: Hue; readonly cells: ReadonlyArray<Cell> }>();
   for (const g of state.groups.values()) {
@@ -39,6 +42,13 @@ export function pictureOf(state: BenchState): Picture {
     const units = c.unitIds.filter((u) => !grouped.has(u));
     const entry = { hue: hueFor(units.length), cells: units.map((u) => state.bench.get(u) as Cell) };
     units.forEach((u) => loose.set(u, entry));
+  }
+  for (const c of mergedClusters(state)) {
+    const entry = { hue: hueFor(c.total), cells: c.cells };
+    c.units.forEach((u) => {
+      grouped.set(u, entry);
+      loose.delete(u);
+    });
   }
   const blocks = [...state.bench].map(([unitId, cell]) => {
     const owner = (grouped.get(unitId) ?? loose.get(unitId)) as { readonly hue: Hue; readonly cells: ReadonlyArray<Cell> };

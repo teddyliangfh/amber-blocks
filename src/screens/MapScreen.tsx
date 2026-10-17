@@ -17,8 +17,8 @@ import { play } from './sound';
 import { ParentGate, RoundButton } from './ui';
 
 const TEXT = {
-  zh: { title: 'Amber Blocks', parent: '家长', hold: '长按进入家长区', play: '开始', next: '去下一站', album: '我的作品', sandbox: '自由玩' },
-  en: { title: 'Amber Blocks', parent: 'Parents', hold: "Press and hold for the parents' area", play: 'Play', next: 'Go to the next stop', album: 'My builds', sandbox: 'Free play' },
+  zh: { title: 'Amber Blocks', parent: '家长', hold: '按住进入家长区', play: '开始', next: '去下一站', album: '我的作品', sandbox: '自由玩', trophy: '奖杯' },
+  en: { title: 'Amber Blocks', parent: 'Parents', hold: "Press and hold for the parents' area", play: 'Play', next: 'Go to the next stop', album: 'My builds', sandbox: 'Free play', trophy: 'Trophy' },
 } as const;
 
 // The way on (2026-10-15 review H): "next stop" comes back to the map first.
@@ -211,11 +211,12 @@ function StopDot({
 }
 
 // Once every island is done (2026-10-15 review I): a string of little flags in
-// the blocks' colours with a cup in the middle, for good. Never touched.
-function Trophy() {
+// the blocks' colours with a cup in the middle, for good. Tapping it opens the
+// last island's page again, its crowd and boss work (Phase 20 Q9).
+function Trophy({ label, onPress }: { readonly label: string; readonly onPress: () => void }) {
   const flags = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10'];
   return (
-    <View pointerEvents="none" style={styles.trophy} testID="map-trophy">
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.trophy} testID="map-trophy">
       <View style={styles.bunting}>
         <View style={styles.string} />
         {flags.map((h, i) => (
@@ -231,7 +232,7 @@ function Trophy() {
         <View style={styles.cupStem} />
         <View style={styles.cupBase} />
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -460,7 +461,7 @@ export function MapScreen() {
           );
         })}
         {/* At the end of the last trail, where the map rests once everything is done. */}
-        {allDone ? <Trophy /> : null}
+        {allDone ? <Trophy label={text.trophy} onPress={() => router.replace({ pathname: '/island/[chapterId]', params: { chapterId: CHAPTERS[CHAPTERS.length - 1]!.id } })} /> : null}
       </ScrollView>
       {advance !== null ? (
         // On the way on, any tap goes straight to the next stop.
@@ -468,9 +469,8 @@ export function MapScreen() {
       ) : null}
       <View style={[styles.bottomBar, { bottom: insets.bottom + 16 }]} pointerEvents={advance === null ? 'box-none' : 'none'}>
         <View style={styles.leftButtons}>
-          <View style={styles.parentButton}>
-            <ParentGate accessibilityLabel={text.parent} accessibilityHint={text.hold} testID="parent" onOpen={() => router.push('/parent')} />
-          </View>
+          {/* Quieter on the gear itself (`muted`), so its hint bubble stays solid (as in the level menu, D-073). */}
+          <ParentGate muted accessibilityLabel={text.parent} accessibilityHint={text.hold} hintAlign="start" testID="parent" onOpen={() => router.push('/parent')} />
           {/* The album, the child's own (2026-10-15 review Q): a plain tap, there once
               something is in it. Beside the gear, away from play and clear of the cup. */}
           {state.album.size > 0 ? <RoundButton label={<Icon name="album" size={32} />} size={58} accessibilityLabel={text.album} testID="album" onPress={() => router.push('/album')} /> : null}
@@ -514,7 +514,6 @@ const styles = StyleSheet.create({
   blade: { width: 6, borderRadius: 3, backgroundColor: '#7CC765', transformOrigin: '50% 100%' },
   bottomBar: { position: 'absolute', left: 20, right: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   // The parents' corner stays quiet next to the big play button.
-  parentButton: { opacity: 0.85 },
   leftButtons: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   rightButtons: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   trophy: { alignItems: 'center', marginTop: -4, marginBottom: 8 },

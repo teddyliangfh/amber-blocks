@@ -9,7 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { materialize, nodeId, sandboxMaterial } from '../content';
 import type { ProgressState } from '../progress';
-import { STORAGE_KEY, createInitialState, deserialize, memoryStorage, reduce, serialize } from '../progress';
+import { RESET_BACKUP_KEY, STORAGE_KEY, createInitialState, deserialize, memoryStorage, reduce, serialize } from '../progress';
 import ch1Finished from '../progress/__fixtures__/archive-v1-phase11-ch1-finished.json';
 import { ParentScreen } from './ParentScreen';
 import { ProgressProvider } from './progress-store';
@@ -162,5 +162,41 @@ describe('reset progress (2026-10-15 review Q)', () => {
       });
     }
     expect(deserialize((await storage.getItem(STORAGE_KEY))!)!.sandbox).toBeNull();
+  });
+
+  test('Phase 20 Q10: clearing is the plain button under the question, cancel the bright one; the cleared archive is kept aside and can come back before leaving', async () => {
+    let s: ProgressState = createInitialState(3);
+    const e = reduce(s, { type: 'enter', nodeId: nodeId('ch1-n1') });
+    const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId('ch1-n1'), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
+    s = c.ok ? c.value : s;
+    const before = serialize(s);
+    const storage = memoryStorage({ [STORAGE_KEY]: before });
+    await open('', storage);
+    const click = async (id: string) => act(async () => (container.querySelector(`[data-testid="${id}"]`) as HTMLElement).click());
+    const settle = async () => {
+      for (let i = 0; i < 3; i += 1) {
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+      }
+    };
+    await click('reset');
+    const confirm = container.querySelector('[data-testid="reset-confirm"]')!;
+    // The question first, then cancel, then clear; cancel is the bright (accent) one.
+    expect(confirm.textContent).toBe('确定要清空所有进度？作品册也会一起清空。取消清空');
+    const bg = (id: string) => getComputedStyle(container.querySelector(`[data-testid="${id}"]`) as HTMLElement).backgroundColor;
+    expect(bg('reset-no')).not.toBe(bg('reset-yes'));
+    expect(bg('reset-yes')).toBe('rgb(255, 255, 255)');
+    expect(text('reset-undo')).toBeNull();
+    await click('reset-yes');
+    await settle();
+    expect(deserialize((await storage.getItem(STORAGE_KEY))!)!.completedNodeIds.size).toBe(0);
+    expect(await storage.getItem(RESET_BACKUP_KEY)).toBe(before);
+    expect(text('reset-undo')).toBe('撤销清空');
+    expect(text('reset-cleared')).toContain('还可以撤销');
+    await click('reset-undo');
+    await settle();
+    expect(deserialize((await storage.getItem(STORAGE_KEY))!)!.completedNodeIds.has(nodeId('ch1-n1'))).toBe(true);
+    expect(text('reset-undo')).toBeNull();
   });
 });

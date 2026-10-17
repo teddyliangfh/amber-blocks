@@ -35,6 +35,9 @@ interface ProgressContextValue {
   readonly state: ProgressState | null;
   readonly dispatch: (cmd: ProgressCommand) => ProgressResult<ProgressState>;
   readonly reset: () => Promise<void>;
+  // Parent action, right after a reset: bring back what was cleared (Phase 20
+  // Q10). False when there is nothing to bring back.
+  readonly undoReset: () => boolean;
   readonly health: StorageHealth;
   // Parent action: read the archive again, e.g. after a private-mode or permission glitch.
   readonly retryLoad: () => Promise<void>;
@@ -115,8 +118,11 @@ export function ProgressProvider({ children, storage = defaultStorage }: { reado
     return r;
   }, []);
 
+  // What the last reset cleared, until it is brought back or the app closes.
+  const cleared = useRef<ProgressState | null>(null);
   const reset = useCallback(async () => {
     // Progress starts over; the parent's language choice stays (2026-10-16 review L-3).
+    cleared.current = latest.current;
     const fresh = { ...createInitialState(drawSeed()), language: latest.current?.language ?? 'zh' };
     latest.current = fresh;
     setState(fresh);
@@ -131,6 +137,20 @@ export function ProgressProvider({ children, storage = defaultStorage }: { reado
     }
   }, []);
 
+  const undoReset = useCallback((): boolean => {
+    const back = cleared.current;
+    if (back === null) {
+      return false;
+    }
+    cleared.current = null;
+    latest.current = back;
+    setState(back);
+    if (persist.current) {
+      saver.current?.save(back);
+    }
+    return true;
+  }, []);
+
   const retryLoad = useCallback(async () => {
     const r = await loadArchive(storage, drawSeed());
     if (r.persist) {
@@ -140,7 +160,7 @@ export function ProgressProvider({ children, storage = defaultStorage }: { reado
     }
   }, [storage, adopt]);
 
-  const value = useMemo(() => ({ state, dispatch, reset, health, retryLoad }), [state, dispatch, reset, health, retryLoad]);
+  const value = useMemo(() => ({ state, dispatch, reset, undoReset, health, retryLoad }), [state, dispatch, reset, undoReset, health, retryLoad]);
   return <ProgressContext.Provider value={value}>{children}</ProgressContext.Provider>;
 }
 

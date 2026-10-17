@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 import { cell as gridCell, clusters, groupSize } from '../core';
 import type { BenchState, Cell, Command, Group, GroupId, UnitId } from '../core';
 import { hueFor } from '../content';
-import { cellToPx, countTarget, footprintOf, resolveDrop } from './layout';
-import type { Rect, StageGeometry } from './layout';
+import { cellToPx, countTarget, footprintOf, labelSpot, resolveDrop, settleOrigin } from './layout';
+import type { Footprint, Rect, StageGeometry } from './layout';
 import type { CheerMove } from './cheer';
 import { DemoHand } from './DemoHand';
 import type { Mood } from './Face';
@@ -14,8 +14,11 @@ import { Spotlight } from './Spotlight';
 import { planTray, trayView } from './tray';
 import type { TrayObject } from './tray';
 import { useCheer, useWheels } from './juice';
+import { MERGE_BLINK_MS, MERGE_ON, MERGE_SEAM_MS, mergedClusters } from './merge';
+import type { MergedCluster } from './merge';
 import { THEME, colorsFor } from './palette';
-import { PartnerView } from './PartnerView';
+import { NumberBadge, PartnerView } from './PartnerView';
+import type { Badge } from './PartnerView';
 import { UnitView } from './UnitView';
 import type { DropResult, Translation } from './use-draggable';
 
@@ -39,6 +42,9 @@ export interface StageProps {
   // Would the core accept it? Drives the snap preview only.
   readonly onPreview: (cmd: Command) => boolean;
   readonly onTapUnit: (unitId: UnitId) => void;
+  // A block or partner waiting in the tray was tapped: it hops, and this hears
+  // its number (1 for a block) to say (Phase 20 Q11). Never a count, never a move.
+  readonly onTapTray?: (n: number) => void;
   // A finger is dragging something (true), or let go (false).
   readonly onDragActive?: (active: boolean) => void;
   // What a hand just felt, for sound: lifted something, set it on the bench,
@@ -63,7 +69,65 @@ export interface StageProps {
   // What the blocks on the mat do on a solve (cheer.ts). 'tall-wave' is 17's
   // big partner's alone; the others hop beside it. 'car' puts wheels under the lot.
   readonly cheer?: CheerMove;
+  // Joined pieces show as one number character (merge.ts): the screen says
+  // when (MERGE_ON). A finger pulling a piece away splits its character at once.
+  readonly merge?: boolean;
+  // A character is joining: the parts it is made of and its total, for the join sound.
+  readonly onJoin?: (parts: ReadonlyArray<number>, total: number) => void;
+  // Numbers that pop up above a block for a moment (free play: a group of blocks
+  // just changed size). `tick` makes each one new.
+  readonly bubbles?: ReadonlyArray<{ readonly at: Cell; readonly n: number; readonly tick: number }>;
 }
+
+// A seam between two joining pieces, lit for a moment (merge.ts MERGE_SEAM_MS).
+function SeamGlow({ rect }: { readonly rect: Rect }) {
+  const o = useSharedValue(0);
+  useEffect(() => {
+    o.set(withSequence(withTiming(1, { duration: MERGE_SEAM_MS * 0.45 }), withTiming(0.3, { duration: MERGE_SEAM_MS * 0.55 })));
+  }, [o]);
+  const lit = useAnimatedStyle(() => ({ opacity: o.get() }));
+  return <Animated.View pointerEvents="none" testID="merge-seam" style={[styles.seam, { left: rect.x, top: rect.y, width: rect.width, height: rect.height, borderRadius: Math.min(rect.width, rect.height) / 2 }, lit]} />;
+}
+
+// How long a free-play number bubble stays up.
+export const BUBBLE_MS = 800;
+
+// A number popping up above a block for BUBBLE_MS, in the partner badge's look.
+// Reduced motion: it only fades in and out.
+function NumberBubble({ x, y, size, n, color }: { readonly x: number; readonly y: number; readonly size: number; readonly n: number; readonly color: string }) {
+  const reduced = useReducedMotion();
+  const o = useSharedValue(0);
+  const rise = useSharedValue(0);
+  useEffect(() => {
+    o.set(withSequence(withTiming(1, { duration: 120 }), withTiming(1, { duration: BUBBLE_MS - 320 }), withTiming(0, { duration: 200 })));
+    if (!reduced) {
+      rise.set(withTiming(-size * 0.4, { duration: 240 }));
+    }
+  }, [o, rise, reduced, size]);
+  const shown = useAnimatedStyle(() => ({ opacity: o.get(), transform: [{ translateY: rise.get() }] }));
+  return (
+    <Animated.View pointerEvents="none" testID="number-bubble" style={[{ position: 'absolute', left: x, top: y, width: size * 2, height: size }, shown]}>
+      <NumberBadge badge={{ left: 0, top: 0, size, n }} color={color} testID={`number-bubble-${n}`} />
+    </Animated.View>
+  );
+}
+
+// How a piece looks: as itself, or as part of a joined character.
+interface Look {
+  readonly colors?: ReturnType<typeof colorsFor>;
+  // Face on this cell of the mat, or none (null); left out: its own.
+  readonly faceCell?: Cell | null;
+  readonly badge?: Badge | null;
+  readonly plateAround?: ReadonlyArray<Cell>;
+  readonly pivot?: { readonly x: number; readonly y: number };
+  readonly index?: number;
+  readonly look?: number;
+  readonly wink?: number;
+  // The solve's move waits while the character is still joining.
+  readonly hold?: boolean;
+}
+
+type Intro = { readonly keys: ReadonlySet<string>; readonly phase: 'seam' | 'blink'; readonly tick: number };
 
 // The 8 brick's wheels, under whatever sits on the mat, along for the drive.
 function CarWheels({ box, cell, tick }: { readonly box: Rect; readonly cell: number; readonly tick: number }) {
@@ -102,8 +166,18 @@ function headOf(cells: ReadonlyArray<Cell>): Cell {
   return cells.reduce((best, c) => (c.y < best.y || (c.y === best.y && c.x < best.x) ? c : best));
 }
 
-export function Stage({ state, geometry, trayObjects, enabled, countOrder, matched, mood: moodOf, celebrateTick, onCommand, onPreview, onTapUnit, onDragActive, onFeel, spotlight = [], demo = 0, demoPiece, demoTo: demoCell, wink = 0, trayHidden = false, cheer = 'hop' }: StageProps) {
+export function Stage({ state, geometry, trayObjects, enabled, countOrder, matched, mood: moodOf, celebrateTick, onCommand, onPreview, onTapUnit, onTapTray, onDragActive, onFeel, spotlight = [], demo = 0, demoPiece, demoTo: demoCell, wink = 0, trayHidden = false, cheer = 'hop', merge = false, onJoin, bubbles = [] }: StageProps) {
   const [preview, setPreview] = useState<Preview | null>(null);
+  // The last thing tapped in the tray, and its hop. Ticks count down from -1
+  // so they never match a solve's (useCheer plays each tick once).
+  const [poke, setPoke] = useState<{ readonly id: string; readonly tick: number } | null>(null);
+  const pokeTray = useCallback(
+    (id: string, n: number) => {
+      setPoke((p) => ({ id, tick: (p?.tick ?? 0) - 1 }));
+      onTapTray?.(n);
+    },
+    [onTapTray],
+  );
   const clearPreview = useCallback(() => setPreview(null), []);
   // The first moments of a stop: everything drops in. Later mounts (a block
   // leaving a partner) just appear where they are.
@@ -122,6 +196,71 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
     },
     [onFeel, onDragActive],
   );
+
+  // Joined characters (merge.ts). The piece a finger holds splits its own
+  // character at once. `view` is what is drawn joined, and the one joining now
+  // (its seams lit, then its faces turned to each other, blinking); `truth`
+  // holds the same, ahead of the drawing, so the timers never act twice.
+  const reduced = useReducedMotion();
+  const [lifted, setLifted] = useState<string | null>(null);
+  const merged = useMemo(() => (merge ? mergedClusters(state) : []), [merge, state]);
+  const wanted = useMemo(() => merged.filter((c) => lifted === null || !c.pieces.some((p) => p.id === lifted)), [merged, lifted]);
+  const [view, setView] = useState<{ readonly joined: ReadonlySet<string>; readonly intro: Intro | null }>(() => ({ joined: new Set(wanted.map((c) => c.key)), intro: null }));
+  const truth = useRef(view);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // The solve whose joining has played (each solve plays it once; the
+  // character joining again after a drag just changes colour).
+  const playedFor = useRef(celebrateTick);
+  const introTicks = useRef(0);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  useEffect(() => {
+    const now = truth.current;
+    const keys = new Set(wanted.map((c) => c.key));
+    const broken = now.intro !== null && [...now.intro.keys].some((k) => !keys.has(k));
+    const joined = new Set([...now.joined].filter((k) => keys.has(k)));
+    const intro = broken ? null : now.intro;
+    const pending = wanted.filter((c) => !joined.has(c.key) && !(intro?.keys.has(c.key) ?? false));
+    if (!broken && joined.size === now.joined.size && pending.length === 0) {
+      return;
+    }
+    const later = (ms: number, next: () => typeof now) => {
+      timers.current.push(
+        setTimeout(() => {
+          truth.current = next();
+          setView(truth.current);
+        }, ms),
+      );
+    };
+    if (broken) {
+      timers.current.forEach(clearTimeout);
+      timers.current = [];
+    }
+    const fresh = pending.length > 0 && (MERGE_ON === 'touch' || (celebrateTick > 0 && celebrateTick !== playedFor.current));
+    if (fresh) {
+      playedFor.current = celebrateTick;
+    }
+    if (!fresh || reduced) {
+      // Joining again (or no motion): straight to one character.
+      pending.forEach((c) => joined.add(c.key));
+      truth.current = { joined, intro };
+      later(0, () => truth.current);
+      if (fresh) {
+        onJoin?.(pending[0]!.parts, pending[0]!.total);
+      }
+      return;
+    }
+    const keysJoining = new Set(pending.map((c) => c.key));
+    introTicks.current -= 1;
+    const seam: Intro = { keys: keysJoining, phase: 'seam', tick: introTicks.current };
+    truth.current = { joined, intro: seam };
+    later(0, () => truth.current);
+    later(MERGE_SEAM_MS, () => {
+      // The join sound runs with the faces: its last, total note lands as the colours run into one.
+      onJoin?.(pending[0]!.parts, pending[0]!.total);
+      return { ...truth.current, intro: truth.current.intro === null ? null : { ...truth.current.intro, phase: 'blink' } };
+    });
+    later(MERGE_SEAM_MS + MERGE_BLINK_MS, () => ({ joined: new Set([...truth.current.joined, ...keysJoining]), intro: null }));
+  }, [wanted, celebrateTick, reduced, onJoin]);
   const felt = useCallback(
     (result: DropResult, landing: 'bench' | 'tray' | 'none'): DropResult => {
       onFeel?.(feelOf(result, landing));
@@ -169,6 +308,29 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
     return { benchPartners, looseOnBench, clusterOf, order };
   }, [state]);
 
+  // Where a piece let go comes to rest (layout settleOrigin): there, else the
+  // nearest free spot within a cell, a partner preferring one beside another.
+  const settleAt = useCallback(
+    (origin: Cell, footprint: Footprint, accepts: (o: Cell) => boolean, beside?: (o: Cell) => boolean): Cell | null =>
+      settleOrigin(origin, footprint, geometry.bench.cols, geometry.bench.rows, accepts, beside),
+    [geometry],
+  );
+  // Would the partner's cells at `origin` touch another partner on the bench?
+  const besidePartner = useCallback(
+    (group: Group, offsets: ReadonlyArray<Cell>) => (origin: Cell) => {
+      const mine = offsets.map((o) => ({ x: origin.x + o.x, y: origin.y + o.y }));
+      return [...state.groups.values()].some(
+        (g) => g.id !== group.id && allOnBench(state, g) && g.unitIds.some((u) => {
+          const c = state.bench.get(u)!;
+          return mine.some((m) => Math.abs(m.x - c.x) + Math.abs(m.y - c.y) === 1);
+        }),
+      );
+    },
+    [state],
+  );
+
+  const unitCommand = (unitId: UnitId, onBench: boolean, to: Cell): Command => (onBench ? { type: 'move', unitId, to } : { type: 'take', unitId, to });
+
   const dropUnit = useCallback(
     (unitId: UnitId, rest: { x: number; y: number }, onBench: boolean, t: Translation): DropResult => {
       setPreview(null);
@@ -180,13 +342,20 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
         return felt(onBench ? (onCommand({ type: 'return', unitId }) ? 'moved' : 'rejected') : 'same', 'tray');
       }
       const current = state.bench.get(unitId);
-      if (current !== undefined && current.x === target.origin.x && current.y === target.origin.y) {
+      const same = (c: Cell) => current !== undefined && current.x === c.x && current.y === c.y;
+      if (same(target.origin)) {
         return felt('same', 'bench');
       }
-      const cmd: Command = onBench ? { type: 'move', unitId, to: target.origin } : { type: 'take', unitId, to: target.origin };
-      return felt(onCommand(cmd) ? 'moved' : 'blocked', 'bench');
+      const at = settleAt(target.origin, { w: 1, h: 1 }, (o) => onPreview(unitCommand(unitId, onBench, o)));
+      if (at === null) {
+        return felt('blocked', 'bench');
+      }
+      if (same(at)) {
+        return felt('same', 'bench');
+      }
+      return felt(onCommand(unitCommand(unitId, onBench, at)) ? 'moved' : 'blocked', 'bench');
     },
-    [geometry, onCommand, state.bench, felt],
+    [geometry, onCommand, onPreview, state.bench, felt, settleAt],
   );
 
   const previewUnit = useCallback(
@@ -196,10 +365,10 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
         setPreview(null);
         return;
       }
-      const cmd: Command = onBench ? { type: 'move', unitId, to: target.origin } : { type: 'take', unitId, to: target.origin };
-      setPreview(onPreview(cmd) ? { cells: [target.origin] } : null);
+      const at = settleAt(target.origin, { w: 1, h: 1 }, (o) => onPreview(unitCommand(unitId, onBench, o)));
+      setPreview(at === null ? null : { cells: [at] });
     },
-    [geometry, onPreview],
+    [geometry, onPreview, settleAt],
   );
 
   const dropPartner = useCallback(
@@ -213,16 +382,22 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
       if (target.kind === 'tray') {
         return felt(onBench ? (onCommand({ type: 'returnGroup', groupId: group.id }) ? 'moved' : 'rejected') : 'same', 'tray');
       }
-      if (!onBench) {
-        return felt(onCommand({ type: 'takeGroup', groupId: group.id, origin: target.origin }) ? 'moved' : 'blocked', 'bench');
-      }
-      const delta = { x: target.origin.x - offsets.origin.x, y: target.origin.y - offsets.origin.y };
-      if (delta.x === 0 && delta.y === 0) {
+      const command = (o: Cell): Command =>
+        onBench ? { type: 'moveGroup', groupId: group.id, delta: { x: o.x - offsets.origin.x, y: o.y - offsets.origin.y } } : { type: 'takeGroup', groupId: group.id, origin: o };
+      const same = (o: Cell) => onBench && o.x === offsets.origin.x && o.y === offsets.origin.y;
+      if (same(target.origin)) {
         return felt('same', 'bench');
       }
-      return felt(onCommand({ type: 'moveGroup', groupId: group.id, delta }) ? 'moved' : 'blocked', 'bench');
+      const at = settleAt(target.origin, offsets.footprint, (o) => onPreview(command(o)), besidePartner(group, offsets.offsets));
+      if (at === null) {
+        return felt('blocked', 'bench');
+      }
+      if (same(at)) {
+        return felt('same', 'bench');
+      }
+      return felt(onCommand(command(at)) ? 'moved' : 'blocked', 'bench');
     },
-    [geometry, onCommand, state.bench, felt],
+    [geometry, onCommand, onPreview, state.bench, felt, settleAt, besidePartner],
   );
 
   const previewPartner = useCallback(
@@ -233,12 +408,12 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
         setPreview(null);
         return;
       }
-      const cmd: Command = onBench
-        ? { type: 'moveGroup', groupId: group.id, delta: { x: target.origin.x - offsets.origin.x, y: target.origin.y - offsets.origin.y } }
-        : { type: 'takeGroup', groupId: group.id, origin: target.origin };
-      setPreview(onPreview(cmd) ? { cells: offsets.offsets.map((o) => ({ x: target.origin.x + o.x, y: target.origin.y + o.y })) } : null);
+      const command = (o: Cell): Command =>
+        onBench ? { type: 'moveGroup', groupId: group.id, delta: { x: o.x - offsets.origin.x, y: o.y - offsets.origin.y } } : { type: 'takeGroup', groupId: group.id, origin: o };
+      const at = settleAt(target.origin, offsets.footprint, (o) => onPreview(command(o)), besidePartner(group, offsets.offsets));
+      setPreview(at === null ? null : { cells: offsets.offsets.map((o) => ({ x: at.x + o.x, y: at.y + o.y })) });
     },
-    [geometry, onPreview, state.bench],
+    [geometry, onPreview, state.bench, settleAt, besidePartner],
   );
 
   const { cell, bench, tray: trayRect } = geometry;
@@ -290,6 +465,60 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
   // One array per kind, keyed by identity, so a block keeps its view (and its
   // momentum) when it moves between the tray and the bench: it flies and lands
   // instead of vanishing from one list and appearing in the other.
+  // Each piece on the mat as part of a joined character: one colour, one face,
+  // one badge, one plate, moving as one about the character's middle.
+  const { looks, seams } = useMemo(() => {
+    const out = new Map<string, Look>();
+    const lit: { key: string; rect: Rect }[] = [];
+    wanted.forEach((c: MergedCluster) => {
+      const joined = view.joined.has(c.key);
+      const intro = view.intro !== null && view.intro.keys.has(c.key) ? view.intro : null;
+      const index = Math.min(...c.pieces.map((p) => model.order.get(p.id) ?? 0));
+      const centre = { x: c.origin.x + c.width / 2, y: c.origin.y + c.height / 2 };
+      const cluster = c.cells.map((x) => ({ x: x.x - c.origin.x, y: x.y - c.origin.y }));
+      const spot = labelSpot(cluster, cell);
+      const top = Math.min(...c.cells.map((x) => x.y));
+      const tail = c.cells.filter((x) => x.y === top).reduce((a, b) => (b.x > a.x ? b : a));
+      for (const piece of c.pieces) {
+        const at = footprintOf(piece.units.map((u) => state.bench.get(u)!)).origin;
+        const holdsTail = piece.units.some((u) => {
+          const x = state.bench.get(u)!;
+          return x.x === tail.x && x.y === tail.y;
+        });
+        if (joined) {
+          out.set(piece.id, {
+            colors: colorsFor(hueFor(c.total)),
+            faceCell: c.head,
+            badge: holdsTail ? { left: spot.left - (at.x - c.origin.x) * cell, top: spot.top - (at.y - c.origin.y) * cell, size: spot.size, n: c.total } : null,
+            plateAround: c.cells.map((x) => ({ x: x.x - at.x, y: x.y - at.y })),
+            pivot: { x: (centre.x - at.x) * cell, y: (centre.y - at.y) * cell },
+            index,
+          });
+        } else if (intro !== null) {
+          const mid = footprintOf(piece.units.map((u) => state.bench.get(u)!));
+          const pieceCentre = mid.origin.x + mid.footprint.w / 2;
+          out.set(piece.id, { hold: true, look: intro.phase === 'blink' ? Math.sign(centre.x - pieceCentre) : 0, wink: intro.phase === 'blink' ? intro.tick : undefined });
+        }
+      }
+      if (intro !== null && intro.phase === 'seam') {
+        const bar = Math.max(4, Math.round(cell * 0.14));
+        c.seams.forEach(([a, b], i) => {
+          const p = cellToPx(geometry, b);
+          lit.push({
+            key: `${c.key}#${i}`,
+            rect: a.x !== b.x ? { x: p.x - bar / 2, y: p.y + cell * 0.14, width: bar, height: cell * 0.72 } : { x: p.x + cell * 0.14, y: p.y - bar / 2, width: cell * 0.72, height: bar },
+          });
+        });
+      }
+    });
+    return { looks: out, seams: lit };
+  }, [wanted, view, model, state, cell, geometry]);
+  // The piece a finger holds, for its character to split.
+  const holding = (id: string) => (active: boolean) => {
+    setLifted(active ? id : null);
+    onActive(active);
+  };
+
   const units = [
     ...tray.units.map(({ unitId, spot: p }, i) => {
       const rest = { x: p.x, y: p.y };
@@ -302,7 +531,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
           face
           mood="sleepy"
           countIndex={null}
-          celebrateTick={0}
+          celebrateTick={poke?.id === unitId ? poke.tick : 0}
           index={0}
           drag={{
             rest,
@@ -314,6 +543,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
             onDrop: (t) => dropUnit(unitId, rest, false, t),
             onMove: (t) => previewUnit(unitId, rest, false, t),
             onCancel: clearPreview,
+            onTap: () => pokeTray(unitId, 1),
             onActive,
           }}
         />
@@ -326,18 +556,24 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
       const size = info?.size ?? 1;
       const isHead = info !== undefined && info.head.x === c.x && info.head.y === c.y;
       const order = model.order.get(unitId as string) ?? 0;
+      const look = looks.get(unitId as string);
+      const joined = look?.colors !== undefined;
       return (
         <UnitView
           key={unitId as string}
           size={cell}
-          colors={colorsFor(hueFor(size))}
-          face={isHead}
+          colors={look?.colors ?? colorsFor(hueFor(size))}
+          face={look?.faceCell === undefined ? isHead : look.faceCell !== null && look.faceCell.x === c.x && look.faceCell.y === c.y}
           mood={mood}
           countIndex={countOrder.get(unitId) ?? null}
-          celebrateTick={celebrateTick}
-          cheer={cheer === 'tall-wave' ? 'hop' : cheer}
-          wink={countOrder.has(unitId) ? wink : 0}
-          index={order}
+          celebrateTick={look?.hold === true ? 0 : celebrateTick}
+          cheer={cheer === 'tall-wave' && !joined ? 'hop' : cheer}
+          wink={look?.wink ?? (countOrder.has(unitId) ? wink : 0)}
+          index={look?.index ?? order}
+          badge={look?.badge ?? null}
+          plateAround={look?.plateAround}
+          look={look?.look ?? 0}
+          pivot={look?.pivot}
           drag={{
             rest,
             restScale: 1,
@@ -349,7 +585,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
             onMove: (t) => previewUnit(unitId, rest, true, t),
             onCancel: clearPreview,
             onTap: (point) => tapAt(unitId, rest, point),
-            onActive,
+            onActive: holding(unitId as string),
           }}
         />
       );
@@ -366,7 +602,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
           colors={colorsFor(hueFor(groupSize(group)))}
           label={groupSize(group)}
           mood="calm"
-          celebrateTick={0}
+          celebrateTick={poke?.id === group.id ? poke.tick : 0}
           index={0}
           drag={{
             rest,
@@ -378,6 +614,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
             onDrop: (t) => dropPartner(group, rest, false, t),
             onMove: (t) => previewPartner(group, rest, false, t),
             onCancel: clearPreview,
+            onTap: () => pokeTray(group.id, groupSize(group)),
             onActive,
           }}
         />
@@ -387,20 +624,28 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
       const fp = footprintOf(group.unitIds.map((u) => state.bench.get(u) as Cell));
       const rest = cellToPx(geometry, fp.origin);
       const order = model.order.get(group.id as string) ?? 0;
+      const look = looks.get(group.id as string);
+      const joined = look?.colors !== undefined;
+      const cells = group.unitIds.map((u) => state.bench.get(u) as Cell);
       return (
         <PartnerView
           key={partnerKey(group.id)}
           cell={cell}
           offsets={fp.offsets}
           counts={group.unitIds.map((u) => countOrder.get(u) ?? null)}
-          wink={group.unitIds.some((u) => countOrder.has(u)) ? wink : 0}
+          wink={look?.wink ?? (group.unitIds.some((u) => countOrder.has(u)) ? wink : 0)}
           onTapBlock={(i, point) => tapAt(group.unitIds[i] ?? null, rest, point)}
-          colors={colorsFor(hueFor(groupSize(group)))}
+          colors={look?.colors ?? colorsFor(hueFor(groupSize(group)))}
           label={groupSize(group)}
           mood={mood}
-          celebrateTick={celebrateTick}
-          cheer={cheer === 'tall-wave' && groupSize(group) < 10 ? 'hop' : cheer}
-          index={order}
+          celebrateTick={look?.hold === true ? 0 : celebrateTick}
+          cheer={cheer === 'tall-wave' && groupSize(group) < 10 && !joined ? 'hop' : cheer}
+          index={look?.index ?? order}
+          faceAt={look?.faceCell === undefined ? undefined : look.faceCell === null ? -1 : cells.findIndex((x) => x.x === look.faceCell!.x && x.y === look.faceCell!.y)}
+          badge={look?.badge}
+          plateAround={look?.plateAround}
+          look={look?.look ?? 0}
+          pivot={look?.pivot}
           drag={{
             rest,
             restScale: 1,
@@ -411,7 +656,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
             onDrop: (t) => dropPartner(group, rest, true, t),
             onMove: (t) => previewPartner(group, rest, true, t),
             onCancel: clearPreview,
-            onActive,
+            onActive: holding(group.id as string),
           }}
         />
       );
@@ -484,7 +729,8 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
         return <View key={`p${c.x},${c.y}`} style={[styles.preview, { left: p.x + 3, top: p.y + 3, width: cell - 6, height: cell - 6, borderRadius: slotRadius(cell - 6) }]} />;
       })}
 
-      {cheer === 'car' && celebrateTick > 0 && state.bench.size > 0 ? (
+      {/* The wheels wait for the brick to finish joining, then drive with it. */}
+      {cheer === 'car' && celebrateTick > 0 && state.bench.size > 0 && view.intro === null ? (
         <CarWheels
           key={celebrateTick}
           tick={celebrateTick}
@@ -498,6 +744,14 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
       ) : null}
       {units}
       {partners}
+      {seams.map((x) => (
+        <SeamGlow key={x.key} rect={x.rect} />
+      ))}
+      {bubbles.map((b) => {
+        const at = cellToPx(geometry, b.at);
+        const size = Math.max(18, Math.round(cell * 0.5));
+        return <NumberBubble key={`b${b.tick}-${b.at.x},${b.at.y}`} x={at.x + (cell - size) / 2} y={at.y - size * 0.8} size={size} n={b.n} color={colorsFor(hueFor(b.n)).deep} />;
+      })}
 
       {demo > 0 && demoFrom !== null && demoTo !== null ? (
         <DemoHand key={demo} from={demoFrom.at} to={demoTo} cell={cell} colors={demoFrom.colors} cells={demoFrom.cells} fromScale={demoFrom.scale} />
@@ -541,5 +795,7 @@ const styles = StyleSheet.create({
   emptySlot: { position: 'absolute', backgroundColor: 'rgba(201,148,79,0.22)', borderWidth: 1.5, borderColor: 'rgba(201,148,79,0.35)', boxShadow: 'inset 0 3px 0 rgba(120,80,30,0.16)' },
   preview: { position: 'absolute', backgroundColor: THEME.previewFill, borderWidth: 2, borderColor: THEME.preview, borderStyle: 'dashed' },
   wheels: { position: 'absolute' },
+  // A seam lighting up as two pieces join: a soft white bar.
+  seam: { position: 'absolute', backgroundColor: '#FFFFFF', boxShadow: '0 0 8px 3px rgba(255,255,255,0.9)' },
   wheel: { position: 'absolute', top: 0, backgroundColor: '#5A5F6B', borderColor: '#2E323B' },
 });

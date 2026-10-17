@@ -1,7 +1,7 @@
-import { countPitch, createAudioSfx, createSilentSfx, notesFor } from './sfx';
+import { JOIN_STEP, countPitch, createAudioSfx, createSilentSfx, notesFor } from './sfx';
 import type { SfxName } from './sfx';
 
-const NAMES: ReadonlyArray<SfxName> = ['pickup', 'drop', 'return', 'blocked', 'count', 'counted', 'adjust', 'success', 'fanfare', 'arrive', 'tap'];
+const NAMES: ReadonlyArray<SfxName> = ['pickup', 'drop', 'return', 'blocked', 'count', 'counted', 'adjust', 'success', 'fanfare', 'arrive', 'tap', 'join'];
 
 function fakeContext(state = 'suspended') {
   const started: { f: number; at: number }[] = [];
@@ -121,3 +121,22 @@ test('unlock creates the context once and resumes it only when needed', () => {
   expect(made).toBe(1);
   expect(ctx.resumed).toBe(1);
 });
+
+test('Phase 20 F1: a join plays each part\'s counting note in turn, then the total\'s, longer, with its octave on top', () => {
+  const notes = notesFor('join', 7, [3, 4]);
+  expect(notes.map((n) => n.f)).toEqual([countPitch(3), countPitch(4), countPitch(7), countPitch(7) * 2]);
+  expect(notes[1]!.at).toBeCloseTo(JOIN_STEP);
+  expect(notes[2]!.at).toBeCloseTo(2 * JOIN_STEP);
+  expect(notes[2]!.dur).toBeGreaterThan(notes[0]!.dur);
+  // The total is the last thing heard.
+  expect(Math.max(...notes.map((n) => n.at))).toBeGreaterThanOrEqual(notes[2]!.at);
+  // Three parts (17 = 10 + 5 + 2): three notes, then 17.
+  expect(notesFor('join', 17, [10, 5, 2]).map((n) => n.f).slice(0, 3)).toEqual([countPitch(10), countPitch(5), countPitch(2)]);
+  // Played with its parts.
+  const { ctx, started } = fakeContext('running');
+  const sfx = createAudioSfx(() => ctx);
+  sfx.unlock();
+  sfx.play('join', 2, [1, 1]);
+  expect(started.map((n) => n.f)).toEqual([countPitch(1), countPitch(1), countPitch(2), countPitch(2) * 2]);
+});
+

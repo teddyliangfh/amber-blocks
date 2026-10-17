@@ -14,7 +14,10 @@ import type { Line } from './hints';
 //   by asking (the feedback card, the help button) counts as said; so does
 //   switching language (the line is the same, only the words differ).
 // - When the answer changes after a correction was spoken, a correction that
-//   may still be queued is stopped: it no longer describes the bench.
+//   may still be queued is stopped: it no longer describes the bench. Only one
+//   that was really said (the speaker says whether it spoke): a timer that
+//   stayed silent must not cut off the help the child asked for next (Phase 20,
+//   play review Q4: "send the 4 back, bring the 3" lost its second half).
 
 export const CORRECTION_QUIET_MS = 900;
 
@@ -28,8 +31,9 @@ export interface CorrectionVoice {
   // A menu covers the stage, or a finger is dragging: nothing is said until
   // every reason is over, then the quiet wait starts again.
   readonly pause: (paused: boolean, reason?: PauseReason) => void;
-  // How a correction is said (the screen's current language). Until set, nothing is.
-  readonly setSpeaker: (speak: (line: Line) => void) => void;
+  // How a correction is said (the screen's current language), returning
+  // whether anything was said out loud. Until set, nothing is.
+  readonly setSpeaker: (speak: (line: Line) => boolean) => void;
   readonly dispose: () => void;
 }
 
@@ -43,7 +47,7 @@ export function createCorrectionVoice({ stop, quietMs = CORRECTION_QUIET_MS }: {
   readonly stop: () => void;
   readonly quietMs?: number;
 }): CorrectionVoice {
-  let speak: (line: Line) => void = () => undefined;
+  let speak: (line: Line) => boolean = () => false;
   let current: Line | null = null;
   let heardSig: string | null = null;
   let spokenSig: string | null = null;
@@ -66,8 +70,9 @@ export function createCorrectionVoice({ stop, quietMs = CORRECTION_QUIET_MS }: {
     timer = setTimeout(() => {
       timer = null;
       heardSig = signature(line);
-      spokenSig = heardSig;
-      speak(line);
+      if (speak(line)) {
+        spokenSig = heardSig;
+      }
     }, quietMs);
   };
 

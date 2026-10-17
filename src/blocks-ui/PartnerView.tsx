@@ -32,6 +32,34 @@ export interface PartnerViewProps {
   readonly wink?: number;
   // What it does on a solve (its number's move).
   readonly cheer?: CheerMove;
+  // Part of a joined character (Phase 20 F1, merge.ts): which block wears the
+  // face (-1: none), the character's badge or none (null; left out: its own
+  // number), the character's cells around it (relative to this partner, for
+  // the plate's corners), which way its face turns, and the point its move
+  // turns about (px, relative to this partner), so the pieces move as one.
+  readonly faceAt?: number;
+  readonly badge?: Badge | null;
+  readonly plateAround?: ReadonlyArray<Cell>;
+  readonly look?: number;
+  readonly pivot?: { readonly x: number; readonly y: number };
+}
+
+export interface Badge {
+  readonly left: number;
+  readonly top: number;
+  readonly size: number;
+  readonly n: number;
+}
+
+// A partner's number: white on the colour's deep shade, readable on every hue.
+// Also the joined character's total, and free play's number bubble.
+export function NumberBadge({ badge, color, testID = 'partner-label' }: { readonly badge: Badge; readonly color: string; readonly testID?: string }) {
+  const { left, top, size, n } = badge;
+  return (
+    <View pointerEvents="none" testID={testID} style={[styles.labelWrap, { left, top, minWidth: size, height: size, borderRadius: size / 2, backgroundColor: color }]}>
+      <Text style={[styles.label, { fontSize: size * 0.64, lineHeight: size * 0.86 }]}>{n}</Text>
+    </View>
+  );
 }
 
 // A partner's grip (2026-10-15 review: nothing showed that grabbing one block
@@ -39,8 +67,10 @@ export interface PartnerViewProps {
 // colour, seen in the seams between them and as a thin rim around the outline:
 // one piece, the whole of which a finger picks up. Behind the blocks, so it
 // never covers a face or a number. Corners are rounded only on the outside.
-function GripPlate({ offsets, cell, color }: { readonly offsets: ReadonlyArray<Cell>; readonly cell: number; readonly color: string }) {
-  const has = new Set(offsets.map((c) => `${c.x},${c.y}`));
+export function GripPlate({ offsets, cell, color, around = offsets }: { readonly offsets: ReadonlyArray<Cell>; readonly cell: number; readonly color: string; readonly around?: ReadonlyArray<Cell> }) {
+  // Corners round only where the whole outline does: a joined character's
+  // plates meet square, as one (`around`: all its cells, relative to these).
+  const has = new Set(around.map((c) => `${c.x},${c.y}`));
   const open = (x: number, y: number) => !has.has(`${x},${y}`);
   const r = Math.round(cell * 0.3);
   return (
@@ -78,7 +108,7 @@ export function headIndex(offsets: ReadonlyArray<Cell>): number {
   return best;
 }
 
-export function PartnerView({ cell, offsets, colors, label, mood, celebrateTick, index, drag, counts, onTapBlock, wink = 0, cheer = 'hop' }: PartnerViewProps) {
+export function PartnerView({ cell, offsets, colors, label, mood, celebrateTick, index, drag, counts, onTapBlock, wink = 0, cheer = 'hop', faceAt, badge, plateAround, look = 0, pivot }: PartnerViewProps) {
   const { gesture, style, squash, lift } = useDraggable(
     onTapBlock === undefined
       ? drag
@@ -90,8 +120,9 @@ export function PartnerView({ cell, offsets, colors, label, mood, celebrateTick,
   const hop = useCheer(cheer, celebrateTick, index);
   const width = (Math.max(...offsets.map((c) => c.x)) + 1) * cell;
   const height = (Math.max(...offsets.map((c) => c.y)) + 1) * cell;
-  const head = headIndex(offsets);
+  const head = faceAt ?? headIndex(offsets);
   const tag = labelSpot(offsets, cell);
+  const shown = badge === undefined ? { left: tag.left, top: tag.top, size: tag.size, n: label } : badge;
   return (
     <GestureDetector gesture={gesture}>
       <Animated.View testID={`partner-${label}`} style={[styles.partner, { left: drag.rest.x, top: drag.rest.y, width, height, transformOrigin: 'top left' }, style]}>
@@ -99,15 +130,12 @@ export function PartnerView({ cell, offsets, colors, label, mood, celebrateTick,
           <LiftShadow key={`s${i}`} cell={cell} x={c.x * cell} y={c.y * cell} lift={lift} />
         ))}
         <Animated.View style={[StyleSheet.absoluteFill, squash]}>
-          <Animated.View style={[StyleSheet.absoluteFill, hop]}>
-            <GripPlate offsets={offsets} cell={cell} color={colors.fill} />
+          <Animated.View style={[StyleSheet.absoluteFill, pivot === undefined ? null : { transformOrigin: `${pivot.x}px ${pivot.y}px` }, hop]}>
+            <GripPlate offsets={offsets} cell={cell} color={colors.fill} around={plateAround} />
             {offsets.map((c, i) => (
-              <BlockBody key={i} cell={cell} x={c.x * cell} y={c.y * cell} colors={colors} face={i === head} mood={mood} count={counts?.[i] ?? null} lift={lift} wink={wink} />
+              <BlockBody key={i} cell={cell} x={c.x * cell} y={c.y * cell} colors={colors} face={i === head} mood={mood} count={counts?.[i] ?? null} lift={lift} wink={wink} look={i === head ? look : 0} />
             ))}
-            {/* The partner's number: white on the colour's deep shade, readable on every hue. */}
-            <View pointerEvents="none" testID="partner-label" style={[styles.labelWrap, { left: tag.left, top: tag.top, minWidth: tag.size, height: tag.size, borderRadius: tag.size / 2, backgroundColor: colors.deep }]}>
-              <Text style={[styles.label, { fontSize: tag.size * 0.64, lineHeight: tag.size * 0.86 }]}>{label}</Text>
-            </View>
+            {shown === null ? null : <NumberBadge badge={shown} color={colors.deep} />}
           </Animated.View>
         </Animated.View>
       </Animated.View>

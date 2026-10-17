@@ -175,6 +175,10 @@ describe('free play page (2026-10-15 review O)', () => {
     expect(dimmed('sandbox-undo')).toBe(true);
     expect(mockSaid).toEqual([]);
     expect(mockSounds).toEqual([]);
+    // Phase 20 Q11: a block tapped in the box says "one"; nothing moves.
+    await act(async () => mockStage.current!.onTapTray!(1));
+    expect(mockSaid).toEqual(['一']);
+    expect(mockStage.current!.state.bench.size).toBe(0);
   });
 
   test('three in a row are one 3 with one face; pulled apart they are a 2 and a 1; never a verdict, never a right or wrong sound', async () => {
@@ -224,7 +228,9 @@ describe('free play page (2026-10-15 review O)', () => {
     await tap(ids[1]!);
     await tap(ids[2]!);
     expect(mockSaid).toEqual(['一', '二', '三', '一共 3 块']);
-    expect(mockSounds).toEqual(['count:1', 'count:2', 'counted:3']);
+    // Phase 20 F6: building the row joined its groups, each time with the join sound.
+    expect(mockSounds.filter((x) => x.startsWith('join'))).toEqual(['join:1', 'join:2', 'join:3']);
+    expect(mockSounds.filter((x) => !x.startsWith('join'))).toEqual(['count:1', 'count:2', 'counted:3']);
     expect(q('count-chip')).toBeNull();
     expect(q('recount')).not.toBeNull();
     expect(mockStage.current!.wink).toBe(1);

@@ -10,8 +10,9 @@ import { Icon } from './icons';
 
 // One look tells the state without reading: a green disc with a tick is right,
 // a white disc with a bulb ringed in amber is "here is a tip", blue is still
-// building. The bulb replaced ↻, which also meant "count again" and "play again".
-const SYMBOL = { start: '✦', building: '↗', adjust: '💡', success: '✓' } as const;
+// building. The bulb replaced ↻, which also meant "count again" and "play again";
+// it is drawn (Icon), not the 💡 emoji, which looks different on every phone (Phase 20 Q7).
+const SYMBOL = { start: '✦', building: '↗', success: '✓' } as const;
 
 // The speaker's nudge: it swells and settles twice (up, down, up, down), the
 // way a Spotlight ring pulses. No sound and no words come with it.
@@ -52,7 +53,11 @@ export function AnswerFeedback({ feedback, lang, onReplay, narrow = false, compa
   const disc = narrow ? 26 : compact ? 36 : 44;
   const symbol = (
     <View testID="feedback-symbol" style={[styles.disc, styles[`${feedback.tone}Disc`], { width: disc, height: disc, borderRadius: disc / 2 }]}>
-      <Text style={[styles.symbol, feedback.tone === 'success' ? styles.symbolOnGreen : null, { fontSize: disc * 0.5, lineHeight: disc * 0.62 }]}>{SYMBOL[feedback.tone]}</Text>
+      {feedback.tone === 'adjust' ? (
+        <Icon name="bulb" size={disc * 0.66} />
+      ) : (
+        <Text style={[styles.symbol, feedback.tone === 'success' ? styles.symbolOnGreen : null, { fontSize: disc * 0.5, lineHeight: disc * 0.62 }]}>{SYMBOL[feedback.tone]}</Text>
+      )}
     </View>
   );
   // The whole card replays; the speaker is drawn as a button so it reads as one.

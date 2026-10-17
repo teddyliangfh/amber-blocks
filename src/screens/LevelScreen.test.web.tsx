@@ -14,12 +14,13 @@ import type { Command, GroupId } from '../core';
 import { STORAGE_KEY, UPGRADE_BACKUP_KEY, createInitialState, deserialize, memoryStorage, reduce, serialize } from '../progress';
 import n10Unfinished from '../progress/__fixtures__/archive-v1-phase11-n10-unfinished.json';
 import type { ProgressState, ProgressStorage } from '../progress';
-import { LevelScreen } from './LevelScreen';
+import { COUNT_UP_STEP_MS, LevelScreen, SOLVE_SETTLE_MS } from './LevelScreen';
 import { ProgressProvider, useProgress } from './progress-store';
+import { PARENT_HINT_MS } from './ui';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const mockRouter = { replace: jest.fn(), push: jest.fn(), back: jest.fn() };
+const mockRouter = { replace: jest.fn(), push: jest.fn(), back: jest.fn(), dismissTo: jest.fn() };
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));
 
 const mockSaid: string[] = [];
@@ -79,6 +80,8 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  // Timers run in step with the clock, so a test can also skip ahead (beat).
+  jest.useFakeTimers({ advanceTimers: 1 });
   mockSaid.length = 0;
   mockVoice.length = 0;
   mockStage.current = null;
@@ -90,6 +93,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  jest.useRealTimers();
 });
 
 const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } };
@@ -144,6 +148,13 @@ async function command(cmd: Command): Promise<boolean> {
   });
   await settle();
   return ok;
+}
+
+// The second beat of a solve (Phase 20 Q2): the paper, the number's own move
+// and the way on come SOLVE_SETTLE_MS after the drop that made it right.
+async function beat() {
+  act(() => jest.advanceTimersByTime(SOLVE_SETTLE_MS));
+  await settle();
 }
 
 async function press(testID: string) {
@@ -203,6 +214,11 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
     expect(await command({ type: 'takeGroup', groupId: partnerOf('ch2-n7', 4), origin: { x: 3, y } })).toBe(true);
     expect(mockSaid).toEqual(['3 加 4，一共 7']);
     expect(badge()).toBe('3 + 4 = 7');
+    // Phase 20 Q2: the first beat is the sound and the smiles; the paper, the move and "next" follow.
+    expect(mockStage.current?.mood).toBe('happy');
+    expect(has('next')).toBe(false);
+    expect(mockStage.current!.celebrateTick).toBe(0);
+    await beat();
     expect(has('next')).toBe(true);
     expect(container.querySelector('[data-testid="feedback-title"]')?.textContent).toBe('拼对啦！');
     // The badge shows 3 + 4 = 7; the card says what comes next.
@@ -244,6 +260,7 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
     // Building towards the first solve: no way on yet.
     expect(has('next')).toBe(false);
     await command({ type: 'take', unitId: units[1]!, to: { x: 1, y: 0 } });
+    await beat();
     expect(has('next')).toBe(true);
     expect(has('again')).toBe(true);
     await command({ type: 'take', unitId: units[2]!, to: { x: 2, y: 0 } });
@@ -288,6 +305,7 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
     root = createRoot(container);
     await open(storage, 'ch1-n2');
     await command({ type: 'return', unitId: units[2]! });
+    await beat();
     expect(container.querySelector('[data-testid="next"]')?.textContent).toBe('下一站');
     mockRouter.replace.mockClear();
     await press('next');
@@ -303,6 +321,7 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
     for (const cmd of p.solution) {
       expect(await command(cmd)).toBe(true);
     }
+    await beat();
     expect(container.querySelector('[data-testid="next"]')?.textContent).toBe('合体岛完成了');
     // Send one partner back: wrong now.
     const partner = [...p.initial.groups.keys()].find((g) => mockStage.current!.state.bench.has(p.initial.groups.get(g)!.unitIds[0]!))!;
@@ -340,6 +359,7 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
       const units = [...puzzleFor('ch1-n2').initial.units.keys()];
       await command({ type: 'take', unitId: units[0]!, to: { x: 0, y: 0 } });
       await command({ type: 'take', unitId: units[1]!, to: { x: 1, y: 0 } });
+      await beat();
       expect(mockStage.current!.matched).toBe(true);
       // Solved and recorded, but the way on waits for the count.
       expect(deserialize((await storage.getItem(STORAGE_KEY))!)!.completedNodeIds.has(nodeId('ch1-n2'))).toBe(true);
@@ -368,6 +388,7 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
     const units = [...puzzleFor('ch1-n2').initial.units.keys()];
     await command({ type: 'take', unitId: units[0]!, to: { x: 0, y: 0 } });
     await command({ type: 'take', unitId: units[1]!, to: { x: 1, y: 0 } });
+    await beat();
     expect(container.querySelector('[data-testid="next"]')?.textContent).toBe('下一站');
     await press('next');
     expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/', params: { from: 'ch1-n2', to: 'ch1-n3' } });
@@ -381,6 +402,7 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
       for (const cmd of puzzleFor(id).solution) {
         expect(await command(cmd)).toBe(true);
       }
+      await beat();
       expect(container.querySelector('[data-testid="next"]')?.textContent).toBe(title);
       await press('next');
       expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/island/[chapterId]', params: { chapterId: chapter } });
@@ -410,6 +432,7 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
     for (const cmd of p.solution.slice(4)) {
       expect(await command(cmd)).toBe(true);
     }
+    await beat();
     expect(container.querySelector('[data-testid="feedback-title"]')?.textContent).toBe('拼对啦！');
     expect(has('next')).toBe(true);
     expect(deserialize((await storage.getItem(STORAGE_KEY))!)!.completedNodeIds.has(nodeId('ch1-n6'))).toBe(true);
@@ -436,6 +459,7 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
     await open(storage, 'ch1-n1');
     const [u] = [...puzzleFor('ch1-n1').initial.units.keys()];
     await command({ type: 'take', unitId: u!, to: { x: 2, y: 2 } });
+    await beat();
     expect(has('again')).toBe(true);
     mockSaid.length = 0;
     await press('again');
@@ -453,6 +477,8 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
     mockSaid.length = 0;
     await command({ type: 'take', unitId: u!, to: { x: 0, y: 0 } });
     expect(mockSaid).toEqual(['1，就是 1 块']);
+    expect(mockStage.current!.celebrateTick).toBe(0);
+    await beat();
     expect(mockStage.current!.celebrateTick).toBeGreaterThan(0);
   });
 
@@ -533,7 +559,8 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
       expect(container.querySelector('[data-testid="feedback-title"]')?.textContent).toBe('拼对啦！');
       // The visible feedback is also an accessible repeat-hint button.
       await act(async () => { (container.querySelector('[data-testid="answer-feedback"]') as HTMLElement).click(); });
-      expect(mockSaid).toEqual(['2，就是 2 块']);
+      // Phase 20 Q6: what was built, then what the card says.
+      expect(mockSaid).toEqual(['2，就是 2 块', '可以去下一站啦']);
       await flushSaves();
     } finally {
       jest.useRealTimers();
@@ -606,17 +633,17 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
     }
   });
 
-  test('review K: the child menu has four things; the gear opens the parents\' area only when held', async () => {
+  test('review K + D-072: the child menu has its things and the map; the gear opens the parents\' area only when held', async () => {
     const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n3')) });
     await open(storage, 'ch1-n2');
     await press('menu');
     const items = [...container.querySelectorAll('[data-testid^="menu-"]')].map((e) => e.getAttribute('data-testid'));
-    expect(items.filter((i) => i !== 'menu-backdrop' && i !== 'menu-card')).toEqual(['menu-close', 'menu-help', 'menu-undo', 'menu-restart', 'menu-parent']);
+    expect(items.filter((i) => i !== 'menu-backdrop' && i !== 'menu-card')).toEqual(['menu-close', 'menu-help', 'menu-undo', 'menu-restart', 'menu-map', 'menu-parent']);
     mockRouter.push.mockClear();
     const gear = container.querySelector('[data-testid="menu-parent"]') as HTMLElement;
     jest.useFakeTimers();
     try {
-      // A tap: nothing, not even closing the menu.
+      // A tap: the menu stays open and only the hold hint shows, for PARENT_HINT_MS (D-073).
       act(() => {
         gear.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
         jest.advanceTimersByTime(150);
@@ -624,6 +651,10 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
         gear.click();
       });
       expect(mockRouter.push).not.toHaveBeenCalled();
+      expect(has('menu-card')).toBe(true);
+      expect(container.querySelector('[data-testid="menu-parent-hint"]')?.textContent).toBe('按住进入家长区');
+      act(() => jest.advanceTimersByTime(PARENT_HINT_MS));
+      expect(has('menu-parent-hint')).toBe(false);
       expect(has('menu-card')).toBe(true);
       // Held for 600ms: the parents' area.
       act(() => {
@@ -637,6 +668,24 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  test('D-072: the menu goes back to the map from an unfinished stop too, and stops the voice first', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n3')) });
+    await open(storage, 'ch1-n3');
+    await press('menu');
+    const items = [...container.querySelectorAll('[data-testid^="menu-"]')].map((e) => e.getAttribute('data-testid'));
+    expect(items.filter((i) => i !== 'menu-backdrop' && i !== 'menu-card')).toEqual(['menu-close', 'menu-help', 'menu-undo', 'menu-map', 'menu-parent']);
+    expect(container.querySelector('[data-testid="menu-map"]')?.textContent).toBe('回地图');
+    mockRouter.dismissTo.mockClear();
+    mockRouter.replace.mockClear();
+    mockVoice.length = 0;
+    await press('menu-map');
+    expect(mockVoice).toEqual(['stop']);
+    expect(mockRouter.dismissTo).toHaveBeenCalledWith('/');
+    expect(mockRouter.replace).not.toHaveBeenCalled();
+    expect(has('menu-card')).toBe(false);
+    await flushSaves();
   });
 
   test('the feedback card says what it shows: the task on an empty bench', async () => {
@@ -666,19 +715,38 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
       act(() => jest.advanceTimersByTime(900));
       expect(mockSaid).toEqual(['找两个伙伴，拼出 7']);
       expect(mockStage.current!.spotlight ?? []).toEqual([]);
-      // The child taps the card: the 2 to send back and the 3 to bring light up and are named.
+      // Phase 20 Q3, the help ladder. The first tap: the card's own line again,
+      // and the six blocks on the mat get their numbers one by one, no words.
       tapNow('answer-feedback');
-      expect(mockSaid).toEqual(['找两个伙伴，拼出 7', '把 2 送回去，换 3 过来']);
+      expect(mockSaid).toEqual(['找两个伙伴，拼出 7', '找两个伙伴，拼出 7']);
+      expect(detail()).toBe('找两个伙伴，拼出 7');
+      expect(mockStage.current!.countOrder.size).toBe(0);
+      for (let i = 1; i <= 6; i += 1) {
+        act(() => jest.advanceTimersByTime(COUNT_UP_STEP_MS));
+        expect(mockStage.current!.countOrder.size).toBe(i);
+      }
+      expect([...mockStage.current!.countOrder.values()]).toEqual([1, 2, 3, 4, 5, 6]);
+      expect(mockSaid).toHaveLength(2);
+      // The second: only what to send back.
+      tapNow('answer-feedback');
+      expect(detail()).toBe('把 2 送回去');
+      expect(mockStage.current!.spotlight).toEqual([partnerOf('ch2-n7', 2)]);
+      // The third: the whole help, the 2 to send back and the 3 to bring lit and named.
+      tapNow('answer-feedback');
+      expect(mockSaid.slice(2)).toEqual(['把 2 送回去', '把 2 送回去，换 3 过来']);
       expect(detail()).toBe('把 2 送回去，换 3 过来');
       expect(mockStage.current!.spotlight).toEqual([partnerOf('ch2-n7', 2), partnerOf('ch2-n7', 3)]);
-      // Doing it clears the lights; the card goes back to describing the bench,
-      // and never says how many are missing (that is the answer, Phase 19).
+      // Doing it: the 3 to bring stays lit until the next move (Q4); the numbers
+      // are gone; the card goes back to describing the bench, and never says how
+      // many are missing (that is the answer, Phase 19).
       act(() => { mockStage.current!.onCommand({ type: 'returnGroup', groupId: partnerOf('ch2-n7', 2) }); });
-      expect(mockStage.current!.spotlight ?? []).toEqual([]);
+      expect(mockStage.current!.spotlight).toEqual([partnerOf('ch2-n7', 3)]);
+      expect(mockStage.current!.countOrder.size).toBe(0);
       expect(container.querySelector('[data-testid="feedback-title"]')?.textContent).toBe('还不到 7');
       expect(detail()).toBe('找两个伙伴，拼出 7');
       act(() => { mockStage.current!.onCommand({ type: 'takeGroup', groupId: partnerOf('ch2-n7', 3), origin: { x: 0, y: 1 } }); });
       expect(container.querySelector('[data-testid="feedback-title"]')?.textContent).toBe('拼对啦！');
+      expect(mockStage.current!.spotlight).toEqual([]);
       await flushSaves();
     } finally {
       jest.useRealTimers();
@@ -809,6 +877,7 @@ describe("Phase 19: who's missing (ch2-n5) and 7 made two ways (ch2-n8)", () => 
     expect(badge()).toBe('2 + 3 = 5');
     expect(title()).toBe('拼对啦！');
     expect(mockSaid).toEqual(['2 加 3，一共 5']);
+    await beat();
     expect(mockStage.current!.celebrateTick).toBeGreaterThan(0);
     expect(nextText()).toBe('下一站');
     expect(await command({ type: 'moveGroup', groupId: partnerOf('ch2-n5', 3), delta: { x: -2, y: 1 } })).toBe(true);
@@ -830,9 +899,15 @@ describe("Phase 19: who's missing (ch2-n5) and 7 made two ways (ch2-n8)", () => 
     await command({ type: 'takeGroup', groupId: of(4), origin: { x: 2, y } });
     expect(title()).toBe('多了 1 块');
     mockSaid.length = 0;
+    // The help ladder (Phase 20 Q3): the card's line, then what to send back, then all of it.
+    await press('answer-feedback');
+    expect(detailText()).toBe('比 5 多了，把一个伙伴送回去');
+    await press('answer-feedback');
+    expect(detailText()).toBe('把 4 送回去');
+    expect(mockStage.current!.spotlight).toEqual([of(4)]);
     await press('answer-feedback');
     expect(detailText()).toBe('把 4 送回去，换 3 过来');
-    expect(mockSaid).toEqual(['把 4 送回去，换 3 过来']);
+    expect(mockSaid).toEqual(['比 5 多了，把一个伙伴送回去', '把 4 送回去', '把 4 送回去，换 3 过来']);
     expect(mockStage.current!.spotlight).toEqual([of(4), of(3)]);
     // The 4 and the 2 go back, the 3 comes alone: not 5 yet, never "3 more" or "2 more".
     await command({ type: 'returnGroup', groupId: of(4) });
@@ -843,17 +918,29 @@ describe("Phase 19: who's missing (ch2-n5) and 7 made two ways (ch2-n8)", () => 
     expect(title()).toBe('还不到 5');
     expect(container.textContent).not.toContain('还差');
     await press('answer-feedback');
+    expect(detailText()).toBe('找两个伙伴，拼出 5');
+    // Nothing to send back: the second ask is the whole help.
+    await press('answer-feedback');
     expect(detailText()).toBe('把 2 搬过来');
     expect(mockStage.current!.spotlight).toEqual([two]);
     // 1 + 4 instead: right count, other partners, and it says so.
     await command({ type: 'returnGroup', groupId: of(3) });
     await command({ type: 'takeGroup', groupId: of(1), origin: { x: 0, y: 0 } });
     await command({ type: 'takeGroup', groupId: of(4), origin: { x: 1, y: 0 } });
-    expect(title()).toBe('数量够了，再找对伙伴');
+    // Phase 20 F5: a discovery, on a blue card, with the small celebration.
+    expect(title()).toBe('1 加 4 也是 5！');
+    expect(detailText()).toBe('再找 2 和 3');
+    expect(mockStage.current!.mood).toBe('calm');
+    expect(mockStage.current!.cheer).toBe('hop');
+    expect(mockStage.current!.celebrateTick).toBeGreaterThan(0);
     mockSaid.length = 0;
     await press('answer-feedback');
+    expect(mockStage.current!.spotlight).toEqual([of(1), of(4)]);
+    await press('answer-feedback');
+    expect(detailText()).toBe('把 1 送回去');
+    await press('answer-feedback');
     expect(detailText()).toBe('1 加 4 也是 5！再找 2 和 3');
-    expect(mockSaid).toEqual(['1 加 4 也是 5！再找 2 和 3']);
+    expect(mockSaid).toEqual(['再找 2 和 3', '把 1 送回去', '1 加 4 也是 5！再找 2 和 3']);
     expect(mockStage.current!.spotlight).toEqual([of(1), of(4), two, of(3)]);
   });
 
@@ -884,10 +971,14 @@ describe("Phase 19: who's missing (ch2-n5) and 7 made two ways (ch2-n8)", () => 
     expect(title()).toBe('换一种拼法！');
     expect(mockStage.current!.celebrateTick).toBe(0);
     expect(has('next')).toBe(false);
-    // Asked for help: it is 7 too, find 5 and 2, all four lit.
+    // Asked for help: first the card's line, the 3 and the 4 lit; then (nothing to
+    // send back) make another 7 beside them, the 5 and the 2 lit (Phase 20 Q1).
     await press('answer-feedback');
-    expect(detailText()).toBe('3 加 4 也是 7！再找 5 和 2');
-    expect(mockStage.current!.spotlight).toEqual([of(3), of(4), of(5), of(2)]);
+    expect(detailText()).toBe('再用另外两个伙伴拼出 7');
+    expect(mockStage.current!.spotlight).toEqual([of(3), of(4)]);
+    await press('answer-feedback');
+    expect(detailText()).toBe('在旁边再拼一个 7');
+    expect(mockStage.current!.spotlight).toEqual([of(5), of(2)]);
     // A reload carries on at the second way.
     act(() => root.unmount());
     root = createRoot(container);
@@ -905,12 +996,123 @@ describe("Phase 19: who's missing (ch2-n5) and 7 made two ways (ch2-n8)", () => 
     expect(badge()).toBe('5 + 2 = 7');
     expect(mockStage.current!.matched).toBe(true);
     expect(mockStage.current!.cheer).not.toBe('hop');
+    await beat();
     expect(mockStage.current!.celebrateTick).toBeGreaterThan(0);
     expect(nextText()).toBe('合体岛完成了');
     const saved = deserialize((await storage.getItem(STORAGE_KEY))!)!;
     expect(saved.completedNodeIds.has(nodeId('ch2-n8'))).toBe(true);
     const picture = saved.album.get(nodeId('ch2-n8'))!;
     expect([...picture.groups.values()].filter((g) => g.unitIds.every((u) => picture.bench.has(u))).map((g) => g.unitIds.length).sort()).toEqual([2, 5]);
+  });
+});
+
+describe('Phase 20: two beats, two ways side by side, the 17 boss on an empty mat', () => {
+  const title = () => container.querySelector('[data-testid="feedback-title"]')?.textContent ?? '';
+  const detailText = () => container.querySelector('[data-testid="feedback-detail"]')?.textContent ?? '';
+
+  test('Q2: a finger down holds the second beat; one block too many before it comes means it never comes', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n2')) });
+    await open(storage, 'ch1-n2');
+    const units = [...puzzleFor('ch1-n2').initial.units.keys()];
+    await command({ type: 'take', unitId: units[0]!, to: { x: 0, y: 0 } });
+    await command({ type: 'take', unitId: units[1]!, to: { x: 1, y: 0 } });
+    // Right: smiles and the card at once; recorded at once.
+    expect(title()).toBe('拼对啦！');
+    expect(mockStage.current!.mood).toBe('happy');
+    expect(deserialize((await storage.getItem(STORAGE_KEY))!)!.completedNodeIds.has(nodeId('ch1-n2'))).toBe(true);
+    // The child picks up the third block before the second beat: it waits.
+    act(() => mockStage.current!.onDragActive!(true));
+    await beat();
+    await beat();
+    expect(mockStage.current!.celebrateTick).toBe(0);
+    expect(has('again')).toBe(false);
+    // and puts it down: one too many. The paper never flies; the way on is the plain one.
+    await command({ type: 'take', unitId: units[2]!, to: { x: 2, y: 0 } });
+    act(() => mockStage.current!.onDragActive!(false));
+    await beat();
+    expect(title()).toBe('多了 1 块');
+    expect(mockStage.current!.celebrateTick).toBe(0);
+    expect(container.querySelector('[data-testid="next"]')?.textContent).toBe('回地图');
+    // Back to right: a new solve. A finger lifted and let go without a change waits again, then it comes.
+    await command({ type: 'return', unitId: units[2]! });
+    act(() => mockStage.current!.onDragActive!(true));
+    act(() => mockStage.current!.onDragActive!(false));
+    act(() => jest.advanceTimersByTime(SOLVE_SETTLE_MS - 1));
+    expect(mockStage.current!.celebrateTick).toBe(0);
+    await beat();
+    expect(mockStage.current!.celebrateTick).toBeGreaterThan(0);
+    expect(container.querySelector('[data-testid="next"]')?.textContent).toBe('下一站');
+  });
+
+  test('Q1: 7 made two ways side by side: the cloud shows both, the stop is done, the album keeps both', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch2-n8')) });
+    await open(storage, 'ch2-n8');
+    const of = (n: number) => partnerOf('ch2-n8', n);
+    await command({ type: 'takeGroup', groupId: of(3), origin: { x: 0, y: 0 } });
+    await command({ type: 'takeGroup', groupId: of(4), origin: { x: 3, y: 0 } });
+    expect(title()).toBe('换一种拼法！');
+    await command({ type: 'takeGroup', groupId: of(5), origin: { x: 0, y: 2 } });
+    // Beside the first way, the 5 alone is short of 7, not "7 too many".
+    expect(title()).toBe('还不到 7');
+    await command({ type: 'takeGroup', groupId: of(2), origin: { x: 5, y: 2 } });
+    expect(title()).toBe('拼对啦！');
+    expect(badge()).toBe('3 + 4 = 7\n5 + 2 = 7');
+    await beat();
+    expect(container.querySelector('[data-testid="next"]')?.textContent).toBe('合体岛完成了');
+    const saved = deserialize((await storage.getItem(STORAGE_KEY))!)!;
+    expect(saved.completedNodeIds.has(nodeId('ch2-n8'))).toBe(true);
+    expect(saved.album.get(nodeId('ch2-n8'))!.bench.size).toBe(14);
+    // Reopened: still right, still both.
+    act(() => root.unmount());
+    root = createRoot(container);
+    await open(storage, 'ch2-n8');
+    expect(title()).toBe('拼对啦！');
+    expect(badge()).toBe('3 + 4 = 7\n5 + 2 = 7');
+  });
+
+  test('Q8: "play again" on a right mat can be undone: the mat comes back, right, without a second celebration; Q15: the menu is "菜单"', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n3')) });
+    await open(storage, 'ch1-n1');
+    const [u] = [...puzzleFor('ch1-n1').initial.units.keys()];
+    await command({ type: 'take', unitId: u!, to: { x: 2, y: 2 } });
+    await beat();
+    await press('again');
+    expect(mockStage.current!.state.bench.size).toBe(0);
+    expect(container.querySelector('[data-testid="menu"]')?.getAttribute('aria-label')).toBe('菜单');
+    await press('menu');
+    await press('menu-undo');
+    expect(mockStage.current!.state.bench.size).toBe(1);
+    expect(title()).toBe('拼对啦！');
+    expect(mockStage.current!.celebrateTick).toBe(0);
+    expect(deserialize((await storage.getItem(STORAGE_KEY))!)!.nodes.get(nodeId('ch1-n1'))!.work!.bench.size).toBe(1);
+    // Undo goes on from there, as before "play again": the block goes back.
+    await press('menu');
+    await press('menu-undo');
+    expect(mockStage.current!.state.bench.size).toBe(0);
+  });
+
+  test('Q3: asking on the 17 boss\'s empty mat says the task, then to bring the biggest partner first, and lights the 10', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n12')) });
+    await open(storage, 'ch1-n12');
+    mockSaid.length = 0;
+    await press('answer-feedback');
+    expect(mockSaid).toEqual(['拼出 17 块', '先搬最大的伙伴']);
+    expect(mockVoice.slice(-1)).toEqual(['queue 先搬最大的伙伴']);
+    expect(mockStage.current!.spotlight).toEqual([partnerOf('ch1-n12', 10)]);
+    expect(detailText()).toBe('拼出 17 块');
+    // Phase 20 Q11: a partner tapped in the tray says its own number; no count, no change, no answer.
+    mockSaid.length = 0;
+    await act(async () => mockStage.current!.onTapTray!(10));
+    expect(mockSaid).toEqual(['十']);
+    expect(mockStage.current!.state.bench.size).toBe(0);
+    expect(mockStage.current!.countOrder.size).toBe(0);
+    // Not on an ordinary stop.
+    act(() => root.unmount());
+    root = createRoot(container);
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n11')) }), 'ch1-n11');
+    mockSaid.length = 0;
+    await press('answer-feedback');
+    expect(mockSaid).toEqual(['拼出 12 块']);
   });
 });
 

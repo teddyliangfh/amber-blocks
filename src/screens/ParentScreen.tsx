@@ -17,16 +17,18 @@ import { voice } from './voice';
 const TEXT = {
   zh: {
     title: '家长区',
-    language: '语音语言',
+    language: '语言',
     zh: '中文',
     en: 'English',
     fullscreen: '全屏',
     exitFullscreen: '退出全屏',
     homeTip: 'iPhone 上：点 Safari 的分享按钮，选"添加到主屏幕"，就能像 App 一样全屏打开。',
     reset: '重置进度',
-    confirm: '确定要清空所有进度？',
+    confirm: '确定要清空所有进度？作品册也会一起清空。',
     yes: '清空',
     no: '取消',
+    undoReset: '撤销清空',
+    cleared: '进度已清空。离开家长区之前，还可以撤销。',
     back: '返回',
     startAt: '从哪里开始',
     startAtTip: '只改变"开始"按钮和地图标记的位置，不会把前面的站算作完成；地图上的其他站照常一站一站打开。',
@@ -52,16 +54,18 @@ const TEXT = {
   },
   en: {
     title: 'Parents',
-    language: 'Voice language',
+    language: 'Language',
     zh: '中文',
     en: 'English',
     fullscreen: 'Full screen',
     exitFullscreen: 'Exit full screen',
     homeTip: 'On iPhone: tap the Safari share button and choose "Add to Home Screen" to open it full screen like an app.',
     reset: 'Reset progress',
-    confirm: 'Clear all progress?',
+    confirm: 'Clear all progress? The album is cleared too.',
     yes: 'Clear',
     no: 'Cancel',
+    undoReset: 'Undo clear',
+    cleared: 'Progress was cleared. You can still undo it until you leave the parents\' area.',
     back: 'Back',
     startAt: 'Where to start',
     startAtTip: 'Moves only the Play button and the map marker. No stop counts as finished, and the other stops still open one after another.',
@@ -100,11 +104,18 @@ function stopNames(ids: ReadonlyArray<NodeId>, lang: Lang): string {
     .join(lang === 'zh' ? '、' : ', ');
 }
 
+// Between the "reset" button and the "clear" button that takes its place, at least this many px.
+const CONFIRM_GAP = 60;
+// The "reset" pill's height as drawn (13px padding twice, a 26px line, a 2px border twice).
+const RESET_HEIGHT = 56;
+
 export function ParentScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { state, dispatch, reset, health, retryLoad } = useProgress();
+  const { state, dispatch, reset, undoReset, health, retryLoad } = useProgress();
   const [confirming, setConfirming] = useState(false);
+  // Cleared during this visit: the way back stays here until the parent leaves.
+  const [justCleared, setJustCleared] = useState(false);
   const [full, setFull] = useState(isFullscreen);
   const [muted, setMuted] = useState(() => sfx.isMuted());
   useEffect(() => onFullscreenChange(() => setFull(isFullscreen())), []);
@@ -191,17 +202,24 @@ export function ParentScreen() {
         ) : null}
 
         <Text style={styles.section}>{text.reset}</Text>
+        {/* Phase 20 Q10: clearing is the plain button and "cancel" the bright one,
+            and both sit under the question, CONFIRM_GAP below where "reset" was,
+            so a second tap on "reset" lands on the words, not on "clear". */}
         {confirming ? (
-          <View style={styles.row}>
+          <View testID="reset-confirm">
             <Text style={styles.confirm}>{text.confirm}</Text>
-            <PillButton title={text.yes} tone="accent" testID="reset-yes" onPress={() => { setConfirming(false); void reset(); }} />
-            <PillButton title={text.no} testID="reset-no" onPress={() => setConfirming(false)} />
+            <View style={[styles.row, styles.confirmRow]}>
+              <PillButton title={text.no} tone="accent" testID="reset-no" onPress={() => setConfirming(false)} />
+              <PillButton title={text.yes} testID="reset-yes" onPress={() => { setConfirming(false); setJustCleared(true); void reset(); }} />
+            </View>
           </View>
         ) : (
           <View style={styles.row}>
             <PillButton title={text.reset} testID="reset" onPress={() => setConfirming(true)} />
+            {justCleared ? <PillButton title={text.undoReset} testID="reset-undo" onPress={() => { if (undoReset()) { setJustCleared(false); } }} /> : null}
           </View>
         )}
+        {justCleared && !confirming ? <Text style={styles.tip} testID="reset-cleared">{text.cleared}</Text> : null}
 
         <View style={[styles.row, { marginTop: 32 }]}>
           <PillButton title={text.back} tone="accent" testID="back" onPress={() => router.back()} />
@@ -220,7 +238,10 @@ const styles = StyleSheet.create({
   section: { fontSize: 18, fontFamily: FONT.display, fontWeight: '800', color: COLORS.ink, marginTop: 24, marginBottom: 10 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'center' },
   tip: { fontSize: 15, fontFamily: FONT.body, color: COLORS.inkSoft, marginTop: 12, lineHeight: 21 },
-  confirm: { fontSize: 16, fontFamily: FONT.body, color: COLORS.ink, width: '100%' },
+  // One line of words (22px) where the "reset" button was, then the buttons
+  // CONFIRM_GAP below that button's bottom edge.
+  confirm: { fontSize: 16, lineHeight: 22, fontFamily: FONT.body, color: COLORS.ink, width: '100%' },
+  confirmRow: { marginTop: RESET_HEIGHT - 22 + CONFIRM_GAP },
   chapterBlock: { marginTop: 12, gap: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { minWidth: 48, height: 40, paddingHorizontal: 10, borderRadius: 12, borderWidth: 2, borderColor: THEME.sandDeep, backgroundColor: THEME.white, alignItems: 'center', justifyContent: 'center' },

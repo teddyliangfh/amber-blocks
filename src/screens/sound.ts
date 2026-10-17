@@ -18,8 +18,8 @@ function readMuted(): boolean {
 
 export const sfx: Sfx = Platform.OS === 'web' ? createWebSfx(readMuted()) : createSilentSfx();
 
-export function play(name: SfxName, step?: number): void {
-  sfx.play(name, step);
+export function play(name: SfxName, step?: number, parts?: ReadonlyArray<number>): void {
+  sfx.play(name, step, parts);
 }
 
 export function setSoundMuted(muted: boolean): void {

@@ -1,5 +1,5 @@
-import { MAX_UNDO, apply, benchCount, commit, createHistory, reconcile, returnGroup, returnUnit, startRound, undo } from '../core';
-import type { BenchState, Command, CountRound, History, RejectReason, Result } from '../core';
+import { MAX_UNDO, apply, benchCount, clusters, commit, createHistory, reconcile, returnGroup, returnUnit, startRound, undo } from '../core';
+import type { BenchState, Cell, Command, CountRound, History, RejectReason, Result, UnitId } from '../core';
 import { sandboxMaterial } from '../content';
 
 // Free play (2026-10-15 review O): a level session without a question. The
@@ -75,3 +75,39 @@ export function tidySandbox(session: SandboxSession): SandboxSession | null {
   const past = [...session.history.past, before].slice(-MAX_UNDO);
   return { history: { state, past }, round: reconcile(session.round, state) };
 }
+
+// A group of touching blocks whose size a move changed (Phase 20, play review
+// F6: free play changed colour quietly and the child had to count to know).
+// `head`: its top-left block, where its number pops up; `parts`: the groups
+// it was put together from, left first (two or more: a join), else empty.
+export interface ClusterChange {
+  readonly head: Cell;
+  readonly size: number;
+  readonly parts: ReadonlyArray<number>;
+}
+
+// Every group on the mat after a move that was not on the mat, just like
+// that, before it: joined, split off, grown or shrunk. Top row first.
+export function clusterChanges(before: BenchState, after: BenchState): ReadonlyArray<ClusterChange> {
+  const was = clusters(before).map((c) => new Set(c.unitIds));
+  const same = (units: ReadonlyArray<UnitId>) => was.some((w) => w.size === units.length && units.every((u) => w.has(u)));
+  const left = (cells: ReadonlyArray<Cell>) => Math.min(...cells.map((c) => c.x));
+  return clusters(after)
+    .filter((c) => !same(c.unitIds))
+    .map((c) => {
+      const head = c.cells.reduce((best, x) => (x.y < best.y || (x.y === best.y && x.x < best.x) ? x : best));
+      // Where each block came from: its old group, or the tray (a part of one).
+      const from = new Map<string, UnitId[]>();
+      c.unitIds.forEach((u) => {
+        const i = was.findIndex((w) => w.has(u));
+        const key = i === -1 ? `new:${u}` : `old:${i}`;
+        from.set(key, [...(from.get(key) ?? []), u]);
+      });
+      const parts = [...from.values()]
+        .sort((a, b) => left(a.map((u) => after.bench.get(u)!)) - left(b.map((u) => after.bench.get(u)!)))
+        .map((units) => units.length);
+      return { head, size: c.unitIds.length, parts: parts.length >= 2 ? parts : [] };
+    })
+    .sort((a, b) => a.head.y - b.head.y || a.head.x - b.head.x);
+}
+

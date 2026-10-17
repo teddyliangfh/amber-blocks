@@ -138,6 +138,7 @@ function Zoom({ entry, onClose, lang }: { readonly entry: AlbumEntry; readonly o
               mood="happy"
               celebrateTick={tick}
               cheer={cheerOf(entry.node, entry.work)}
+              merge
               onCommand={() => false}
               onPreview={() => false}
               onTapUnit={() => undefined}

@@ -11,6 +11,7 @@ import { STORAGE_KEY, createInitialState, memoryStorage, reduce, serialize } fro
 import type { ProgressState } from '../progress';
 import { ADVANCE, MapScreen, SKIP_AFTER_MS, advanceOf } from './MapScreen';
 import { ProgressProvider } from './progress-store';
+import { PARENT_HINT_MS } from './ui';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -162,31 +163,51 @@ describe('the way on (2026-10-15 review H)', () => {
       const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId('ch2-n8'), verdict: { matched: true, benchCount: 7, reason: 'matched' } }) : e;
       await open(c.ok ? c.value : all, {});
       expect(container.querySelector('[data-testid="map-trophy"]')).not.toBeNull();
+      // Phase 20 Q9: the cup opens the last island's page again.
+      mockRouter.replace.mockClear();
+      act(() => (container.querySelector('[data-testid="map-trophy"]') as HTMLElement).click());
+      expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/island/[chapterId]', params: { chapterId: 'ch2' } });
+      expect(container.querySelector('[data-testid="map-trophy"]')?.getAttribute('aria-label')).toBe('奖杯');
     } finally {
       jest.useRealTimers();
     }
   });
 
-  test('review K: the parents\' gear opens only when held for 600ms; a tap only clicks (2026-10-16 review I-3)', async () => {
+  test('review K: the parents\' gear opens only when held for 600ms; a tap only clicks and shows the hold hint (2026-10-16 review I-3, D-073)', async () => {
     jest.useFakeTimers();
     try {
       await open(finishedUpTo('ch1-n3'), {});
       const gear = container.querySelector('[data-testid="parent"]') as HTMLElement;
+      const hint = () => container.querySelector('[data-testid="parent-hint"]')?.textContent ?? null;
+      const tap = () =>
+        act(() => {
+          gear.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+          jest.advanceTimersByTime(200);
+          gear.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+          gear.click();
+        });
       mockSounds.length = 0;
-      act(() => {
-        gear.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-        jest.advanceTimersByTime(200);
-        gear.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-        gear.click();
-      });
+      expect(hint()).toBeNull();
+      tap();
       expect(mockRouter.push).not.toHaveBeenCalled();
       expect(mockSounds).toEqual(['tap']);
+      expect(hint()).toBe('按住进入家长区');
+      // A second tap keeps it up for another PARENT_HINT_MS from then.
+      act(() => jest.advanceTimersByTime(PARENT_HINT_MS - 500));
+      tap();
+      act(() => jest.advanceTimersByTime(PARENT_HINT_MS - 300));
+      expect(hint()).toBe('按住进入家长区');
+      act(() => jest.advanceTimersByTime(300));
+      expect(hint()).toBeNull();
+      // Held: the parents' area, and no bubble left behind.
+      tap();
       act(() => {
         gear.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
         jest.advanceTimersByTime(650);
         gear.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
       });
       expect(mockRouter.push).toHaveBeenCalledWith('/parent');
+      expect(hint()).toBeNull();
     } finally {
       jest.useRealTimers();
     }

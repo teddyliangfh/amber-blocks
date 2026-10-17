@@ -39,22 +39,29 @@ describe('pictureOf', () => {
     expect([pic.origin, pic.cols, pic.rows]).toEqual([{ x: 0, y: 0 }, 3, 3]);
   });
 
-  test('a partner keeps its own number\'s colour beside loose blocks touching it (5 = a 3 and two singles)', () => {
+  test('Phase 20 F1: a partner and the singles touching it are one 5, in 5\'s colour with one face; apart, each keeps its own', () => {
     const p = puzzle('ch1-n5');
     const solved = play(p.initial, p.solution);
     const pic = pictureOf(solved);
     expect(pic.blocks).toHaveLength(5);
-    const hues = pic.blocks.map((x) => x.hue).sort();
-    expect(hues).toEqual(['n2', 'n2', 'n3', 'n3', 'n3']);
-    // One face on the partner, one on the pair of singles.
-    expect(pic.blocks.filter((x) => x.face).map((x) => x.hue).sort()).toEqual(['n2', 'n3']);
+    expect(pic.blocks.map((x) => x.hue)).toEqual(['n5', 'n5', 'n5', 'n5', 'n5']);
+    expect(pic.blocks.filter((x) => x.face)).toHaveLength(1);
+    // The singles moved away from the 3: a 3 and a 2 again.
+    const handle = [...p.initial.groups.values()][0]!;
+    const apart = play(p.initial, [{ type: 'takeGroup', groupId: handle.id, origin: { x: 0, y: 0 } }, ...p.solution.filter((c) => c.type === 'take').map((c, i) => ({ ...c, to: { x: i, y: 2 } }))]);
+    expect(pictureOf(apart).blocks.map((x) => x.hue).sort()).toEqual(['n2', 'n2', 'n3', 'n3', 'n3']);
   });
 
-  test('17 = 10 + 5 + 2: three partners, three faces; an empty mat draws nothing', () => {
+  test('17 = 10 + 5 + 2 joined: one 17 in its colour, one face (Phase 20 F1); the 8 brick one cyan 8; an empty mat draws nothing', () => {
     const p = puzzle('ch1-n12');
     const pic = pictureOf(play(p.initial, p.solution));
     expect(pic.blocks).toHaveLength(17);
-    expect(pic.blocks.filter((x) => x.face).map((x) => x.hue).sort()).toEqual(['n10', 'n2', 'n5']);
+    expect(new Set(pic.blocks.map((x) => x.hue))).toEqual(new Set(['n10']));
+    expect(pic.blocks.filter((x) => x.face)).toHaveLength(1);
+    const brick = puzzle('ch1-n8');
+    const eight = pictureOf(play(brick.initial, brick.solution));
+    expect(new Set(eight.blocks.map((x) => x.hue))).toEqual(new Set(['n8']));
+    expect(eight.blocks.filter((x) => x.face)).toHaveLength(1);
     expect(pictureOf(p.initial)).toEqual({ blocks: [], origin: { x: 0, y: 0 }, cols: 0, rows: 0 });
   });
 });

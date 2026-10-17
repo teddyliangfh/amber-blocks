@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +23,11 @@ import { say } from './voice';
 // Nothing here times out or moves on by itself.
 
 const MAP = { zh: '回地图', en: 'Back to map' } as const;
+// The page's button answers only this long after the page opens (Phase 20,
+// play review Q9): the last stop's "island done" button sits about where this
+// one does, and a quick second tap on it skipped the whole page in 0.4s. The
+// map's hop has the same guard (MapScreen SKIP_AFTER_MS, 300ms).
+export const ISLAND_SKIP_AFTER_MS = 800;
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const NO_COUNTS = new Map();
 
@@ -99,6 +104,11 @@ export function IslandDoneScreen({ chapterId }: { readonly chapterId: string }) 
     }
   }, [done]);
   const shown = useMemo(() => (chapter === null || state === null ? null : bossWork(chapter, state)), [chapter, state]);
+  // When the page opened (set after the first paint; until then nothing goes on).
+  const openedAt = useRef(Number.POSITIVE_INFINITY);
+  useEffect(() => {
+    openedAt.current = Date.now();
+  }, []);
   if (chapter === null || state === null || !done) {
     return <View style={[styles.root, { paddingTop: insets.top }]} />;
   }
@@ -112,6 +122,9 @@ export function IslandDoneScreen({ chapterId }: { readonly chapterId: string }) 
   const size = landscape ? 30 : Math.max(30, Math.min(48, Math.floor(column / 6) - 12));
   const colors = chapter.nodes.map((n) => colorsFor(hueFor(labelOf(n).number)).fill);
   const onGo = () => {
+    if (Date.now() - openedAt.current < ISLAND_SKIP_AFTER_MS) {
+      return;
+    }
     if (next === null) {
       router.replace('/');
       return;
@@ -157,6 +170,7 @@ export function IslandDoneScreen({ chapterId }: { readonly chapterId: string }) 
                 matched
                 mood="happy"
                 celebrateTick={1}
+                merge
                 onCommand={() => false}
                 onPreview={() => false}
                 onTapUnit={() => undefined}

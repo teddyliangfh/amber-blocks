@@ -5,7 +5,7 @@ import { THEME } from '../blocks-ui';
 // Small drawn icons in the toy style: chunky rounded strokes in the app's ink,
 // the same on every platform (the emoji and symbol glyphs they replace changed
 // shape and weight from one phone to the next).
-export type IconName = 'menu' | 'play' | 'gear' | 'speaker' | 'again' | 'album' | 'close' | 'sandbox' | 'map' | 'tidy' | 'undo';
+export type IconName = 'menu' | 'play' | 'gear' | 'speaker' | 'again' | 'album' | 'close' | 'sandbox' | 'map' | 'tidy' | 'undo' | 'bulb' | 'star' | 'count';
 
 export function Icon({ name, size, color = THEME.ink }: { readonly name: IconName; readonly size: number; readonly color?: string }) {
   const s = size;
@@ -131,6 +131,52 @@ export function Icon({ name, size, color = THEME.ink }: { readonly name: IconNam
         <View style={[styles.box, { width: s, height: s }]}>
           <View style={{ position: 'absolute', left: s * 0.26, top: s * 0.22, width: d, height: d, borderRadius: d / 2, borderWidth: stroke, borderColor: color, borderLeftColor: 'transparent' }} />
           <View style={{ position: 'absolute', left: s * 0.18, top: s * 0.22 + stroke / 2 - head * 0.5, width: 0, height: 0, borderTopWidth: head / 2, borderBottomWidth: head / 2, borderRightWidth: head * 0.86, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRightColor: color }} />
+        </View>
+      );
+    }
+    case 'bulb': {
+      // A light bulb: "here is a tip" (Phase 20 Q7, the help button and the
+      // "needs a change" card; it replaces the 💡 emoji).
+      const d = s * 0.56;
+      return (
+        <View style={[styles.box, { width: s, height: s }]}>
+          <View style={{ position: 'absolute', top: s * 0.06, width: d, height: d, borderRadius: d / 2, borderWidth: stroke, borderColor: color }} />
+          {/* A little shine inside, then the screw base under the glass. */}
+          <View style={{ position: 'absolute', top: s * 0.06 + d * 0.26, left: s * 0.5 - d * 0.14, width: d * 0.14, height: d * 0.3, borderRadius: d * 0.07, backgroundColor: color, transform: [{ rotate: '25deg' }] }} />
+          <View style={{ position: 'absolute', top: s * 0.06 + d + stroke * 0.4, width: s * 0.28, height: stroke, borderRadius: stroke / 2, backgroundColor: color }} />
+          <View style={{ position: 'absolute', top: s * 0.06 + d + stroke * 1.8, width: s * 0.18, height: stroke, borderRadius: stroke / 2, backgroundColor: color }} />
+        </View>
+      );
+    }
+    case 'star': {
+      // A five-point star (the island done): five rays turned a fifth of a
+      // turn each about the middle, over a disc that fills the centre.
+      const ray = s * 0.17;
+      const reach = s * 0.48;
+      const disc = s * 0.42;
+      return (
+        <View style={[styles.box, { width: s, height: s }]}>
+          {[0, 72, 144, 216, 288].map((deg) => (
+            <View key={deg} style={[StyleSheet.absoluteFill, { transform: [{ rotate: `${deg}deg` }] }]}>
+              <View style={{ position: 'absolute', left: s / 2 - ray, top: s / 2 - reach, width: 0, height: 0, borderLeftWidth: ray, borderRightWidth: ray, borderBottomWidth: reach, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: color }} />
+            </View>
+          ))}
+          <View style={{ width: disc, height: disc, borderRadius: disc / 2, backgroundColor: color }} />
+        </View>
+      );
+    }
+    case 'count': {
+      // Counting: one finger up under a row of three dots (Phase 20 Q8: "count
+      // again" had the same ↻ as "play again").
+      const dot = s * 0.15;
+      const finger = s * 0.17;
+      return (
+        <View style={[styles.box, { width: s, height: s }]}>
+          {[0.26, 0.52, 0.78].map((x) => (
+            <View key={x} style={{ position: 'absolute', left: s * x - dot / 2, top: s * 0.08, width: dot, height: dot, borderRadius: dot / 2, backgroundColor: color }} />
+          ))}
+          <View style={{ position: 'absolute', left: s * 0.26 - finger / 2, top: s * 0.32, width: finger, height: s * 0.42, borderRadius: finger / 2, backgroundColor: color }} />
+          <View style={{ position: 'absolute', left: s * 0.14, top: s * 0.58, width: s * 0.44, height: s * 0.34, borderRadius: s * 0.12, backgroundColor: color }} />
         </View>
       );
     }

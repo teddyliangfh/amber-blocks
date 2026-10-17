@@ -12,7 +12,7 @@ import type { BenchState } from '../core';
 import { materialize, nodeId } from '../content';
 import { STORAGE_KEY, createInitialState, memoryStorage, reduce, serialize } from '../progress';
 import type { ProgressState } from '../progress';
-import { IslandDoneScreen } from './IslandDoneScreen';
+import { ISLAND_SKIP_AFTER_MS, IslandDoneScreen } from './IslandDoneScreen';
 import { ProgressProvider } from './progress-store';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -34,6 +34,8 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  // The clock (and Date.now) runs as usual; a test can also skip ahead.
+  jest.useFakeTimers({ advanceTimers: 1 });
   mockSaid.length = 0;
   mockSounds.length = 0;
   mockRouter.replace.mockClear();
@@ -45,6 +47,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  jest.useRealTimers();
 });
 
 const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } };
@@ -100,6 +103,10 @@ describe('island page (2026-10-15 review I)', () => {
     await act(async () => q('island-line')!.click());
     expect(mockSaid).toEqual(['数字岛完成了，去合体岛吧']);
     expect(q('island-go')?.textContent).toBe('去合体岛');
+    // Phase 20 Q9: a tap carried over from the last stop's button does nothing.
+    await act(async () => q('island-go')!.click());
+    expect(mockRouter.replace).not.toHaveBeenCalled();
+    act(() => jest.advanceTimersByTime(ISLAND_SKIP_AFTER_MS));
     await act(async () => q('island-go')!.click());
     expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/', params: { from: 'ch1-n12', to: 'ch2-n1' } });
   });
@@ -111,6 +118,7 @@ describe('island page (2026-10-15 review I)', () => {
     expect([...container.querySelectorAll('[data-testid="island-work"] [data-testid^="partner-"]')].map((p) => p.getAttribute('data-testid')).filter((t) => /^partner-\d+$/.test(t!)).sort()).toEqual(['partner-2', 'partner-5']);
     expect(q('island-line')?.textContent).toBe('Every island is done!');
     expect(q('island-go')?.textContent).toBe('Back to map');
+    act(() => jest.advanceTimersByTime(ISLAND_SKIP_AFTER_MS));
     await act(async () => q('island-go')!.click());
     expect(mockRouter.replace).toHaveBeenLastCalledWith('/');
   });

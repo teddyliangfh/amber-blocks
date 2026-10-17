@@ -1312,3 +1312,157 @@ brief 第 4 节列出、本轮按要求没做的：三个伙伴合体、凑到 1
 - [x] **它抓到一个真问题，已修**：工作台上三个伙伴、要送回两个时（例：送回开局的 4 后摆 2 + 3 + 1 拼 6；ch2-n8 第二步 3 + 1 + 2），`pairPlan` 返回 null，求助退回第一级"找两个伙伴，拼出 6"、什么都不点亮；照做的孩子再拿一个 → "比 6 多了，把一个伙伴送回去"（不点亮）→ 送回刚拿的那个 → 循环（未修时 ch2-n6 种子 11 / 46 / 57 / 68 / 75 / 77、ch2-n8 种子 29 卡住）。修法只改 `hints.ts` `pairPlan` 结尾一处：要送回的不止一个时也点名第一个（`hint.send`"把 3 送回去"），问一次点一个，和数字岛 `quantityPlan` 一样；一换一仍是"把 a 送回去，换 b 过来"，同和二换二仍是 D-063 那句。另加场景测试钉住 ch2-n6 的 2 + 3 + 1 → "把 3 送回去" → "把 1 送回去，换 4 过来"。两个新测试在旧代码上都失败（验证过）。界面上的变化：三个伙伴在工作台上时点卡片 / 求助，从"找两个伙伴，拼出 n"、不点亮，变成点名并点亮一个要送回的伙伴。不要的话把那一处改回 `if (best.send.length === 1) { … } return null;`。`SPEC-screens.md` 的求助规则与测试清单各补一句。
 - [x] 内容、core、存档、AUTO_SPEECH 没动；没跑 git。门禁：`pnpm lint` 0 问题；`pnpm typecheck` 通过；`pnpm lint:purity` 零命中；`pnpm test:gate` 55 suite / **782** 测试全过（覆盖率全部 97.63 / 93.6）。
 - 未做：浏览器里没走"三个伙伴 → 求助"的新卡片（纯逻辑改动，句子与点亮沿用已有的 `hint.send`）。
+
+## 上线与 D-072：关卡菜单加回"回地图"（2026-10-17）
+
+- [x] 上线：私有仓库 `teddyliangfh/amber-blocks`（`main`，首个提交 `1071041`），Vercel Git 导入，https://amber-blocks.vercel.app/ ；各路由（含 `/play/<id>`、`/island/<id>` 深链接刷新）都是 200。之后每次 push 到 `main` 自动部署。
+- [x] Ted 线上试玩反馈：进了关卡就回不到地图重新选站（D-043 把"地图"收进家长区时列入"需要 Ted 决定"，PRD AC-42 要求回地图始终可用）。Ted 决定加回（D-072）。
+- [x] `LevelScreen.tsx`：菜单在"重新挑战"之后、⚙ 之前加 `menu-map`"回地图 / Back to map"，未完成的站也有；`voice.stop()` + `router.dismissTo('/')`（沙盒、家长区同一条路）。
+- [x] 测试：`LevelScreen.test.web.tsx` 菜单项列表加 `menu-map`；新测试：未完成站菜单也有回地图，点了先停语音、`dismissTo('/')`、不走 `replace`、菜单收起。
+- [x] 门禁：`pnpm lint`、`pnpm typecheck`、`pnpm lint:purity` 通过；`pnpm test:gate` 55 suite / **783** 测试全过（覆盖率门槛达标）；`pnpm build:web` 通过。
+- [x] 实际运行（静态产物，Playwright 无头 Chromium）：390 × 844 未完成站菜单 继续 / 帮助 / 撤销 / 回地图 / ⚙，点回地图 → `/`；667 × 331 横屏从深链接直接打开已完成站，菜单两列五项 + ⚙ 全在视口内（卡片 y 86–245），点回地图 → `/`（栈里没有地图时 `dismissTo` 换成地图）。控制台 0 error / 0 warning。
+- 文档：D-072、`SPEC-screens.md` 关卡菜单、README 儿童菜单一句。
+
+## D-073：家长门短按冒"按住进入家长区"气泡（2026-10-17）
+
+- [x] Ted 线上反馈："设置功能点击没反应"——⚙ 是按住 600ms 的家长门，短按只有 tap + 小晃，太轻。Ted 决定保留按住，短按加文字提示（D-073）。
+- [x] `screens/ui.tsx` `ParentGate`：短按 `setHint(n + 1)`，⚙ 上方冒气泡（白底、沙色描边与底边、`FONT.body` 15px、宽 160、`pointerEvents="none"`、`FadeIn` 120ms），文字取 `accessibilityHint`；`PARENT_HINT_MS = 1500` 后消失，再点重新计时（effect 依赖计数），按住打开时先收起；新增 `hintAlign`（默认居中，地图传 `start`，免得左下角的气泡出屏）。
+- [x] 中文 `hold` 文案"长按进入家长区"→"按住进入家长区"（`MapScreen`、`LevelScreen`），英文不变。
+- [x] 测试：`MapScreen.test.web.tsx` 家长门测试加气泡出现 / 第二次点续时 / 到点消失 / 按住打开后没有残留；`LevelScreen.test.web.tsx` 菜单 ⚙ 短按出气泡、菜单不关、`PARENT_HINT_MS` 后消失。
+- [x] 走查时发现：关卡菜单 ⚙ 的外层 `menuGate` 有 `opacity: 0.85`，把气泡也一起变半透明，被盖住的"回地图"字透出来。改为 `ParentGate` 新增 `muted`，0.85 只加在齿轮本身，`menuGate` 去掉 opacity（齿轮外观不变）。气泡 `marginBottom` 加到 12 并加一个指向 ⚙ 的小尖角，盖住菜单按钮时整段文字都在气泡下面，不会被气泡边切半。
+- [x] 门禁：`pnpm lint`、`pnpm typecheck`、`pnpm lint:purity` 通过；`pnpm test:gate` 55 suite / 783 测试全过；`pnpm build:web` 通过。
+- [x] 实际运行（静态产物，Playwright 无头 Chromium）：375 × 667 地图点 ⚙ → 气泡在 ⚙ 正上方、左对齐、一行（x 12–172），约 1.5 秒后消失；关卡菜单点 ⚙ → 菜单不关，气泡居中盖住"回地图"按钮、不透字，1.5 秒后消失（记录：出现 1382ms、消失 2883ms）；667 × 331 横屏菜单气泡盖住"撤销"、在卡片内（x 440–600）。控制台 0 error / 0 warning。
+- 文档：D-073、`SPEC-screens.md` 家长门一条、README 家长区一句。
+
+# Phase 20：质量 + 招牌时刻"合体变身"（2026-10-18，D-074 – D-088）
+
+只做 [tasks/brief-phase-20.md](brief-phase-20.md) 的第 1 批（20-1 → 20-2 → 20-3，16 项全部实现），来源 [docs/play-review-2026-10-18.md](../docs/play-review-2026-10-18.md)。没有执行任何 git 命令（工作区里 D-072 / D-073 的未提交改动原样保留，在它们之上继续改）；没有新增依赖、没改 `package.json`；`judge.ts` 与 core 没改；`schemaVersion` 不变、没加存档字段；`CONTENT_VERSION` 仍是 6、catalog 没改；没加任何自动语音（新句子都在点按时说，音效可以自己响）；新动画都有减少动效分支（只换色 / 透明度）。`pnpm lint:purity` 每节都是零命中。
+
+## 20-1 判题与反馈（D-074 – D-080）
+
+- [x] 1. 两种拼法并排（D-074）：`level-session.ts` 新 `judgedMat` / `matOf` / `wayAside` / `roomBeside`；`standingWays` 找"恰好是一种用过的拼法、两个伙伴已接好、自成一簇"的部分，判题前剔除。`startSession` 与 `commitCommand` 共用 `walk`（第二种判法：一种允许拼法自成一簇、旁边还有别的块 → 记为已拼的一种），刷新不丢第一种；完成过的站两种并排仍是对的。`sameWayAgain` / 求助 / `solvedParts` / `solvedEquation` 都看剔除后的部分；云朵两行 `3 + 4 = 7` / `5 + 2 = 7`（按拼出先后，`LevelScreen` 两行字号）。"换一种拼法"态第三级 `hint.beside`"在旁边再拼一个 7"并点亮要拿的那一对；放不下（第一种在中间一行）就仍走同和句。
+- [x] 2. 庆祝分两拍（D-075）：`SOLVE_SETTLE_MS = 600`。第一拍 success / fanfare 音、笑脸、绿卡，完成与作品册即时派发；第二拍（彩纸、过关动作、云朵 pop、"下一站 / 再玩一次"）由 `armSettle` 计时，`onDragActive(true)` 暂停、松手后重新计时，改错（`dropSettle`）就取消；撤销、再玩一次也取消。
+- [x] 3. 求助逐级升（D-076）：`hints.ts HELP_LADDER_STEPS = 3`、`rungOf`、`helpAt`、`sendOnly`、`biggestFirst`；`LevelScreen` 用 `asks`（求助次数）+ `pointed`（自动第一级）代替原 `helpLevel`；第 1 下数量不对时工作台上的块依次亮数字（`COUNT_UP_STEP_MS = 320`，count 音，不念数词，只显示）；17 Boss 空台求助说完题目再排队说"先搬最大的伙伴"并点亮 10（`hint.biggest`）。
+- [x] 4. 求助语音不被掐断（D-077）：`correction-voice` speaker 返回 boolean，只有出声才记 `spokenSig`；`LevelScreen` 返回 `AUTO_SPEECH.correction`。送回被点名的伙伴后，求助点亮过、位置没变的（要拿的那个）保持点亮到下一次提交（`carry`）。
+- [x] 5. 自由和不报差数（D-078）：`fewer && (puzzle.given !== undefined || q.kind === 'sum_composition')` → "还不到 n"。
+- [x] 6. 看到的 = 听到的（D-079）：`hint.fewer.blocks`"还不到 n，再拿 k 块"；成功时点卡片先念成功句、再排队念卡片正文；`feedback.matched.quantity.one`；"Let's find"；家长区"语言 / Language"；英文菜单"Keep playing"。
+- [x] 7. 承认孩子的发现（D-080）：同和且两个伙伴相贴 → 蓝卡 `feedback.same-sum` + `hint.find`，无"需要调整"音、无困惑脸，复用 stepHop 小庆祝；`asksForHelp` 包含这一态。数量 / 造型题过关列部分（`feedback.matched.parts.2…5`，伙伴 + 相贴的散块组，从左到右）；ch1-n6 最后一步 `feedback.matched.same`。
+- 门禁（20-1 结束）：`pnpm lint` 0；`pnpm typecheck` 通过；`pnpm lint:purity` 零命中；`pnpm test:gate` 55 suite / 800 测试（基线 783），覆盖率全部 97.61 / 93.96，screens 96.09 / 91.69，content 98.04 / 95.4，core 100 / 99.09，progress 99.02 / 97.59；`pnpm build:web` 通过。
+
+## 20-2 界面与手感（D-081 – D-086）
+
+- [x] 8. 图标（D-081）：`icons.tsx` 新 `bulb`、`star`（五道射线绕中心转 + 圆心；第一版三角拼法在浏览器里像只鸟，已重画）、`count`；`PillButton` 可选 `icon`；菜单 继续 play / 帮助 bulb / 撤销 undo / 重新挑战 again / 回地图 map；底栏 下一站 play / 回地图 map / 岛完成 star；`AnswerFeedback` 的 💡 换成 bulb。
+- [x] 9. ↻ 不再一图两义（D-081）：再数一遍用 `count` 图标；再玩一次 / 重新挑战前答案是对的就留着那一局（`replayed`），新一局没有可撤销时撤销拿回整局。
+- [x] 10. 岛收尾页防连点（D-082）：`ISLAND_SKIP_AFTER_MS = 800`；地图奖杯是按钮（"奖杯 / Trophy"），replace 到 `/island/ch2`。
+- [x] 11. 家长区清空（D-083）：提示文字在上、取消（accent）+ 清空（plain）在下，`CONFIRM_GAP = 60`（浏览器实测重置按钮 56px 高，第一版按 52 算只隔 56px，已改）；`store.ts RESET_BACKUP_KEY`，`createSaver().reset` 先备份原串；`progress-store undoReset`；`ParentScreen` 本次停留期间显示"撤销清空"和一句说明。
+- [x] 12. 点托盘里的角色（D-084）：`Stage` 新 `onTapTray`，托盘对象 `onTap` → hop（负数 tick）+ 关卡 / 沙盒念数词。
+- [x] 13. 就近吸附（D-085）：`layout.ts nearbyOrigins`、`settleOrigin`；`Stage` 的 `dropUnit` / `dropPartner` / 两个 preview 都走 `settleAt`，伙伴优先贴住其他伙伴；落回自己原位算 same。
+- [x] 14. 小修（D-086）：`+html.tsx` `#boot` 天空色 + 标题占位、robots meta；`vercel.json` `X-Robots-Tag: noindex`（JSON 不能写注释，同一条说明写在 `+html.tsx` 与 README）；菜单 `accessibilityLabel` = MENU.menu；地图 `<ParentGate muted>`、删 `parentButton` 透明度；README 部署状态。
+- 门禁（20-2 结束）：lint 0、typecheck、purity 零命中；`pnpm test:gate` 55 suite / 805 测试（之后补了托盘点按测试），覆盖率全部 97.44 / 93.84；`pnpm build:web` 通过。
+
+## 20-3 招牌时刻（D-087、D-088）
+
+- [x] 15. 合体变身（D-087）：`blocks-ui/merge.ts`（`MERGE_ON = 'success'`、`MERGE_SEAM_MS = 220`、`MERGE_BLINK_MS = 220`、纯函数 `mergedClusters`：含伙伴、≥ 2 个部分的簇，给出总数、部分、头块、接缝）；`Stage` 新属性 `merge` / `onJoin`，状态机（`view` + `truth` ref + 计时器）：新解的第二拍 → 接缝亮（`SeamGlow`）→ 脸转向对方并眨眼（`BlockBody` 新 `look`，`wink` 用负数 tick）+ `onJoin` → 合成一个角色；之后再合（拖开又放回）只换色；`lifted` 让拿起的那一块所在的角色立刻分开。各部分的外观覆盖：颜色 `hueFor(总数)`、只有头块有脸（`PartnerView faceAt`）、一个总数徽章（`NumberBadge`，放在含"上排最后一格"的那一块）、底板按整个角色的轮廓圆角（`GripPlate around`，散块也画底板）、同一错开序号与转动中心（`pivot` → `transformOrigin`），车轮等合完再出现。`LevelScreen` 传 `merge={MERGE_ON === 'touch' \|\| (solved && !settling)}`，`onJoin` → `play('join', total, parts)`；岛收尾页与作品册放大传 `merge`；`pictureOf` 按合体后的样子上色（作品册缩略图）。`sfx.ts` 新 `join`（`notesFor(name, step, parts)`、`JOIN_STEP`），`Sfx.play` / `sound.play` 多一个 `parts` 参数。
+- [x] 16. 自由玩冒数字（D-088）：`sandbox-session.ts clusterChanges`；`SandboxScreen` 每次提交后算变化 → `bubbles`（`Stage` 新属性，`NumberBubble`，`BUBBLE_MS = 800`）+ `play('join', …)`。
+- 门禁（20-3 结束）：lint 0、typecheck、purity 零命中；`pnpm test:gate` 56 suite / 816 测试，覆盖率全部 97.58 / 93.82；`pnpm build:web` 通过。
+
+### 改了期望的旧测试（逐条）
+
+- `screens/hints.test.ts` "right count does not claim success for a wrong shape or the wrong partners"：5 + 2 相贴现在是"也是 7"的发现（D-080），把 2 挪到第 3 行（不相贴）继续测原来的"数量够了，再找对伙伴"；补英文"Let's find 3 and 4"。
+- `screens/hints.test.ts` "loose stops keep the single-block hints"：空工作台的第一级句子"还不到 2，再拿一块"→"还不到 2，再拿 2 块"（D-079）；补一块时仍是"再拿一块"。
+- `screens/hints.test.ts` "2026-10-16 review A-4: 3 + 4 built as 5 + 2"：tone adjust → building，标题"5 加 2 也是 7！"，第一级"我们先找 3 和 4"→"再找 3 和 4"（D-080）；第二级同和句不变。
+- `screens/hints.test.ts` "the 2 sent back and 1 + 4 built"：卡片标题"数量够了，再找对伙伴"→"1 加 4 也是 5！"（D-080）。
+- `screens/hints.test.ts` "the first way still on the mat"：第二级"3 加 4 也是 7！再找 5 和 2"（点亮四个）→"在旁边再拼一个 7"（点亮 5 与 2）（D-074）；补第一种在中间一行时仍是原同和句。
+- `screens/hints.test.ts` 两个属性测试：大数站那个把新 key `hint.fewer.blocks` 当作"再拿一块"处理（动作相同）；合体岛那个改成 `test.each` 跑两遍（整句帮助 / 求助阶梯：先按第 2 级做，回到见过的工作台再问一次拿到完整句，并模拟 D-077 的"送回后要拿的那个保持点亮"）。
+- `screens/level-session.test.ts` "the first way is a step and is used up"：第一种拼好后 verdict 由 groups-mismatch → count-mismatch / benchCount 0（自成一簇的第一种被剔除，剩下的什么都没有，D-074）。
+- `screens/correction-voice.test.ts` setup：speaker 回调改为返回 true（签名变化，期望不变）。
+- `screens/LevelScreen.test.web.tsx`：`beforeEach` 改用 `jest.useFakeTimers({ advanceTimers: 1 })`（时钟照常走，可快进），新 `beat()` 快进 `SOLVE_SETTLE_MS`；以下 10 个测试在过关后加 `beat()` 才断言"下一站 / 再玩一次 / celebrateTick"：ch2-n7 的 3 + 4（另断言第一拍时没有"下一站"、tick 为 0、表情已是 happy）、"breaking a right answer"、"review B"、"finished island's last stop"、"COUNT_TO_PASS"、"review H / I"、"review L"、"play again"（再次过关前 tick 为 0）、"ch2-n5 one move solves it"、"7 made two ways"。
+- `screens/LevelScreen.test.web.tsx` "wrong answers show and speak a useful correction"：拼对后点卡片念 ['2，就是 2 块'] → ['2，就是 2 块', '可以去下一站啦']（D-079）。
+- `screens/LevelScreen.test.web.tsx` "asked-for help names the partner and lights it"：一次点卡片 → 三次（第 1 下卡片原句 + 6 块依次亮数字、第 2 下"把 2 送回去"、第 3 下"把 2 送回去，换 3 过来"）；送回 2 后 3 仍点亮（原来断言灯全灭，D-077），数字标签消失。
+- `screens/LevelScreen.test.web.tsx` "short of 5 … 1 + 4 is 5 too"：4 多了要点三下才到"把 4 送回去，换 3 过来"；"把 2 搬过来"在第二下；1 + 4 的标题由"数量够了，再找对伙伴"变为"1 加 4 也是 5！"并有小庆祝，第三下才是同和句。
+- `screens/LevelScreen.test.web.tsx` "7 made two ways"：第一种在工作台上时第一下"再用另外两个伙伴拼出 7"点亮 3、4，第二下"在旁边再拼一个 7"点亮 5、2（原来一下就是同和句点亮四个，D-074 / D-076）。
+- `screens/LevelScreen.sound.test.web.tsx`：同样改用快进计时器；"Phase 19: who's missing and two ways …"点两下才念到"把 4 送回去"；"play again opens with the arrive sound"在"再玩一次"出现前先 `beat()`。
+- `screens/IslandDoneScreen.test.web.tsx`：快进计时器；两个测试点"去合体岛 / 回地图"前快进 `ISLAND_SKIP_AFTER_MS`，第一个另断言刚打开时的点按无效（D-082）。
+- `progress/reliability.test.ts` "reset waits for the write in flight"：写入序列 [old, null, fresh] → [old, old（备份）, null, fresh]，另断言 `RESET_BACKUP_KEY` 是原串（D-083）。
+- `blocks-ui/picture.test.ts` 两个：ch1-n5 的 3 + 两块单块由"3 色 + 2 色、两张脸"变为一个 5 色、一张脸（另测拆开后回到 3 + 2）；17 由"三张脸"变为一个 n10 色、一张脸，并加 8 砖一个 n8（D-087）。
+- `screens/AlbumScreen.test.web.tsx` "only what was built is shown"：ch1-n12 三张脸 → 一张，ch2-n8 两张 → 一张（D-087）。
+- `screens/SandboxScreen.test.web.tsx` "counting says the numbers and the total once"：音效里多了摆一排时的 `join:1`、`join:2`、`join:3`（D-088），分开断言。
+
+### 新测试（+33，783 → 816）
+
+- `level-session.test.ts` +3：两种并排不相贴过关、云朵两行、完成后重开仍对、哪种先都行；贴成 14 块判多了、送回再拼仍过关、未接好的第一种不剔除；第二种中途刷新从第二步继续、`roomBeside`（顶行有地方、中间一行没有）。
+- `hints.test.ts` +9：`rungOf` 与 `HELP_LADDER_STEPS`；swap 三级与 `countUp`、阶梯为 1 时等于整句；错伙伴第一级点亮工作台伙伴、空工作台不纠正；17 Boss `biggestFirst`；Q5 "还不到 5"；Q6 单数与"再拿 2 块"；F5 部分列举、8 砖"4 和 4"、ch1-n6"变了样子"；F5 同和蓝卡（中英）与三级；合体岛属性测试的阶梯版。
+- `correction-voice.test.ts` +1：不出声的纠正不 `stop` 后面的求助（旧代码失败）。
+- `LevelScreen.test.web.tsx` +4：手指按着时第二拍等着、改错就不来、放下再等 600ms；两种并排过关、云朵两行、作品册 14 块、重开仍两行；再玩一次后撤销拿回整局、菜单 aria "菜单"；17 Boss 空台求助两句排队并点亮 10、托盘点按念"十"不计数、普通站没有第二句。
+- `LevelScreen.sound.test.web.tsx` +1：正式策略下纠正计时器到点后求助、照做第一步，不触发 `stop`，3 仍点亮。
+- `ParentScreen.test.web.tsx` +1：问题在上、取消亮色、清空白色；清空后备份键是原串；撤销清空写回。
+- `reliability.test.ts` +1：reset 备份原串；没有存档不备份；备份写失败不影响清空。
+- `layout.test.ts` +2：`nearbyOrigins` 顺序与边界；`settleOrigin` 原位 / 最近 / 优先 / 无处可放。
+- `merge.test.ts` +5（新文件）：默认值；3 + 4 一个簇（总数、部分、头块、接缝、key 稳定）；分开 / 单个伙伴 / 只有散块都不合；3 + 两块单块是 5；8 砖、17。
+- `Stage.test.web.tsx` +3：已对的 1 + 1 打开即一个 2；新解的接缝 → 眨眼 + join → 一个 8（车轮等着）、同一解再合不再闪；自由玩数字气泡。
+- `sfx.test.ts` +1：join 的音高顺序与时长、三部分、带 parts 播放。
+- `sandbox-session.test.ts` +2：并起来的变化与部分、新放一块；拆开两处各一、整组挪动无变化、放回缩小。
+- 已有测试里加的断言：`MapScreen` 奖杯可点与 aria；`SandboxScreen` 托盘点按念"一"。
+
+## 浏览器走查（Checkpoint 20）
+
+内建浏览器（`preview_start expo-web`，dev 模式），视口 375 × 812 为主；拖放用浏览器面板的 `left_click_drag`（RNGH 的 pointer 事件），存档用 localStorage 种子（与 `unlockedTo` 同格式）；页面里包了 `OscillatorNode.frequency.setValueAtTime` / `speechSynthesis.speak / cancel` 与一个 MutationObserver 记录音高、语音、彩纸 / 下一站 / 接缝 / 气泡的出现时刻。没有听声音。截图 22 张 `docs/review-assets/p20-01` … `p20-22`。
+
+- [x] 从清空 localStorage 的新存档开始：地图 → 1 站拖一块过关，"下一站"在过关后才淡入（带 ▶ 图标）。
+- [x] ch1-n2 多拖一块（三次拖放相隔约 50ms）：success 音 → 第三块落下响"需要调整"→ 白色"回地图"；全程没有出现彩纸，也没有出现"下一站"（`p20-01`）。
+- [x] ch1-n5 3 + 3 块（多 1 块）连点卡片三下：第 1 下说"比 五 多了，放回一块"并依次响 count 音 261.63 → 440（6 个、不念数词），6 块亮出 1–6（`p20-02`）；第 2、3 下同一句并点亮多出的一块（这站的最短一步就是放回一块，没有要点名的伙伴）。
+- [x] ch2-n5 把 4 贴在 2 右边连点三下：①"比 五 多了，把一个伙伴送回去"+ 数字 1–6；②"把 四 送回去"点亮 4（`p20-03`）；③"把 四 送回去，换 三 过来"点亮 4 与 3（`p20-04`）。把 4 送回托盘：没有 `cancel`，3 仍点亮（`p20-05`）。把 3 贴到 2 右边：success 音即时，约 630ms 后彩纸 + 下一站 + 接缝，再约 230ms 响 join（293.66 / 329.63 / 392 + 784 = 2、3、5），变成一个蓝色的 5、一张脸、一个"5"徽章（`p20-06`）。
+- [x] ch2-n1：1 + 1 合体过程（接缝、转脸，`p20-07`）→ 一个橙色的 2（`p20-08`）。
+- [x] ch1-n8：两条绿色的 4 → 一个青色的 8，一张脸、一个"8"，车轮在合完之后才出现（`p20-09`）。
+- [x] ch2-n8：3 + 4（第一步跳一下，各自颜色不合体）→ 点卡片两下：②"在旁边再拼一个 7"点亮 5 与 2（`p20-10`）；5 放在下面一行时"还不到 7"（不是"多了 7 块"）；再放 2 → 云朵两行"3 + 4 = 7 / 5 + 2 = 7"、两个粉色的 7、"合体岛完成了"带星星图标（`p20-11`，星星第一版画坏，重画后复查）。
+- [x] 岛收尾页连点：点"合体岛完成了"后立刻在收尾页按钮位置连点两下，页面没被跳过；Boss 作品是两个合好的粉色 7（`p20-12`）。回地图 → 奖杯在、点奖杯进 `/island/ch2`；地图 ⚙ 的透明度只在齿轮自身（0.85）。
+- [x] 家长区清空后撤销：确认态问题在上、取消（橙）清空（白）在下，清空键上沿 744、原重置按钮下沿 684，隔 60px（`p20-14`）；清空后 `progress.before-reset` 是原串（完成 20、作品册 1），出现"撤销清空"与说明（`p20-15`）；撤销后完成 20、作品册 1、"从合体岛第 8 站开始"都回来，按钮消失。标题"语言"。
+- [x] 冷启动占位：整页刷新时先看到天空色和"Amber Blocks"（`p20-13`）；生产构建 `dist/index.html` 里有 `#boot` 与 `robots noindex, nofollow`。
+- [x] 沙盒连块：放一块冒"1"、贴上第二块冒"2"、隔开放的一块冒"1"、补上空隙冒"4"、再接一块冒"5"（`p20-16`），join 音按部分再总数（4 = 2 + 1 + 1：293.66、261.63、261.63、349.23 + 698.46）；从中间抽走一块，两边的 2 与被抽走的 1 各冒一次（记录里同时出现"2"与"1"两种气泡），只响总数；每个气泡约 0.78 秒消失；点盒子里的一块说"一"。全程不说别的话。
+- [x] 英文模式（ch2-n3 2 + 2）：3 单独放时琥珀"Try a different partner"+ 需要调整音；把 1 贴上 → 蓝卡"3 plus 1 is 4 too! / Now find 2 and 2"、跳一下、success 音、表情 calm（`p20-17`）；三下求助"Now find two and two"→"Send the three back"→"three plus one is four too! Now find two and two"并点亮四个（`p20-18`）；菜单"Keep playing / Help / Undo / Back to map"带图标（`p20-19`）。
+- [x] 360 × 640（英文 ch2-n8 两种并排）：短屏云朵两行在云内，"Join Island done!"带星（x 94–322、下沿 633）与圆形再玩一次都在屏内（`p20-20`）。
+- [x] 667 × 331 横屏：重新打开已完成的 ch2-n8 直接是两个合好的 7（不再闪），侧栏云朵两行、"Done!"带星在屏内（`p20-21`）；英文菜单两行三列，"Keep playing""Back to map"在 176px 的格子里折两行，全部在卡内（`p20-22`）。
+- [x] 控制台：dev 与生产构建（`static-dist`，8787）都是 0 error。warning：dev 模式 RN-web 的 `useNativeDriver` 回退（生产构建没有）；从地图 ▶ `router.push` 进关卡时 "Blocked aria-hidden on an element because its descendant retained focus"（被点的 ▶ 留着焦点，所在页面被 Stack 设为 aria-hidden；生产构建也有；这条路本轮没改，见已知遗留）。
+
+## Checkpoint 20（最终）
+
+- [x] 门禁（文档写完后最后一次）：`pnpm lint` 0 问题；`pnpm typecheck` 通过；`pnpm lint:purity` 零命中；`pnpm test:gate` 56 suite / 816 测试全过（基线 783；19.5s），覆盖率全部 97.58 / 93.82（语句 / 分支），content 98.04 / 95.4、core 100 / 99.09、progress 99.03 / 97.61（门禁 95，均达标）、blocks-ui 98.09 / 92.15、screens 96.08 / 91.4（基线 95.75 / 90.29）；jest 输出里没有 console error / warning；`pnpm build:web` 通过，dist 2.9 MB。
+- [x] 没有删测试；改了期望的旧测试逐条见上。
+- [x] 规格与文档：决策 D-074 – D-088；`SPEC-screens.md`（结构、规则、验证）、`SPEC-blocks-ui.md`（合体、就近吸附、托盘点按、数字气泡、`pictureOf`）；README「当前实现」与「已知缺口」。
+
+### 需要 Ted 决定（都留了一处可改的常量或一行）
+
+1. `MERGE_ON`（`blocks-ui/merge.ts`）：`'success'`（答对才变，默认）还是 `'touch'`（贴上就变）。`'touch'` 只跑了单测（`Stage` 每个新簇都会走一遍接缝 / 眨眼），没在浏览器里走过。
+2. 合体后是否保留"部分"的痕迹（测评 §6 #3）：现在彻底变成一个角色（只有总数徽章）；拿起任一块即分开。
+3. `SOLVE_SETTLE_MS = 600`（两拍之间）。
+4. `HELP_LADDER_STEPS = 3`（设 1 回到第一下就给完整句）；`COUNT_UP_STEP_MS = 320`；第 1 下亮出的数字留到答案变化为止（第 2、3 下仍显示）。
+5. `ISLAND_SKIP_AFTER_MS = 800`。
+6. `MERGE_SEAM_MS` / `MERGE_BLINK_MS` 各 220ms。
+7. F5 的小庆祝复用了 success 音（brief 要求"复用两种拼法第一步的小庆祝"）：答案还没对就响"对了"的音，会不会让孩子以为过关。
+8. "先搬最大的伙伴"只给数量题 Boss（实际只有 17 站）；卡片上仍写题目，这一句只说不写（与 D-079"念出来的就是写着的"略有出入）。
+9. 自由玩：从盒子里新放上的单独一块也冒"1"并响一声；拆开时只响总数。
+10. 再玩一次后撤销拿回的是整个上一局（含它自己的撤销历史）。
+11. "两种拼法"实时推进也用了恢复的规则：一种拼法自成一簇、旁边已有别的块，也算第一步完成（否则实时与刷新后的判法不一致）。
+12. 就近吸附"伙伴优先贴住其他伙伴"：在 ch2-n8 第二步，若松手点被占，第二种可能被吸到贴着第一种（变成 14 块"多了"），孩子要再挪开。
+
+### 已知遗留（按 brief 不顺手修）
+
+- 地图 ▶ / 下一站用 `router.push` 进关卡时的 aria-hidden 焦点 warning（被点按钮在隐藏的页面里保留焦点；dev 与生产都有，与本轮改动无关）。
+- 8 列工作台仍贴着屏幕边（Q13，上轮待定）。
+- F5 同和态第 3 级时，卡片标题与正文都以"3 plus 1 is 4 too!"开头（完整句本来就带这一句）。
+- ch1-n5 这种"只需放回一块"的情况，第 2、3 级是同一句。
+- "再玩一次"药丸没有图标（只有圆形版本有）。
+- 横屏英文菜单"Keep playing / Back to map"折两行（在卡内）。
+- `vercel.json` 不能写注释，noindex 的说明只在 `+html.tsx` 与 README。
+- 浏览器面板在不截图时不会重新排版，脚本里量位置前要先截一张（只影响走查方法）。
+
+### 只能真机确认
+
+- 600ms 的两拍在手指上是"先对、再欢呼"还是"卡了一下"；手指还按着时第二拍等着是否自然。
+- 托盘里真实手指的点按与拖动是否分得开（6px 阈值），点了会不会误拖。
+- 合体时接缝 / 转脸 / 眨眼在手机尺寸下看不看得出；join 音在手机喇叭上能否听出"3、4、7"。
+- 第 1 级求助的 count 音与说话的那句重叠时会不会乱。
+- 就近吸附在手指不准时是否顺手，虚影跳到旁边格会不会让孩子困惑。
+- Safari 字体下家长区清空键与重置键是否仍隔 ≥ 60px。
+- 冷启动占位在真实网络与 Vercel 上的样子；部署后用 `curl -I` 看 `X-Robots-Tag`。
+- bulb / count / star 图标在小尺寸上孩子能否认出。

@@ -43,7 +43,7 @@ export function LiftShadow({ cell, x, y, lift }: { readonly cell: number; readon
 // optionally a face and a counting number. When its colour changes (its
 // cluster grew or shrank: two 1s became a 2) it morphs and pops instead of
 // switching.
-export function BlockBody({ cell, x, y, colors, face, mood, count, lift, wink = 0 }: {
+export function BlockBody({ cell, x, y, colors, face, mood, count, lift, wink = 0, look = 0 }: {
   readonly cell: number;
   readonly x: number;
   readonly y: number;
@@ -54,6 +54,9 @@ export function BlockBody({ cell, x, y, colors, face, mood, count, lift, wink = 
   readonly lift?: SharedValue<number>;
   // A finished count (0 = none): the block blinks once with the others.
   readonly wink?: number;
+  // Which way the face turns: -1 left, 1 right, 0 ahead (two partners joining
+  // look at each other, Phase 20 F1). Never with reduced motion.
+  readonly look?: number;
 }) {
   const reduced = useReducedMotion();
   const { inset, side, border, radius } = blockMetrics(cell);
@@ -78,12 +81,21 @@ export function BlockBody({ cell, x, y, colors, face, mood, count, lift, wink = 
   const winked = useWink(wink);
   const squint = useAnimatedStyle(() => ({ transform: [{ scaleY: 1 - 0.08 * winked.get() }] }));
   const inner = side - 2 * border;
+  const lean = useSharedValue(0);
+  useEffect(() => {
+    lean.set(reduced ? 0 : withTiming(look, { duration: 120, easing: EASE_OUT }));
+  }, [look, reduced, lean]);
+  const turned = useAnimatedStyle(() => ({ transform: [{ translateX: lean.get() * inner * 0.1 }] }));
   return (
     <Animated.View style={[styles.body, { left: x + inset, top: y + inset, width: side, height: side, borderRadius: radius, borderWidth: border, boxShadow: toyShadow(cell) }, paint]}>
       <Animated.View style={[StyleSheet.absoluteFill, pulse]}>
         <Animated.View style={[StyleSheet.absoluteFill, squint]}>
           <View style={[styles.shine, { left: inner * 0.12, top: inner * 0.1, width: inner * 0.24, height: Math.max(2, inner * 0.09), borderRadius: inner * 0.05 }]} />
-          {face ? <Face size={inner} mood={mood} blush={colors.blush} lifted={lift} winked={winked} blink={mood === 'calm'} /> : null}
+          {face ? (
+            <Animated.View style={[StyleSheet.absoluteFill, turned]}>
+              <Face size={inner} mood={mood} blush={colors.blush} lifted={lift} winked={winked} blink={mood === 'calm'} />
+            </Animated.View>
+          ) : null}
           {count !== null ? <CountMark size={inner} n={count} colors={colors} /> : null}
         </Animated.View>
       </Animated.View>

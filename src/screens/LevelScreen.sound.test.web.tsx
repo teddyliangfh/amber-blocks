@@ -14,7 +14,8 @@ import { CONTENT_VERSION, chapterId, materialize, nodeId } from '../content';
 import type { GroupId } from '../core';
 import { STORAGE_KEY, createInitialState, deserialize, memoryStorage, reduce, serialize } from '../progress';
 import type { ProgressState, ProgressStorage } from '../progress';
-import { LevelScreen, NUDGE_AFTER_MS } from './LevelScreen';
+import { CORRECTION_QUIET_MS } from './correction-voice';
+import { LevelScreen, NUDGE_AFTER_MS, SOLVE_SETTLE_MS } from './LevelScreen';
 import { ParentScreen } from './ParentScreen';
 import { ProgressProvider } from './progress-store';
 
@@ -62,6 +63,8 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  // Timers run in step with the clock, so a test can also skip ahead (beat).
+  jest.useFakeTimers({ advanceTimers: 1 });
   mockSaid.length = 0;
   mockStops.length = 0;
   mockSounds.length = 0;
@@ -75,6 +78,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  jest.useRealTimers();
 });
 
 const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } };
@@ -108,6 +112,12 @@ async function press(testID: string) {
   await act(async () => {
     el.click();
   });
+  await settle();
+}
+
+// The second beat of a solve (Phase 20 Q2): the paper, the move and the way on.
+async function beat() {
+  act(() => jest.advanceTimersByTime(SOLVE_SETTLE_MS));
   await settle();
 }
 
@@ -186,8 +196,30 @@ describe('LevelScreen sounds (D-036: sounds first, speech when asked)', () => {
     await command({ type: 'returnGroup', groupId: partnerOf('ch2-n8', 3) });
     expect(mockSounds).toEqual(['arrive', 'success']);
     expect(mockSaid).toEqual([]);
+    // The help ladder (Phase 20 Q3): the card's line first, then what to send back.
     await press('answer-feedback');
-    expect(mockSaid).toEqual(['把 4 送回去']);
+    expect(mockSaid).toEqual(['再用另外两个伙伴拼出 7']);
+    await press('answer-feedback');
+    expect(mockSaid).toEqual(['再用另外两个伙伴拼出 7', '把 4 送回去']);
+  });
+
+  test('Phase 20 Q4: the shipping policy says no correction on its own, so doing the first step of asked-for help never cuts the help off', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch2-n5')) });
+    await open(storage, 'ch2-n5');
+    const four = partnerOf('ch2-n5', 4);
+    const y = [...mockStage.current!.state.bench.values()][0]!.y;
+    await command({ type: 'takeGroup', groupId: four, origin: { x: 2, y } });
+    // The silent correction timer runs out while the child waits.
+    act(() => jest.advanceTimersByTime(CORRECTION_QUIET_MS));
+    expect(mockSaid).toEqual([]);
+    for (let i = 0; i < 3; i += 1) {
+      await press('answer-feedback');
+    }
+    expect(mockSaid[mockSaid.length - 1]).toBe('把 4 送回去，换 3 过来');
+    // Sending the 4 back: the voice is not stopped, and the 3 stays lit.
+    await command({ type: 'returnGroup', groupId: four });
+    expect(mockStops).toEqual([]);
+    expect(mockStage.current!.spotlight).toEqual([partnerOf('ch2-n5', 3)]);
   });
 
   test('right and wrong sound different; a wrong answer is not said, and its "hmm" plays once while it stays wrong', async () => {
@@ -405,6 +437,7 @@ describe('LevelScreen sounds (D-036: sounds first, speech when asked)', () => {
     await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n3')) }), 'ch1-n1');
     const [u] = [...puzzleFor('ch1-n1').initial.units.keys()];
     await command({ type: 'take', unitId: u!, to: { x: 2, y: 2 } });
+    await beat();
     mockSounds.length = 0;
     mockSaid.length = 0;
     await press('again');

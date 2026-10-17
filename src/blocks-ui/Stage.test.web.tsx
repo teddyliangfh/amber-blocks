@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { CONTENT_VERSION, chapterId, materialize, nodeId } from '../content';
 import { apply } from '../core';
 import { computeGeometry } from './layout';
+import { MERGE_BLINK_MS, MERGE_SEAM_MS } from './merge';
 import { Stage } from './Stage';
 import type { StageProps } from './Stage';
 import { trayObjects } from './tray';
@@ -120,3 +121,70 @@ describe('Stage (2026-10-15 review D: the first partner stop showed one block)',
     expect(all('car-wheels')).toHaveLength(0);
   });
 });
+
+describe('Phase 20 F1: joined into one character', () => {
+  const solved = (id: string) => {
+    const puzzle = puzzleOf(id);
+    return puzzle.solution.reduce((st, cmd) => {
+      const r = apply(st, cmd);
+      return r.ok ? r.value : st;
+    }, puzzle.initial);
+  };
+  // Every badge on the stage, the tray's decoys too, in number order.
+  const labels = () => [...all('partner-label')].map((l) => l.textContent).sort();
+  const faces = () => all('face-happy').length;
+
+  test('a right 1 + 1 opened already right is one 2 at once: one face, one badge, no seams', () => {
+    render('ch2-n1', { state: solved('ch2-n1'), matched: true, mood: 'happy', merge: true });
+    expect(labels()).toEqual(['2', '3']);
+    expect(faces()).toBe(1);
+    expect(all('merge-seam')).toHaveLength(0);
+    // Not joined: two 1s, two faces, two badges.
+    render('ch2-n1', { state: solved('ch2-n1'), matched: true, mood: 'happy', merge: false });
+    expect(labels()).toEqual(['1', '1', '3']);
+    expect(faces()).toBe(2);
+  });
+
+  test('the solve: seams light, then the faces turn and blink with the join sound, then one character makes the move', () => {
+    jest.useFakeTimers();
+    try {
+      const joins: string[] = [];
+      const onJoin = (parts: ReadonlyArray<number>, total: number) => joins.push(`${parts.join('+')}=${total}`);
+      const state = solved('ch1-n8');
+      render('ch1-n8', { state, matched: true, mood: 'happy', merge: false, onJoin, cheer: 'car' });
+      expect(labels()).toEqual(['3', '4', '4']);
+      render('ch1-n8', { state, matched: true, mood: 'happy', merge: true, celebrateTick: 1, onJoin, cheer: 'car' });
+      act(() => jest.advanceTimersByTime(0));
+      expect(all('merge-seam')).toHaveLength(4);
+      expect(labels()).toEqual(['3', '4', '4']);
+      // The wheels wait for the brick.
+      expect(all('car-wheels')).toHaveLength(0);
+      act(() => jest.advanceTimersByTime(MERGE_SEAM_MS));
+      expect(all('merge-seam')).toHaveLength(0);
+      expect(joins).toEqual(['4+4=8']);
+      act(() => jest.advanceTimersByTime(MERGE_BLINK_MS));
+      // One cyan 8 (the decoy 3 still waits in the tray), one face on the mat.
+      expect(labels()).toEqual(['3', '8']);
+      expect(faces()).toBe(1);
+      expect(all('car-wheels')).toHaveLength(1);
+      // Not again for the same solve: split and joined again, just the colour.
+      render('ch1-n8', { state, matched: true, mood: 'happy', merge: false, celebrateTick: 1, onJoin, cheer: 'car' });
+      act(() => jest.advanceTimersByTime(0));
+      expect(labels()).toEqual(['3', '4', '4']);
+      render('ch1-n8', { state, matched: true, mood: 'happy', merge: true, celebrateTick: 1, onJoin, cheer: 'car' });
+      act(() => jest.advanceTimersByTime(0));
+      expect(all('merge-seam')).toHaveLength(0);
+      expect(labels()).toEqual(['3', '8']);
+      expect(joins).toEqual(['4+4=8']);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('free play: a number pops up over a block; the bubble wears the badge\'s look', () => {
+    render('ch1-n2', { bubbles: [{ at: { x: 1, y: 1 }, n: 3, tick: 1 }] });
+    expect(all('number-bubble')).toHaveLength(1);
+    expect(all('number-bubble-3')[0]!.textContent).toBe('3');
+  });
+});
+

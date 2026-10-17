@@ -38,6 +38,15 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
   'prompt.missing_part': { zh: '已经有 {a} 了，再找一个伙伴，拼成 {n}', en: 'Here is {a}. Find one more partner to make {n}', params: ['a', 'n'] },
 
   'feedback.matched.quantity': { zh: '{n}，就是 {n} 块', en: '{n}. {n} blocks', params: ['n'] },
+  // One block: "one. one block", not "one blocks" (Phase 20, play review Q6).
+  'feedback.matched.quantity.one': { zh: '{n}，就是 {n} 块', en: '{n}. {n} block', params: ['n'] },
+  // A right number made of parts, named left to right (Phase 20, play review F5).
+  'feedback.matched.parts.2': { zh: '{a} 和 {b}，一共 {n} 块', en: '{a} and {b}, {n} in all', params: ['a', 'b', 'n'] },
+  'feedback.matched.parts.3': { zh: '{a}、{b} 和 {c}，一共 {n} 块', en: '{a}, {b} and {c}, {n} in all', params: ['a', 'b', 'c', 'n'] },
+  'feedback.matched.parts.4': { zh: '{a}、{b}、{c} 和 {d}，一共 {n} 块', en: '{a}, {b}, {c} and {d}, {n} in all', params: ['a', 'b', 'c', 'd', 'n'] },
+  'feedback.matched.parts.5': { zh: '{a}、{b}、{c}、{d} 和 {e}，一共 {n} 块', en: '{a}, {b}, {c}, {d} and {e}, {n} in all', params: ['a', 'b', 'c', 'd', 'e', 'n'] },
+  // The last picture of a stop in steps: the same blocks in a new shape.
+  'feedback.matched.same': { zh: '变了样子，还是 {n} 块', en: 'A new shape, still {n} blocks', params: ['n'] },
   'feedback.matched.shape': { zh: '拼好了，{n} 块', en: 'Done. {n} blocks', params: ['n'] },
   'feedback.matched.addition': { zh: '{a} 加 {b}，一共 {n}', en: '{a} plus {b} makes {n}', params: ['a', 'b', 'n'] },
   'feedback.start': { zh: '动手试试看', en: 'Give it a try', params: [] },
@@ -55,6 +64,8 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
   // blocks are missing is the answer itself, so the title does not say (Phase 19).
   'feedback.notyet': { zh: '还不到 {n}', en: 'Not {n} yet', params: ['n'] },
   'feedback.join': { zh: '数量对了，再接起来', en: 'Right count. Now join up', params: [] },
+  // Two other partners that make the total too: a discovery, not a mistake (Phase 20, F5).
+  'feedback.same-sum': { zh: '{x} 加 {y} 也是 {n}！', en: '{x} plus {y} is {n} too!', params: ['x', 'y', 'n'] },
   // Card titles stay short: one line on a 375px phone in either language.
   'feedback.partners': { zh: '数量够了，再找对伙伴', en: 'Right count. Swap partners', params: [] },
   'feedback.swap': { zh: '换个伙伴试试看', en: 'Try a different partner', params: [] },
@@ -68,6 +79,8 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
   // Hints name only moves the child can make with what is in front of them:
   // single blocks for loose material, whole partners for partner material.
   'hint.count-mismatch.fewer': { zh: '还不到 {n}，再拿一块', en: 'Not {n} yet. Take one more', params: ['n'] },
+  // As many as the card's title says are missing (Phase 20, play review Q6).
+  'hint.fewer.blocks': { zh: '还不到 {n}，再拿 {k} 块', en: 'Not {n} yet. Take {k} more', params: ['n', 'k'] },
   'hint.count-mismatch.more': { zh: '比 {n} 多了，放回一块', en: 'More than {n}. Put one back', params: ['n'] },
   'hint.fewer.partner': { zh: '还不到 {n}，再搬一个伙伴过来', en: 'Not {n} yet. Bring another partner', params: ['n'] },
   'hint.more.partner': { zh: '比 {n} 多了，把一个伙伴送回去', en: 'More than {n}. Send a partner back', params: ['n'] },
@@ -75,10 +88,16 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
   'hint.stuck.block': { zh: '先放回一些，再把伙伴搬过来', en: 'Put some back, then bring a partner', params: [] },
   'hint.sum-pair': { zh: '找两个伙伴，拼出 {n}', en: 'Find two partners that make {n}', params: ['n'] },
   'hint.another-way': { zh: '再用另外两个伙伴拼出 {n}', en: 'Make {n} with two other partners', params: ['n'] },
+  // The first way stays; the next is built beside it (Phase 20, play review Q1).
+  'hint.beside': { zh: '在旁边再拼一个 {n}', en: 'Make another {n} beside it', params: ['n'] },
+  // After the same-sum title: which two to find.
+  'hint.find': { zh: '再找 {a} 和 {b}', en: 'Now find {a} and {b}', params: ['a', 'b'] },
+  // A big number on an empty mat, after the task (the 17 boss, Phase 20 Q3).
+  'hint.biggest': { zh: '先搬最大的伙伴', en: 'Bring the biggest partner first', params: [] },
   // Said while the stray blocks / the little shape picture light up.
   'hint.not-one-cluster': { zh: '把分开的积木推到一起', en: 'Push the blocks together', params: [] },
   'hint.shape-mismatch': { zh: '照着小图摆一摆', en: 'Build it like the little picture', params: [] },
-  'hint.groups-mismatch': { zh: '我们先找 {a} 和 {b}', en: 'Let us find {a} and {b}', params: ['a', 'b'] },
+  'hint.groups-mismatch': { zh: '我们先找 {a} 和 {b}', en: "Let's find {a} and {b}", params: ['a', 'b'] },
   'hint.not-merged': { zh: '把 {a} 和 {b} 推到一起', en: 'Push {a} and {b} together', params: ['a', 'b'] },
   // Asked-for help (the card or the help button): names the partner and lights it up.
   'hint.send': { zh: '把 {a} 送回去', en: 'Send the {a} back', params: ['a'] },

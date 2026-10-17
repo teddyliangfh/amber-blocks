@@ -2,7 +2,7 @@ import { MAX_UNDO, assertInvariants, cell, clusters } from '../core';
 import type { Command } from '../core';
 import { CONTENT_VERSION, chapterId, materialize, nodeId, sandboxMaterial } from '../content';
 import { countOrder, countProgress, countTap, isCounted, recount } from './level-session';
-import { canUndo, commitSandbox, previewSandbox, startSandbox, tidySandbox, undoSandbox } from './sandbox-session';
+import { canUndo, clusterChanges, commitSandbox, previewSandbox, startSandbox, tidySandbox, undoSandbox } from './sandbox-session';
 import type { SandboxSession } from './sandbox-session';
 
 // Free play (2026-10-15 review O): no question, so nothing here is ever right or wrong.
@@ -124,3 +124,40 @@ describe('sandbox session', () => {
     expect(recount(counted).history).toBe(counted.history);
   });
 });
+
+describe('Phase 20 F6: groups that change size get their number for a moment', () => {
+  const box = sandboxMaterial();
+  const ids = [...box.units.keys()];
+  const put = (state: typeof box, cmds: ReadonlyArray<Parameters<typeof commitSandbox>[1]>) =>
+    cmds.reduce((s, cmd) => {
+      const r = commitSandbox(s, cmd);
+      if (!r.ok) {
+        throw new Error(r.reason);
+      }
+      return r.session;
+    }, startSandbox(null, state)).history.state;
+
+  test('joining two groups: one change, the new size, its parts left first, at its top-left block', () => {
+    const before = put(box, [
+      { type: 'take', unitId: ids[0]!, to: { x: 0, y: 0 } },
+      { type: 'take', unitId: ids[1]!, to: { x: 1, y: 0 } },
+      { type: 'take', unitId: ids[2]!, to: { x: 3, y: 0 } },
+    ]);
+    const after = put(before, [{ type: 'take', unitId: ids[3]!, to: { x: 2, y: 0 } }]);
+    expect(clusterChanges(before, after)).toEqual([{ head: { x: 0, y: 0 }, size: 4, parts: [2, 1, 1] }]);
+    // A block from the box on its own: a new 1, nothing joined.
+    expect(clusterChanges(after, put(after, [{ type: 'take', unitId: ids[4]!, to: { x: 0, y: 3 } }]))).toEqual([{ head: { x: 0, y: 3 }, size: 1, parts: [] }]);
+  });
+
+  test('splitting: both groups show their number; moving a whole group changes nothing; putting one back shrinks it', () => {
+    const row = put(box, ids.slice(0, 3).map((u, i) => ({ type: 'take', unitId: u, to: { x: i, y: 0 } }) as const));
+    const split = put(row, [{ type: 'move', unitId: ids[2]!, to: { x: 4, y: 0 } }]);
+    expect(clusterChanges(row, split)).toEqual([
+      { head: { x: 0, y: 0 }, size: 2, parts: [] },
+      { head: { x: 4, y: 0 }, size: 1, parts: [] },
+    ]);
+    expect(clusterChanges(split, put(split, [{ type: 'move', unitId: ids[2]!, to: { x: 5, y: 4 } }]))).toEqual([]);
+    expect(clusterChanges(row, put(row, [{ type: 'return', unitId: ids[0]! }]))).toEqual([{ head: { x: 1, y: 0 }, size: 2, parts: [] }]);
+  });
+});
+

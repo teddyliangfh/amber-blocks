@@ -2,7 +2,7 @@ import { areTouching, groupSize } from '../core';
 import type { Command, Group } from '../core';
 import { CHAPTERS, CONTENT_VERSION, chapterId, format, materialize, materializeNode, nodeId } from '../content';
 import type { Puzzle } from '../content';
-import { asksForHelp, cardFor, feedbackFor, guidanceFor, hintFor, promptParams } from './hints';
+import { HELP_LADDER_STEPS, asksForHelp, biggestFirst, cardFor, feedbackFor, guidanceFor, helpAt, hintFor, promptParams, rungOf } from './hints';
 import { commitCommand, startSession } from './level-session';
 import type { LevelSession } from './level-session';
 
@@ -80,14 +80,16 @@ describe('help hints follow the material (review: no "take one more" when only p
     expect(shapeFeedback.tone).toBe('adjust');
     expect(format(shapeFeedback.title.key, 'zh')).toBe('数量对了，再看看形状');
     const p = exactJoin();
+    // Apart (Phase 20: joined, 5 + 2 is a discovery, see the A-4 test).
     const wrong = play(p, [
       { type: 'takeGroup', groupId: partner(p, 5).id, origin: { x: 0, y: 0 } },
-      { type: 'takeGroup', groupId: partner(p, 2).id, origin: { x: 5, y: 0 } },
+      { type: 'takeGroup', groupId: partner(p, 2).id, origin: { x: 0, y: 2 } },
     ]);
     const f = feedbackFor(wrong);
     expect(f.tone).toBe('adjust');
     expect(format(f.title.key, 'zh')).toBe('数量够了，再找对伙伴');
     expect(format(f.detail.key, 'zh', f.detail.params)).toBe('我们先找 3 和 4');
+    expect(format(f.detail.key, 'en', f.detail.params)).toBe("Let's find 3 and 4");
     const partialWrong = play(p, [
       { type: 'takeGroup', groupId: partner(p, 4).id, origin: { x: 0, y: 0 } },
       { type: 'takeGroup', groupId: partner(p, 2).id, origin: { x: 0, y: 2 } },
@@ -100,7 +102,9 @@ describe('help hints follow the material (review: no "take one more" when only p
   test('loose stops keep the single-block hints', () => {
     const p = puzzleOf('ch1-n2');
     const units = [...p.initial.units.keys()];
-    expect(say(play(p, []))).toBe('还不到 2，再拿一块');
+    // Phase 20 Q6: as many as the title says are missing.
+    expect(say(play(p, []))).toBe('还不到 2，再拿 2 块');
+    expect(say(play(p, [{ type: 'take', unitId: units[0]!, to: { x: 0, y: 0 } }]))).toBe('还不到 2，再拿一块');
     expect(say(play(p, units.slice(0, 3).map((u, i) => ({ type: 'take', unitId: u, to: { x: i, y: 0 } }))))).toBe('比 2 多了，放回一块');
   });
 
@@ -254,7 +258,7 @@ describe('help hints follow the material (review: no "take one more" when only p
             const g = pick(fresh.length > 0 ? fresh : fitting, rnd)!;
             brought.push(g);
             next = takeGroup(s, g);
-          } else if (key === 'hint.count-mismatch.fewer') {
+          } else if (key === 'hint.count-mismatch.fewer' || key === 'hint.fewer.blocks') {
             next = take(s, pick(m.trayLoose, rnd)!);
           } else if (key === 'hint.stuck.block' || key === 'hint.count-mismatch.more') {
             next = commitFirst(s, [{ type: 'return', unitId: pick(m.benchLoose, rnd)! }]);
@@ -374,9 +378,10 @@ describe('asked-for help points at the blocks (review: hints must point at objec
       { type: 'takeGroup', groupId: partner(p, 2).id, origin: { x: 5, y: 0 } },
     ]);
     expect(s.verdict.reason).toBe('groups-mismatch');
-    expect(feedbackFor(s).tone).toBe('adjust');
-    // Level 1 is unchanged: what to find, nothing lit.
-    expect(text(guidanceFor(s, 1))).toBe('我们先找 3 和 4');
+    // Phase 20 F5: joined, it is a discovery on a blue card, then which two to find.
+    expect(feedbackFor(s).tone).toBe('building');
+    expect(format(feedbackFor(s).title.key, 'zh', feedbackFor(s).title.params)).toBe('5 加 2 也是 7！');
+    expect(text(guidanceFor(s, 1))).toBe('再找 3 和 4');
     expect(guidanceFor(s, 1).focus.objects).toEqual([]);
     const help = guidanceFor(s, 2);
     expect(text(help)).toBe('5 加 2 也是 7！再找 3 和 4');
@@ -533,7 +538,10 @@ describe('asked-for help points at the blocks (review: hints must point at objec
   // moves is listed with its trail (step:partners on the mat:line, * = lit).
   // It found three partners on the mat (2 + 3 + 1 on make-6) with help naming
   // nothing: "find two partners", a fourth brought, the right one sent back.
-  test('Phase 19: following help from a random muddle always finishes the Join Island sums, the boss both ways', () => {
+  // Phase 20 Q3: also on the help ladder. The child asks until something is
+  // named (the middle rung names only what to send back) and does it; back on a
+  // mat it has seen before, it asks once more and gets the whole help.
+  test.each(['whole help', 'help ladder'] as const)('Phase 19: following help from a random muddle always finishes the Join Island sums, the boss both ways (%s)', (mode) => {
     const commitFirst = (s: LevelSession, cmds: ReadonlyArray<Command>): LevelSession | null => {
       for (const cmd of cmds) {
         const r = commitCommand(s, cmd);
@@ -595,8 +603,13 @@ describe('asked-for help points at the blocks (review: hints must point at objec
         const brought: string[] = [];
         const sentBack = new Set<string>();
         let moves = 0;
+        const visits = new Map<string, number>();
+        // What stayed lit after the child did only the first half of a swap (Q4).
+        let carry: string[] = [];
         while (moves < 24 && !s.verdict.matched) {
-          const help = guidanceFor(s, asksForHelp(s) ? 2 : 1);
+          const mat = `${s.step}:${onBench(s).map((g) => g.id).sort().join(',')}`;
+          visits.set(mat, (visits.get(mat) ?? 0) + 1);
+          const help = !asksForHelp(s) ? guidanceFor(s, 1) : mode === 'whole help' ? guidanceFor(s, 2) : helpAt(s, Math.min(1 + visits.get(mat)!, HELP_LADDER_STEPS));
           const key = help.line.key as string;
           const lit = help.focus.objects;
           trail.push(`${s.step}:${onBench(s).map(groupSize).join('+') || 0}:${key}${lit.length > 0 ? '*' : ''}`);
@@ -606,7 +619,9 @@ describe('asked-for help points at the blocks (review: hints must point at objec
             moves += 1;
           } else if (lit.length > 0) {
             next = s;
-            for (const object of rnd() % 2 === 0 ? lit : lit.slice(0, 1)) {
+            const doing = rnd() % 2 === 0 ? lit : lit.slice(0, 1);
+            carry = mode === 'help ladder' ? lit.slice(doing.length).filter((o) => inTray(s).some((g) => g.id === o)) : [];
+            for (const object of doing) {
               const g: Group | undefined = next.history.state.groups.get(object as never);
               if (g === undefined) {
                 next = null;
@@ -633,7 +648,9 @@ describe('asked-for help points at the blocks (review: hints must point at objec
           } else {
             const tray = inTray(s);
             const fresh = tray.filter((g) => !sentBack.has(g.id));
-            const g = pick(fresh.length > 0 ? fresh : tray);
+            const kept = tray.find((g) => carry.includes(g.id));
+            carry = [];
+            const g = kept ?? pick(fresh.length > 0 ? fresh : tray);
             if (g !== undefined) {
               brought.push(g.id);
               next = place(s, g, takes(g), false);
@@ -726,7 +743,8 @@ describe("Phase 19: who's missing (ch2-n5: the 2 is on the mat, find its other h
       { type: 'takeGroup', groupId: of(4), origin: { x: 1, y: 0 } },
     ]);
     expect(s.verdict.reason).toBe('groups-mismatch');
-    expect(card(s).title).toBe('数量够了，再找对伙伴');
+    // Phase 20 F5: joined, the card says so (blue), then which two to find.
+    expect(card(s).title).toBe('1 加 4 也是 5！');
     const help = guidanceFor(s, 2);
     expect(text(help.line)).toBe('1 加 4 也是 5！再找 2 和 3');
     expect(help.focus.objects).toEqual([of(1), of(4), two, of(3)]);
@@ -787,11 +805,18 @@ describe('Phase 19: 7 made two ways (ch2-n8): the second way', () => {
     expect(text(f.detail)).toBe('再用另外两个伙伴拼出 7');
     expect(text(f.detail, 'en')).toBe('Make 7 with two other partners');
     expect(guidanceFor(s, 1).focus.objects).toEqual([]);
+    // Phase 20 Q1: the first way may stay; the next is made beside it (the bottom row is free), the two to bring lit.
     const help = guidanceFor(s, 2);
-    expect(text(help.line)).toBe('3 加 4 也是 7！再找 5 和 2');
-    expect(help.focus.objects).toEqual([of(3), of(4), of(5), of(2)]);
-    expect(text(cardFor(s, 2, true).detail)).toBe('3 加 4 也是 7！再找 5 和 2');
+    expect(text(help.line)).toBe('在旁边再拼一个 7');
+    expect(text(help.line, 'en')).toBe('Make another 7 beside it');
+    expect(help.focus.objects).toEqual([of(5), of(2)]);
+    expect(text(cardFor(s, 2, true).detail)).toBe('在旁边再拼一个 7');
     expect(text(cardFor(s, 0, true).detail)).toBe('再用另外两个伙伴拼出 7');
+    // Across the middle row there is no room beside it: send it back, as before.
+    const middle = play(p, first.map((c) => (c.type === 'takeGroup' ? { ...c, origin: { x: c.origin.x, y: 1 } } : c)));
+    expect(feedbackFor(middle).tone).toBe('building');
+    expect(text(guidanceFor(middle, 2).line)).toBe('3 加 4 也是 7！再找 5 和 2');
+    expect(guidanceFor(middle, 2).focus.objects).toEqual([of(3), of(4), of(5), of(2)]);
   });
 
   test('half of the first way sent back is still "another way"; help names the one left to send back', () => {
@@ -807,5 +832,126 @@ describe('Phase 19: 7 made two ways (ch2-n8): the second way', () => {
     expect(s.verdict.matched).toBe(true);
     expect(say(s)).toBe('5 加 2，一共 7');
     expect(text(feedbackFor(play(p, [])).detail)).toBe('找两个伙伴，拼出 7');
+  });
+});
+
+describe('Phase 20: the help ladder, what is said, and what the child found', () => {
+  const text = (l: { key: string; params: Readonly<Record<string, number>> }, lang: 'zh' | 'en' = 'zh', numbers: 'digit' | 'word' = 'digit') => format(l.key as never, lang, l.params, { numbers });
+
+  test('Q3: three rungs by default; one rung is the old help, everything on the first ask', () => {
+    expect(HELP_LADDER_STEPS).toBe(3);
+    expect([1, 2, 3, 4].map((n) => rungOf(n))).toEqual(['look', 'send', 'full', 'full']);
+    expect([1, 2].map((n) => rungOf(n, 1))).toEqual(['full', 'full']);
+    expect([1, 2, 3].map((n) => rungOf(n, 2))).toEqual(['send', 'full', 'full']);
+  });
+
+  test('Q3: a swap climbs: the card\'s line with the blocks numbered, then only what to send back, then all of it', () => {
+    const p = puzzleOf('ch2-n5');
+    const given = p.given!;
+    const four = partner(p, 4).id;
+    const s = play(p, [{ type: 'takeGroup', groupId: four, origin: { x: 2, y: [...p.initial.bench.values()][0]!.y } }]);
+    const look = helpAt(s, 1);
+    expect(text(look.line)).toBe('比 5 多了，把一个伙伴送回去');
+    expect(look.countUp).toBe(true);
+    expect(look.focus.objects).toEqual([]);
+    const send = helpAt(s, 2);
+    expect(text(send.line)).toBe('把 4 送回去');
+    expect(send.focus.objects).toEqual([four]);
+    expect(send.countUp).toBe(false);
+    const full = helpAt(s, 3);
+    expect(text(full.line)).toBe('把 4 送回去，换 3 过来');
+    expect(full.focus.objects).toEqual([four, partner(p, 3).id]);
+    expect(helpAt(s, 9)).toEqual(full);
+    // A ladder of one: the whole help at once, as before Phase 20.
+    expect(helpAt(s, 1, 1)).toEqual(full);
+    expect(given).toBeDefined();
+  });
+
+  test('Q3: wrong partners light the partners on the mat first; nothing is corrected on an empty mat', () => {
+    const p = exactJoin();
+    const apart = play(p, [
+      { type: 'takeGroup', groupId: partner(p, 5).id, origin: { x: 0, y: 0 } },
+      { type: 'takeGroup', groupId: partner(p, 2).id, origin: { x: 0, y: 2 } },
+    ]);
+    expect(helpAt(apart, 1).focus.objects).toEqual([partner(p, 5).id, partner(p, 2).id]);
+    expect(helpAt(apart, 1).countUp).toBe(false);
+    expect(text(helpAt(apart, 2).line)).toBe('把 5 送回去');
+    expect(helpAt(play(p, []), 3)).toEqual({ ...guidanceFor(play(p, []), 1), countUp: false });
+  });
+
+  test('Q3: the 17 boss on an empty mat: bring the biggest partner first, the 10 lit; other stops and a started mat have none', () => {
+    const p = puzzleOf('ch1-n12');
+    const big = biggestFirst(play(p, []));
+    expect(text(big!.line)).toBe('先搬最大的伙伴');
+    expect(text(big!.line, 'en')).toBe('Bring the biggest partner first');
+    expect(big!.focus.objects).toEqual([partner(p, 10).id]);
+    expect(biggestFirst(play(p, [{ type: 'takeGroup', groupId: partner(p, 2).id, origin: { x: 0, y: 4 } }]))).toBeNull();
+    expect(biggestFirst(play(puzzleOf('ch1-n2'), []))).toBeNull();
+    expect(biggestFirst(play(puzzleOf('ch1-n8'), []))).toBeNull();
+  });
+
+  test('Q5: a free sum short of its total says only "not 5 yet", never how many are missing', () => {
+    const p = puzzleOf('ch2-n4');
+    const s = play(p, [{ type: 'takeGroup', groupId: partner(p, 1).id, origin: { x: 0, y: 0 } }]);
+    const f = feedbackFor(s);
+    expect(f.tone).toBe('building');
+    expect(text(f.title)).toBe('还不到 5');
+    expect(text(f.title, 'en')).toBe('Not 5 yet');
+  });
+
+  test('Q6: one block is "one block"; more single blocks than one ask for as many as the title says', () => {
+    const one = play(puzzleOf('ch1-n1'), [{ type: 'take', unitId: [...puzzleOf('ch1-n1').initial.units.keys()][0]!, to: { x: 1, y: 1 } }]);
+    expect(text(feedbackFor(one).detail, 'en', 'word')).toBe('one. one block');
+    expect(text(feedbackFor(one).detail, 'zh', 'word')).toBe('一，就是 一 块');
+    const p = puzzleOf('ch1-n5');
+    const units = spares(p);
+    const three = play(p, units.slice(0, 3).map((u, i) => ({ type: 'take', unitId: u, to: { x: i, y: 0 } })));
+    expect(text(feedbackFor(three).title)).toBe('还差 2 块');
+    expect(text(feedbackFor(three).detail)).toBe('还不到 5，再拿 2 块');
+    expect(text(feedbackFor(three).detail, 'en')).toBe('Not 5 yet. Take 2 more');
+  });
+
+  test('F5: a number made of parts names them left to right; the last picture of a stop in steps says it is still the same number', () => {
+    const p = puzzleOf('ch1-n9');
+    const s = play(p, [
+      { type: 'takeGroup', groupId: partner(p, 5).id, origin: { x: 0, y: 0 } },
+      { type: 'takeGroup', groupId: partner(p, 3).id, origin: { x: 0, y: 1 } },
+      { type: 'take', unitId: spares(p)[0]!, to: { x: 3, y: 1 } },
+    ]);
+    expect(s.verdict.matched).toBe(true);
+    expect(text(feedbackFor(s).detail)).toBe('5、3 和 1，一共 9 块');
+    expect(text(feedbackFor(s).detail, 'en')).toBe('5, 3 and 1, 9 in all');
+    const brick = puzzleOf('ch1-n8');
+    expect(text(feedbackFor(play(brick, brick.solution)).detail)).toBe('4 和 4，一共 8 块');
+    const same = puzzleOf('ch1-n6');
+    const line = play(same, same.solution);
+    expect(text(feedbackFor(line).detail)).toBe('变了样子，还是 4 块');
+    expect(text(feedbackFor(line).detail, 'en')).toBe('A new shape, still 4 blocks');
+    // One part: as before.
+    expect(text(feedbackFor(play(puzzleOf('ch1-n3'), puzzleOf('ch1-n3').solution)).detail)).toBe('拼好了，4 块');
+  });
+
+  test('F5: two other partners joined that make the total are a discovery: a blue card, which two to find, help that names them', () => {
+    const p = puzzleOf('ch2-n3');
+    const s = play(p, [
+      { type: 'takeGroup', groupId: partner(p, 3).id, origin: { x: 0, y: 0 } },
+      { type: 'takeGroup', groupId: partner(p, 1).id, origin: { x: 3, y: 0 } },
+    ]);
+    const f = feedbackFor(s);
+    expect(f.tone).toBe('building');
+    expect(text(f.title)).toBe('3 加 1 也是 4！');
+    expect(text(f.title, 'en')).toBe('3 plus 1 is 4 too!');
+    expect(text(f.detail)).toBe('再找 2 和 2');
+    expect(text(f.detail, 'en')).toBe('Now find 2 and 2');
+    expect(asksForHelp(s)).toBe(true);
+    expect(helpAt(s, 1).focus.objects).toEqual([partner(p, 3).id, partner(p, 1).id]);
+    expect(text(helpAt(s, 2).line)).toBe('把 3 送回去');
+    expect(text(helpAt(s, 3).line)).toBe('3 加 1 也是 4！再找 2 和 2');
+    // Apart, they are only the right count with the wrong partners.
+    const apart = play(p, [
+      { type: 'takeGroup', groupId: partner(p, 3).id, origin: { x: 0, y: 0 } },
+      { type: 'takeGroup', groupId: partner(p, 1).id, origin: { x: 0, y: 2 } },
+    ]);
+    expect(feedbackFor(apart).tone).toBe('adjust');
   });
 });

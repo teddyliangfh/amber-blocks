@@ -5,14 +5,14 @@ import type { LayoutChangeEvent } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Confetti, FONT, LEVEL_CHROME, Spotlight, Stage, THEME, cheerFor, colorsFor, computeGeometry, trayObjects, useBreathe, usePop } from '../blocks-ui';
+import { Confetti, FONT, LEVEL_CHROME, MERGE_ON, Spotlight, Stage, THEME, cheerFor, colorsFor, computeGeometry, trayObjects, useBreathe, usePop } from '../blocks-ui';
 import { COUNT_TO_PASS, copyKey, format, hueFor, materialize, nodeId as makeNodeId } from '../content';
 import type { NodeId, Puzzle } from '../content';
 import type { Command, UnitId } from '../core';
 import { chapterOf, nextNodeOf, statusOf } from '../progress';
 import { createCorrectionVoice } from './correction-voice';
-import { asksForHelp, cardFor, feedbackFor, guidanceFor, matchedFeedback, promptParams } from './hints';
-import type { Line } from './hints';
+import { asksForHelp, biggestFirst, cardFor, feedbackFor, guidanceFor, helpAt, matchedFeedback, promptParams } from './hints';
+import type { AskedHelp, Line } from './hints';
 import { AnswerFeedback } from './AnswerFeedback';
 import { Cloud, SkyCloud } from './Cloud';
 import { Icon } from './icons';
@@ -26,8 +26,8 @@ import { ParentGate, PillButton, RoundButton } from './ui';
 import { say, voice } from './voice';
 
 const MENU = {
-  zh: { help: '帮助', undo: '撤销', close: '继续', next: '下一站', done: '回地图', again: '再玩一次', restart: '重新挑战', recount: '再数一遍', parent: '家长区', hold: '长按进入家长区' },
-  en: { help: 'Help', undo: 'Undo', close: 'Play', next: 'Next stop', done: 'Back to map', again: 'Play again', restart: 'Start over', recount: 'Count again', parent: 'Parents', hold: 'Press and hold for the parents\' area' },
+  zh: { help: '帮助', undo: '撤销', close: '继续', next: '下一站', done: '回地图', again: '再玩一次', restart: '重新挑战', map: '回地图', recount: '再数一遍', parent: '家长区', hold: '按住进入家长区', menu: '菜单' },
+  en: { help: 'Help', undo: 'Undo', close: 'Keep playing', next: 'Next stop', done: 'Back to map', again: 'Play again', restart: 'Start over', map: 'Back to map', recount: 'Count again', parent: 'Parents', hold: 'Press and hold for the parents\' area', menu: 'Menu' },
 } as const;
 
 // The "like this" hand: after this long with an empty mat and no touch, at
@@ -42,6 +42,15 @@ const FIRST_STOP = 'ch1-n1';
 // the card's speaker pulses twice: the help is in there (2026-10-16 review B-3).
 // Once a visit; no sound, no words.
 export const NUDGE_AFTER_MS = 3000;
+// A solve comes in two beats (Phase 20, play review Q2: the paper flew on the
+// second block of three, then the third turned it into "one too many"). The
+// drop that makes it right gets the success sound and smiling faces at once;
+// the paper, the number's own move and the way on ("next") wait this long, and
+// wait again while a finger is dragging. The completion is saved at once.
+export const SOLVE_SETTLE_MS = 600;
+// The first ask for help when the count is off numbers the blocks on the mat,
+// one this often, with the counting sound and no words (Phase 20 Q3).
+export const COUNT_UP_STEP_MS = 320;
 
 function isBossStop(nodeId: NodeId): boolean {
   return chapterOf(nodeId).nodes.find((n) => n.id === nodeId)?.role === 'boss';
@@ -100,18 +109,47 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
   // Spoken corrections follow one timing rule (see correction-voice.ts). They
   // queue (interrupt: false) so counting words and the prompt are never cut off.
   const [corrections] = useState(() => createCorrectionVoice({ stop: () => voice.stop() }));
-  // How much help the current answer has had: 0 none, 1 the correction was said
-  // on its own (it points only where that gives nothing away), 2 the child asked
-  // (the card or the help button) and the partner is named and lit. Any change
-  // to the answer starts again at 0.
-  const [helpLevel, setHelpLevel] = useState<0 | 1 | 2>(0);
+  // How much help the current answer has had. `pointed`: the correction came
+  // on its own (or a step was done), pointing only where that gives nothing
+  // away. `asks`: how many times the child asked (the card or the help
+  // button), which climbs the help ladder (hints.ts HELP_LADDER_STEPS). Any
+  // change to the answer starts both again.
+  const [pointed, setPointed] = useState(false);
+  const [asks, setAsks] = useState(0);
+  const asksRef = useRef(0);
+  const setAskCount = useCallback((n: number) => {
+    asksRef.current = n;
+    setAsks(n);
+  }, []);
+  // After the child sends back what asked-for help named, what it lit in the
+  // tray (the one to bring) stays lit until the next move (Phase 20 Q4).
+  const [carry, setCarry] = useState<ReadonlyArray<string>>([]);
+  // The blocks on the mat numbered one by one for the first ask (display only).
+  const [countUp, setCountUp] = useState<{ readonly units: ReadonlyArray<UnitId>; readonly shown: number } | null>(null);
+  useEffect(() => {
+    if (countUp === null || countUp.shown >= countUp.units.length) {
+      return;
+    }
+    const t = setTimeout(() => {
+      play('count', countUp.shown + 1);
+      setCountUp({ ...countUp, shown: countUp.shown + 1 });
+    }, COUNT_UP_STEP_MS);
+    return () => clearTimeout(t);
+  }, [countUp]);
+  const clearHelp = useCallback(() => {
+    setPointed(false);
+    setAskCount(0);
+    setCarry([]);
+    setCountUp(null);
+  }, [setAskCount]);
   useEffect(
     () =>
       corrections.setSpeaker((l) => {
         if (AUTO_SPEECH.correction) {
           say(lang, l.key, l.params, false);
         }
-        setHelpLevel((v) => (v === 0 ? 1 : v));
+        setPointed(true);
+        return AUTO_SPEECH.correction;
       }),
     [corrections, lang],
   );
@@ -125,7 +163,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
     setFinishedBefore(state?.completedNodeIds.has(nodeId) ?? false);
     sessionRef.current = s;
     setSession(s);
-    setHelpLevel(0);
+    clearHelp();
     // Saved work that is already right shows as right, without a second
     // celebration. It is the stop's album picture too (a no-op when it already is;
     // an archive from before the album fills it in on the next visit).
@@ -158,6 +196,37 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
   // The cloud pops on a solve and on a finished count.
   const [badgePops, setBadgePops] = useState(0);
   const pop = usePop(badgePops);
+  // The second beat of a solve (SOLVE_SETTLE_MS): which solve waits for it
+  // (0: none), whether a finger is down, and its timer.
+  const [settling, setSettling] = useState(false);
+  const pendingSolve = useRef(0);
+  const dragging = useRef(false);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdSettle = useCallback(() => {
+    if (settleTimer.current !== null) {
+      clearTimeout(settleTimer.current);
+      settleTimer.current = null;
+    }
+  }, []);
+  const armSettle = useCallback(() => {
+    holdSettle();
+    if (pendingSolve.current === 0 || dragging.current) {
+      return;
+    }
+    settleTimer.current = setTimeout(() => {
+      settleTimer.current = null;
+      setCelebration(pendingSolve.current);
+      setBadgePops((n) => n + 1);
+      pendingSolve.current = 0;
+      setSettling(false);
+    }, SOLVE_SETTLE_MS);
+  }, [holdSettle]);
+  const dropSettle = useCallback(() => {
+    holdSettle();
+    pendingSolve.current = 0;
+    setSettling(false);
+  }, [holdSettle]);
+  useEffect(() => holdSettle, [holdSettle]);
 
   // Anything the child does puts the demo away and starts its wait again.
   const [demo, setDemo] = useState(0);
@@ -172,7 +241,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
 
   const [nudge, setNudge] = useState(0);
   const nudged = useRef(false);
-  const tipWaiting = session !== null && helpLevel < 2 && feedbackFor(session).tone === 'adjust';
+  const tipWaiting = session !== null && asks === 0 && feedbackFor(session).tone === 'adjust';
   useEffect(() => {
     if (!tipWaiting || menuOpen || nudged.current) {
       return;
@@ -226,12 +295,27 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
       if (before !== null && countWordsStale(before, next)) {
         voice.stop();
       }
+      // Asked-for help named a partner to send back and the child did: what it
+      // lit that has not moved (the one to bring) stays lit until the next move.
+      const lit = before !== null && asksRef.current > 0 ? helpAt(before, asksRef.current).focus.objects : [];
+      const placeOf = (s: LevelSession, id: string) => {
+        const state = s.history.state;
+        const units = state.groups.get(id as never)?.unitIds ?? [id as UnitId];
+        return units.every((u) => state.bench.has(u)) ? 'bench' : 'tray';
+      };
+      const sent = before !== null && lit.some((id) => placeOf(before, id) === 'bench' && placeOf(next, id) === 'tray');
       // A step done: the new picture lights up at once (help level 1 points at it).
-      setHelpLevel(stepDone && !solvedNow ? 1 : 0);
+      setPointed(stepDone && !solvedNow);
+      setAskCount(0);
+      setCountUp(null);
+      setCarry(sent && before !== null ? lit.filter((id) => placeOf(before, id) === placeOf(next, id)) : []);
       saveWork(next);
       // Before the success line: a stale correction is stopped, the success line is not.
       corrections.answer(correctionOf(next));
-      if (stepDone && !solvedNow) {
+      // Two other partners that make the total too (Phase 20, F5): the same
+      // little celebration as a step done, once, as the mat turns into it.
+      const sameSum = (s: LevelSession | null) => s !== null && feedbackFor(s).title.key === copyKey('feedback.same-sum');
+      if ((stepDone && !solvedNow) || (!solvedNow && sameSum(next) && !sameSum(before))) {
         // One picture made, the next to make with the same blocks: a hop, the
         // success sound and the cloud's pop; the paper waits for the last one.
         solves.current += 1;
@@ -243,16 +327,24 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
       }
       setStepHop(0);
       if (solvedNow) {
+        // The first beat now: the sound and the smiles. The paper, the number's
+        // move and the way on follow after SOLVE_SETTLE_MS (armSettle).
         solves.current += 1;
-        setCelebration(solves.current);
-        setBadgePops((n) => n + 1);
+        pendingSolve.current = solves.current;
+        setSettling(true);
+        setCelebration(0);
         play(isBossStop(nodeId) ? 'fanfare' : 'success');
         if (AUTO_SPEECH.success) {
           const fb = matchedFeedback(next);
           say(lang, fb.key, fb.params);
         }
+        armSettle();
       } else {
         setCelebration(0);
+        // Wrong again before the second beat: it never comes.
+        if (!next.verdict.matched) {
+          dropSettle();
+        }
         // A soft "hmm?" when the answer turns into one that needs changing; not
         // again while it stays wrong, so moving things around is not nagged.
         if (feedbackFor(next).tone === 'adjust' && (before === null || feedbackFor(before).tone !== 'adjust')) {
@@ -260,7 +352,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
         }
       }
     },
-    [saveWork, nodeId, lang, corrections],
+    [saveWork, nodeId, lang, corrections, setAskCount, armSettle, dropSettle],
   );
 
   const onCommand = useCallback(
@@ -293,6 +385,8 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
       const { session: next, outcome } = countTap(current, unitId);
       sessionRef.current = next;
       setSession(next);
+      // The child counts for itself: the numbers help put up give way.
+      setCountUp(null);
       corrections.activity();
       stir();
       if (outcome.kind === 'counted') {
@@ -313,12 +407,33 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
     [lang, corrections, stir],
   );
 
+  // A right mat cleared by "play again" (or "start over") comes back with
+  // undo once the new round has nothing left to undo (Phase 20 Q8).
+  const replayed = useRef<LevelSession | null>(null);
+  // Pieces joining into one number: their notes, then the total's (Phase 20 F1).
+  const onJoin = useCallback((parts: ReadonlyArray<number>, total: number) => play('join', total, parts), []);
+
+  // A block or partner in the tray says its own number when tapped (Phase 20
+  // Q11): asked for, so not automatic speech; no count, no change to the mat.
+  const onTapTray = useCallback(
+    (n: number) => {
+      corrections.activity();
+      stir();
+      say(lang, copyKey(`number.${Math.min(n, 17)}`), {});
+    },
+    [lang, corrections, stir],
+  );
+
   const onUndo = useCallback(() => {
     const current = sessionRef.current;
     if (current === null) {
       return;
     }
-    const back = undoCommand(current);
+    const kept = replayed.current;
+    if (current.history.past.length === 0 && kept !== null) {
+      replayed.current = null;
+    }
+    const back = undoCommand(current) ?? (current.history.past.length === 0 ? kept : null);
     if (back !== null) {
       if (countWordsStale(current, back)) {
         voice.stop();
@@ -326,11 +441,12 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
       sessionRef.current = back;
       setSession(back);
       setCelebration(0);
-      setHelpLevel(0);
+      dropSettle();
+      clearHelp();
       saveWork(back);
       corrections.answer(correctionOf(back));
     }
-  }, [saveWork, corrections]);
+  }, [saveWork, corrections, dropSettle, clearHelp]);
 
   const onRecount = useCallback(() => {
     const current = sessionRef.current;
@@ -342,6 +458,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
     const next = recount(current);
     sessionRef.current = next;
     setSession(next);
+    setCountUp(null);
   }, []);
 
   // Re-challenge a finished stop: the completion and the unlocked map stay, the
@@ -352,23 +469,27 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
       return;
     }
     voice.stop();
+    const before = sessionRef.current;
+    replayed.current = before !== null && before.verdict.matched ? before : null;
     const fresh = startSession(puzzle, null);
     sessionRef.current = fresh;
     setSession(fresh);
     setCelebration(0);
     setStepHop(0);
-    setHelpLevel(0);
+    dropSettle();
+    clearHelp();
     corrections.answer(null);
     play('arrive');
     if (AUTO_SPEECH.prompt) {
       say(lang, puzzle.prompt, promptParams(puzzle));
     }
-  }, [dispatch, nodeId, puzzle, lang, corrections]);
+  }, [dispatch, nodeId, puzzle, lang, corrections, dropSettle, clearHelp]);
 
-  // The help button and the feedback card ask for help. A wrong answer gets
-  // the named, lit-up help (level 2) and the card shows it; otherwise the card's
-  // own line again (the task, the next step, or what was built), pointing at the
-  // shape picture on a shape stop.
+  // The help button and the feedback card ask for help. Help that has
+  // something to correct climbs a rung each time it is asked on the same answer
+  // (hints.ts helpAt) and the card shows what it said; otherwise the card's own
+  // line again (the task, the next step), pointing at the shape picture on a
+  // shape stop. A right answer says what was built, then what the card says.
   const onAskHelp = useCallback(() => {
     const current = sessionRef.current;
     if (current === null) {
@@ -378,25 +499,45 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
     corrections.heard(f.detail);
     // Found the help on its own: no need to point at it any more this visit.
     nudged.current = true;
+    const n = asksRef.current + 1;
+    setAskCount(n);
     if (asksForHelp(current, f)) {
-      const help = guidanceFor(current, 2);
-      setHelpLevel(2);
+      const help = helpAt(current, n);
       say(lang, help.line.key, help.line.params);
+      if (help.countUp) {
+        const bench = current.history.state.bench;
+        setCountUp({ units: [...bench.keys()].sort((a, b) => bench.get(a)!.y - bench.get(b)!.y || bench.get(a)!.x - bench.get(b)!.x), shown: 0 });
+      }
       return;
     }
-    const line = f.tone === 'success' ? matchedFeedback(current) : f.detail;
-    setHelpLevel((v) => (v === 0 ? 1 : v));
-    say(lang, line.key, line.params);
-  }, [lang, corrections]);
+    if (f.tone === 'success') {
+      const built = matchedFeedback(current);
+      const card = cardFor(current, 0, nextNodeOf(nodeId) !== null).detail;
+      say(lang, built.key, built.params);
+      say(lang, card.key, card.params, false);
+      return;
+    }
+    say(lang, f.detail.key, f.detail.params);
+    // The 17 boss on an empty mat: which partner to start with.
+    const big = isBossStop(nodeId) ? biggestFirst(current) : null;
+    if (big !== null) {
+      say(lang, big.line.key, big.line.params, false);
+    }
+  }, [lang, corrections, nodeId, setAskCount]);
 
   const onDragActive = useCallback(
     (active: boolean) => {
       corrections.pause(active, 'drag');
+      // A finger down holds the second beat of a solve; letting go waits again.
+      dragging.current = active;
       if (active) {
+        holdSettle();
         stir();
+      } else {
+        armSettle();
       }
     },
-    [corrections, stir],
+    [corrections, stir, holdSettle, armSettle],
   );
 
   const onPrompt = useCallback(() => {
@@ -449,7 +590,13 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
   }, [stageSize, puzzle, objects]);
 
   const order = useMemo(() => (session === null ? new Map<UnitId, number>() : countOrder(session)), [session]);
-  const guide = useMemo(() => (session === null || helpLevel === 0 ? null : guidanceFor(session, helpLevel)), [session, helpLevel]);
+  const guide = useMemo((): AskedHelp | null => (session === null ? null : asks > 0 ? helpAt(session, asks) : pointed ? { ...guidanceFor(session, 1), countUp: false } : null), [session, asks, pointed]);
+  const biggest = useMemo(() => (session === null || asks === 0 || !isBossStop(nodeId) ? null : biggestFirst(session)), [session, asks, nodeId]);
+  const spotlight = useMemo(
+    () => [...(guide !== null && guide.focus.objects.length > 0 ? guide.focus.objects : carry), ...(biggest?.focus.objects ?? [])],
+    [guide, carry, biggest],
+  );
+  const shownCounts = useMemo(() => (countUp === null ? order : new Map(countUp.units.slice(0, countUp.shown).map((u, i) => [u, i + 1]))), [countUp, order]);
   const breathe = useBreathe(session?.verdict.matched ?? false);
 
   if (built.failed) {
@@ -461,7 +608,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
 
   // Only for a stop that was entered: the static export renders this route with a placeholder id.
   const hasNext = nextNodeOf(nodeId) !== null;
-  const feedback = cardFor(session, helpLevel, hasNext);
+  const feedback = cardFor(session, asks > 0 ? 2 : 0, hasNext, guide?.line);
   // The stop as asked right now (the current step's picture on a stop in steps).
   const q = session.puzzle.question;
   const title = solvedEquation(session) ?? (q.kind === 'addition_exact' ? `${q.operands[0]} + ${q.operands[1]}` : String(q.kind === 'sum_composition' ? q.sum : q.target));
@@ -505,7 +652,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
       <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPrompt} testID="prompt">
         <Cloud small={small} tone={solved ? 'solved' : isBoss ? 'boss' : 'plain'}>
           <Text
-            style={[styles.target, small ? styles.targetCompact : null, title.length > 2 ? (small ? styles.targetWideCompact : styles.targetWide) : null, title.length > 5 ? (small ? styles.targetEquationCompact : styles.targetEquation) : null]}>
+            style={[styles.target, small ? styles.targetCompact : null, title.length > 2 ? (small ? styles.targetWideCompact : styles.targetWide) : null, title.length > 5 ? (small ? styles.targetEquationCompact : styles.targetEquation) : null, title.includes('\n') ? (small ? styles.targetTwoCompact : styles.targetTwo) : null]}>
             {title}
           </Text>
         </Cloud>
@@ -542,11 +689,11 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
   // every block is counted (empty by default, see content/catalog).
   const countFirst = COUNT_TO_PASS.has(nodeId) && !finishedBefore && solved && !counting.complete;
   const actions =
-    (solved || completed) && !countFirst ? (
+    (solved || completed) && !countFirst && !settling ? (
       <Animated.View entering={FadeInDown.duration(220)} style={landscape ? styles.actionsColumn : styles.actionsRow} pointerEvents="box-none">
         {solved ? again : null}
         <Animated.View style={solved ? breathe : null}>
-          <PillButton title={nextTitle} tone={solved ? 'accent' : 'plain'} onPress={onNext} compact={compact} testID="next" />
+          <PillButton title={nextTitle} icon={!solved ? 'map' : islandDone ? 'star' : hasNext ? 'play' : 'map'} tone={solved ? 'accent' : 'plain'} onPress={onNext} compact={compact} testID="next" />
         </Animated.View>
       </Animated.View>
     ) : null;
@@ -554,7 +701,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
   const countChip =
     counting.counted === 0 ? null : counting.complete ? (
       <View style={styles.recount}>
-        <RoundButton label={<Icon name="again" size={26} />} accessibilityLabel={text.recount} testID="recount" onPress={onRecount} />
+        <RoundButton label={<Icon name="count" size={26} />} accessibilityLabel={text.recount} testID="recount" onPress={onRecount} />
         <Text style={styles.recountLabel}>{text.recount}</Text>
       </View>
     ) : (
@@ -574,7 +721,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
           trayObjects={objects}
           // The menu overlay covers the stage; toggling gestures off and on loses the first tap after it closes.
           enabled
-          countOrder={order}
+          countOrder={shownCounts}
           matched={session.verdict.matched}
           // The faces agree with the card: puzzled while it gives a tip, happy when right.
           mood={feedback.tone === 'adjust' ? 'puzzled' : feedback.tone === 'success' ? 'happy' : 'calm'}
@@ -583,9 +730,13 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
           onCommand={onCommand}
           onPreview={onPreview}
           onTapUnit={onTapUnit}
+          onTapTray={onTapTray}
           onDragActive={onDragActive}
+          // Right (after the second beat), the joined pieces become one number (merge.ts MERGE_ON).
+          merge={MERGE_ON === 'touch' || (solved && !settling)}
+          onJoin={onJoin}
           onFeel={play}
-          spotlight={guide?.focus.objects}
+          spotlight={spotlight}
           demo={demo}
           demoPiece={demoPiece}
           demoTo={demoTo}
@@ -604,7 +755,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
       ) : null}
     </View>
   );
-  const menuButton = <RoundButton label={<Icon name="menu" size={26} />} accessibilityLabel="menu" testID="menu" onPress={() => setMenuOpen(true)} />;
+  const menuButton = <RoundButton label={<Icon name="menu" size={26} />} accessibilityLabel={text.menu} testID="menu" onPress={() => setMenuOpen(true)} />;
   const promptLine = (
     <AnswerFeedback feedback={feedback} lang={lang} onReplay={onAskHelp} narrow={landscape} compact={compact} nudge={nudge} />
   );
@@ -656,13 +807,15 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuOpen(false)} accessibilityLabel={text.close} testID="menu-backdrop" />
           <View style={styles.menuCard} testID="menu-card">
             <ScrollView contentContainerStyle={[styles.menuItems, landscape ? styles.menuItemsWide : null]} bounces={false}>
-              {/* The child's menu: four things a child does (2026-10-15 review K). Language,
-                  sounds, full screen and the map live in the parents' area behind the held gear. */}
+              {/* The child's menu: the things a child does (2026-10-15 review K), plus the way
+                  back to the map (D-072). Language, sounds and full screen live in the parents'
+                  area behind the held gear. */}
               {[
-                <PillButton key="close" title={text.close} tone="accent" onPress={() => setMenuOpen(false)} testID="menu-close" />,
-                <PillButton key="help" title={text.help} onPress={() => { setMenuOpen(false); onAskHelp(); }} testID="menu-help" />,
-                <PillButton key="undo" title={text.undo} onPress={() => { setMenuOpen(false); onUndo(); }} testID="menu-undo" />,
-                completed ? <PillButton key="restart" title={text.restart} onPress={() => { setMenuOpen(false); onRechallenge(); }} testID="menu-restart" /> : null,
+                <PillButton key="close" title={text.close} icon="play" tone="accent" onPress={() => setMenuOpen(false)} testID="menu-close" />,
+                <PillButton key="help" title={text.help} icon="bulb" onPress={() => { setMenuOpen(false); onAskHelp(); }} testID="menu-help" />,
+                <PillButton key="undo" title={text.undo} icon="undo" onPress={() => { setMenuOpen(false); onUndo(); }} testID="menu-undo" />,
+                completed ? <PillButton key="restart" title={text.restart} icon="again" onPress={() => { setMenuOpen(false); onRechallenge(); }} testID="menu-restart" /> : null,
+                <PillButton key="map" title={text.map} icon="map" onPress={() => { setMenuOpen(false); voice.stop(); router.dismissTo('/'); }} testID="menu-map" />,
               ]
                 .filter((item) => item !== null)
                 .map((item) => (
@@ -673,6 +826,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
               <View style={[styles.menuGate, landscape ? styles.menuItemWide : null]}>
                 <ParentGate
                   size={48}
+                  muted
                   accessibilityLabel={text.parent}
                   accessibilityHint={text.hold}
                   testID="menu-parent"
@@ -712,6 +866,9 @@ const styles = StyleSheet.create({
   targetWideCompact: { fontSize: 32, lineHeight: 40 },
   targetEquation: { fontSize: 30, lineHeight: 38 },
   targetEquationCompact: { fontSize: 22, lineHeight: 30 },
+  // Two ways side by side, one a line (Phase 20 Q1): both inside the cloud.
+  targetTwo: { fontSize: 25, lineHeight: 32, textAlign: 'center' },
+  targetTwoCompact: { fontSize: 19, lineHeight: 25, textAlign: 'center' },
   templateBox: { position: 'relative', borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.8)', boxShadow: `0 4px 0 ${THEME.skyDeep}` },
   templateCell: { position: 'absolute', borderWidth: 1.5 },
   cornerMenu: { position: 'absolute' },
@@ -733,5 +890,6 @@ const styles = StyleSheet.create({
   menuItems: { padding: 16, gap: 10 },
   menuItemsWide: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', maxWidth: 600 },
   menuItemWide: { width: 176 },
-  menuGate: { alignItems: 'center', paddingTop: 4, opacity: 0.85 },
+  // The gear is quieter (`muted`, 0.85) on itself: an opacity here would also fade its hint bubble.
+  menuGate: { alignItems: 'center', paddingTop: 4 },
 });

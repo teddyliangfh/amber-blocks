@@ -25,10 +25,14 @@ export type SfxName =
   // A stop opens.
   | 'arrive'
   // A button press.
-  | 'tap';
+  | 'tap'
+  // Pieces joining into one number (Phase 20 F1, and free play's groups
+  // changing size): each part's counting note, then the total's with a
+  // shimmer on top. `step` is the total, `parts` the parts.
+  | 'join';
 
 export interface Sfx {
-  readonly play: (name: SfxName, step?: number) => void;
+  readonly play: (name: SfxName, step?: number, parts?: ReadonlyArray<number>) => void;
   // Creates or resumes the audio context; call it from inside a touch or click
   // handler (iOS Safari only starts audio from one). Nothing plays before it.
   readonly unlock: () => void;
@@ -59,8 +63,22 @@ export function countPitch(step: number): number {
 // Seconds the solve sounds wait so the drop's "clack" comes first.
 export const SOLVE_AFTER = 0.1;
 
-export function notesFor(name: SfxName, step = 1): ReadonlyArray<Note> {
+// Seconds between the notes of a join.
+export const JOIN_STEP = 0.11;
+
+export function notesFor(name: SfxName, step = 1, parts: ReadonlyArray<number> = []): ReadonlyArray<Note> {
   switch (name) {
+    case 'join': {
+      // 3 + 4: the note of 3, the note of 4, then the note of 7, longer, with
+      // its octave above as a shimmer. The total is the last thing heard.
+      const end = parts.length * JOIN_STEP;
+      const total = countPitch(step);
+      return [
+        ...parts.map((n, i) => ({ f: countPitch(n), at: i * JOIN_STEP, dur: 0.1, type: 'sine' as const, gain: 0.4 })),
+        { f: total, at: end, dur: 0.3, type: 'triangle', gain: 0.5 },
+        { f: total * 2, at: end + 0.02, dur: 0.26, type: 'sine', gain: 0.18 },
+      ];
+    }
     case 'pickup':
       return [{ f: 420, to: 760, at: 0, dur: 0.09, type: 'sine', gain: 0.5 }];
     case 'drop':
@@ -169,7 +187,7 @@ export function createAudioSfx(make: () => AudioLike | null, initiallyMuted = fa
     }
   };
   return {
-    play: (name, step) => {
+    play: (name, step, parts) => {
       // Before the first touch there is no context yet (browsers refuse to start
       // audio without one): the sound is skipped rather than queued.
       const c = ctx;
@@ -181,7 +199,7 @@ export function createAudioSfx(make: () => AudioLike | null, initiallyMuted = fa
           c.resume().catch(() => undefined);
         }
         const t0 = c.currentTime + 0.005;
-        for (const n of notesFor(name, step)) {
+        for (const n of notesFor(name, step, parts)) {
           const osc = c.createOscillator();
           const amp = c.createGain();
           const start = t0 + n.at;

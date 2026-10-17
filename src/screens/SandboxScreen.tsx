@@ -4,15 +4,15 @@ import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FONT, SANDBOX_CHROME, Stage, THEME, computeGeometry, trayObjects } from '../blocks-ui';
+import { BUBBLE_MS, FONT, SANDBOX_CHROME, Stage, THEME, computeGeometry, trayObjects } from '../blocks-ui';
 import { copyKey, sandboxMaterial } from '../content';
-import type { Command, UnitId } from '../core';
+import type { Cell, Command, UnitId } from '../core';
 import { SkyCloud } from './Cloud';
 import { Icon } from './icons';
 import type { IconName } from './icons';
 import { countOrder, countProgress, countTap, countWordsStale, recount } from './level-session';
 import { useProgress } from './progress-store';
-import { canUndo, commitSandbox, previewSandbox, startSandbox, tidySandbox, undoSandbox } from './sandbox-session';
+import { canUndo, clusterChanges, commitSandbox, previewSandbox, startSandbox, tidySandbox, undoSandbox } from './sandbox-session';
 import type { SandboxSession } from './sandbox-session';
 import { play } from './sound';
 import { AUTO_SPEECH } from './speech-policy';
@@ -113,6 +113,19 @@ export function SandboxScreen() {
     [dispatch],
   );
 
+  // A group that changed size shows its number for a moment, with the join
+  // sound; nothing is said (Phase 20 F6). Split apart, each group shows its own.
+  const [bubbles, setBubbles] = useState<ReadonlyArray<{ readonly at: Cell; readonly n: number; readonly tick: number }>>([]);
+  const bubbleTicks = useRef(0);
+  const bubbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (bubbleTimer.current !== null) {
+        clearTimeout(bubbleTimer.current);
+      }
+    },
+    [],
+  );
   const onCommand = useCallback(
     (cmd: Command): boolean => {
       const current = sessionRef.current;
@@ -124,6 +137,18 @@ export function SandboxScreen() {
         return false;
       }
       update(r.session);
+      const changes = clusterChanges(current.history.state, r.session.history.state);
+      if (changes.length > 0) {
+        bubbleTicks.current += 1;
+        const tick = bubbleTicks.current;
+        setBubbles(changes.map((c) => ({ at: c.head, n: c.size, tick })));
+        if (bubbleTimer.current !== null) {
+          clearTimeout(bubbleTimer.current);
+        }
+        bubbleTimer.current = setTimeout(() => setBubbles([]), BUBBLE_MS);
+        const joined = changes.find((c) => c.parts.length >= 2) ?? changes[0]!;
+        play('join', joined.size, joined.parts);
+      }
       return true;
     },
     [update],
@@ -159,6 +184,15 @@ export function SandboxScreen() {
           say(lang, copyKey('count.total'), { n: outcome.total }, false);
         }
       }
+    },
+    [lang, stir],
+  );
+
+  // A block in the box says "one" when tapped, as in a level (Phase 20 Q11).
+  const onTapTray = useCallback(
+    (n: number) => {
+      stir();
+      say(lang, copyKey(`number.${Math.min(n, 17)}`), {});
     },
     [lang, stir],
   );
@@ -269,7 +303,9 @@ export function SandboxScreen() {
           onCommand={onCommand}
           onPreview={onPreview}
           onTapUnit={onTapUnit}
+          onTapTray={onTapTray}
           onDragActive={onDragActive}
+          bubbles={bubbles}
           onFeel={play}
           demo={demo}
           wink={counting.complete ? counts : 0}

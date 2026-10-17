@@ -1,6 +1,6 @@
 import { cell, unitIds } from '../core';
 import { CONTENT_VERSION, chapterId, materialize, nodeId } from '../content';
-import { atStart, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, givenPartner, isCounted, onlyGiven, previewCommand, recount, sameWayAgain, solvedEquation, startSession, undoCommand } from './level-session';
+import { atStart, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, givenPartner, isCounted, matOf, onlyGiven, previewCommand, recount, roomBeside, sameWayAgain, solvedEquation, solvedParts, startSession, undoCommand, wayAside } from './level-session';
 
 const puzzle = materialize({ contentVersion: CONTENT_VERSION, chapterId: chapterId('ch1'), nodeId: nodeId('ch1-n2'), attemptVariant: 0, seed: 5 });
 const ids = [...puzzle.initial.units.keys()];
@@ -270,7 +270,8 @@ describe('Phase 19: 7 made two ways (ch2-n8) — the ways used so far are screen
     expect(first.solvedNow).toBe(false);
     expect(first.session.step).toBe(1);
     expect(first.session.used).toEqual([[3, 4]]);
-    expect(first.session.verdict).toMatchObject({ matched: false, reason: 'groups-mismatch' });
+    // Phase 20 Q1: the way made stands on its own, so it is left out; nothing is left to judge.
+    expect(first.session.verdict).toMatchObject({ matched: false, benchCount: 0, reason: 'count-mismatch' });
     expect(first.session.puzzle.question).toEqual({ kind: 'sum_composition', sum: 7, allowed: [[5, 2]] });
     expect(sameWayAgain(first.session)).toBe(true);
     // The 3 tucks under the 4 and back, then both go back and come out again: still the used way.
@@ -314,6 +315,71 @@ describe('Phase 19: 7 made two ways (ch2-n8) — the ways used so far are screen
     }
     // A half-built mat starts at the first way.
     expect(startSession(boss, run(startSession(boss, null), [threeFour[0]]).session.history.state).step).toBe(0);
+  });
+
+  // Phase 20 Q1: the first way may stay on the mat beside the second.
+  const fiveTwoBelow = [
+    { type: 'takeGroup', groupId: of(5), origin: cell(0, 2) },
+    { type: 'takeGroup', groupId: of(2), origin: cell(5, 2) },
+  ] as const;
+
+  test('Phase 20: two ways side by side, not touching, are the solve; the cloud shows both; a reload keeps it right', () => {
+    const first = run(startSession(boss, null), threeFour);
+    expect(wayAside(first.session)).toBe(true);
+    expect(matOf(first.session).bench.size).toBe(0);
+    const five = run(first.session, [fiveTwoBelow[0]]);
+    // The 5 alone beside the first way: short of 7, not "too many".
+    expect(five.session.verdict).toMatchObject({ matched: false, benchCount: 5, reason: 'count-mismatch' });
+    expect(sameWayAgain(five.session)).toBe(false);
+    const done = run(five.session, [fiveTwoBelow[1]]);
+    expect(done.solvedNow).toBe(true);
+    expect(done.session.verdict).toMatchObject({ matched: true, benchCount: 7 });
+    expect(solvedParts(done.session)).toEqual([5, 2]);
+    expect(solvedEquation(done.session)).toBe('3 + 4 = 7\n5 + 2 = 7');
+    // Finished and reopened: both ways are on the mat and it is still right.
+    const reopened = startSession(boss, done.session.history.state, true);
+    expect(reopened.verdict.matched).toBe(true);
+    expect(solvedEquation(reopened)).toBe('3 + 4 = 7\n5 + 2 = 7');
+    // Either way may be the first.
+    const other = run(run(startSession(boss, null), fiveTwo).session, [
+      { type: 'takeGroup', groupId: of(3), origin: cell(0, 2) },
+      { type: 'takeGroup', groupId: of(4), origin: cell(3, 2) },
+    ]);
+    expect(other.solvedNow).toBe(true);
+    expect(solvedEquation(other.session)).toBe('5 + 2 = 7\n3 + 4 = 7');
+  });
+
+  test('Phase 20: the two ways touching are one 14-block cluster, too many; sending the first back still works', () => {
+    const touching = run(run(startSession(boss, null), threeFour).session, [
+      { type: 'takeGroup', groupId: of(5), origin: cell(0, 1) },
+      { type: 'takeGroup', groupId: of(2), origin: cell(5, 1) },
+    ]);
+    expect(touching.solvedNow).toBe(false);
+    expect(touching.session.verdict).toMatchObject({ matched: false, benchCount: 14, reason: 'count-mismatch' });
+    const sentBack = run(run(startSession(boss, null), threeFour).session, [...back(3, 4), ...fiveTwo]);
+    expect(sentBack.solvedNow).toBe(true);
+    expect(solvedEquation(sentBack.session)).toBe('5 + 2 = 7');
+    // A first way that is not joined is not left out: it is what is on the mat.
+    const apart = run(startSession(boss, null), [threeFour[0], { type: 'takeGroup', groupId: of(4), origin: cell(4, 0) }]);
+    expect(apart.session.step).toBe(0);
+  });
+
+  test('Phase 20: a reload in the middle of the second way, beside the first, carries on at the second way', () => {
+    const half = run(run(startSession(boss, null), threeFour).session, [fiveTwoBelow[0]]).session.history.state;
+    const resumed = startSession(boss, half);
+    expect(resumed.step).toBe(1);
+    expect(resumed.used).toEqual([[3, 4]]);
+    expect(resumed.verdict).toMatchObject({ matched: false, benchCount: 5 });
+    const done = commitCommand(resumed, fiveTwoBelow[1]);
+    expect(done.ok && done.solvedNow).toBe(true);
+    // The first way alone, reloaded: as before, the second way is next.
+    const firstOnly = run(startSession(boss, null), threeFour).session.history.state;
+    expect(startSession(boss, firstOnly).step).toBe(1);
+    // Room beside it: on the top row there is; across the middle row there is not.
+    expect(roomBeside(startSession(boss, firstOnly))).toBe(true);
+    const middle = run(startSession(boss, null), threeFour.map((c) => ({ ...c, origin: cell(c.origin.x, 1) }))).session;
+    expect(sameWayAgain(middle)).toBe(true);
+    expect(roomBeside(middle)).toBe(false);
   });
 
   test('the hand: past the first way, a partner of the way not made yet', () => {

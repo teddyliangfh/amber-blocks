@@ -8,7 +8,10 @@ const JOIN: Line = { key: copyKey('hint.not-one-cluster'), params: {} };
 function setup() {
   const log: string[] = [];
   const cv = createCorrectionVoice({ stop: () => log.push('stop') });
-  cv.setSpeaker((l) => log.push(`say ${l.key}`));
+  cv.setSpeaker((l) => {
+    log.push(`say ${l.key}`);
+    return true;
+  });
   return { cv, log };
 }
 
@@ -110,5 +113,19 @@ describe('correction voice timing', () => {
     cv.pause(false, 'drag');
     jest.advanceTimersByTime(CORRECTION_QUIET_MS);
     expect(log).toEqual(['say hint.count-mismatch.more', 'stop', 'say hint.not-one-cluster']);
+  });
+
+  test('Phase 20 Q4: a correction the speaker did not say out loud never stops what comes after it', () => {
+    const log: string[] = [];
+    const cv = createCorrectionVoice({ stop: () => log.push('stop') });
+    // The shipping policy: automatic corrections are silent (AUTO_SPEECH.correction false).
+    cv.setSpeaker(() => false);
+    cv.answer(MORE);
+    jest.advanceTimersByTime(CORRECTION_QUIET_MS);
+    // The child asks, hears the help, and does its first step: the answer changes.
+    cv.heard(MORE);
+    cv.answer(JOIN);
+    cv.answer(null);
+    expect(log).toEqual([]);
   });
 });

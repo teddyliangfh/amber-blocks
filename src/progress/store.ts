@@ -9,6 +9,9 @@ export const BACKUP_KEY = 'amber-blocks/progress.corrupt';
 // The archive as it was before a content upgrade set unfinished work aside, so
 // that work is never destroyed outright.
 export const UPGRADE_BACKUP_KEY = 'amber-blocks/progress.before-upgrade';
+// The archive as it was before a parent cleared it (Phase 20, play review Q10:
+// clearing took the album with it and left nothing to go back to).
+export const RESET_BACKUP_KEY = 'amber-blocks/progress.before-reset';
 
 export function memoryStorage(initial: Readonly<Record<string, string>> = {}): ProgressStorage {
   const items = new Map(Object.entries(initial));
@@ -98,7 +101,8 @@ export interface Saver {
   // Queue the latest state. Never rejects; only the newest pending state is written.
   readonly save: (state: ProgressState) => void;
   // Clear the archive and write `fresh` after anything already in flight, and
-  // drop queued writes of older states so they cannot land afterwards.
+  // drop queued writes of older states so they cannot land afterwards. The
+  // archive as stored is first copied to RESET_BACKUP_KEY.
   readonly reset: (fresh: ProgressState) => Promise<SaveResult>;
   // Resolves once every queued operation has finished.
   readonly idle: () => Promise<void>;
@@ -130,6 +134,10 @@ export function createSaver(storage: ProgressStorage, onResult: (r: SaveResult) 
     }
     let result: SaveResult = { ok: true };
     try {
+      const before = await storage.getItem(STORAGE_KEY);
+      if (before !== null) {
+        await backup(storage, before, RESET_BACKUP_KEY);
+      }
       await storage.removeItem(STORAGE_KEY);
       await save(storage, op.fresh);
     } catch (error) {

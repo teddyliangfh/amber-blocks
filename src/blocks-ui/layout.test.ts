@@ -2,7 +2,7 @@ import { cell, unitId } from '../core';
 import { CHAPTERS, CONTENT_VERSION, materialize } from '../content';
 import { LEVEL_CHROME, portraitChrome } from './chrome';
 import { PHONES, isCompact, stageSizeOf } from './devices';
-import { COUNT_SLOP, MIN_CELL, TRAY_MIN_BLOCK, TRAY_PAD, TRAY_SLACK, WIDE_MAT_COLS, blockAt, cellToPx, computeGeometry, countTarget, fitTray, footprintOf, inRect, labelSpot, layoutTray, resolveDrop } from './layout';
+import { COUNT_SLOP, MIN_CELL, TRAY_MIN_BLOCK, TRAY_PAD, TRAY_SLACK, WIDE_MAT_COLS, blockAt, cellToPx, computeGeometry, countTarget, fitTray, footprintOf, inRect, labelSpot, layoutTray, nearbyOrigins, resolveDrop, settleOrigin } from './layout';
 import type { Footprint, Rect, StageGeometry, TrayItem } from './layout';
 import { trayObjects } from './tray';
 
@@ -435,3 +435,25 @@ describe('partner number badge (2026-10-15 review F: badges hung off the outline
     }
   });
 });
+
+describe('Phase 20 Q12: a piece let go on a taken spot lands on the nearest free one', () => {
+  test('nearby origins: within one cell, sides before corners, never off the mat', () => {
+    expect(nearbyOrigins(cell(2, 1), { w: 1, h: 1 }, 5, 3)).toEqual([cell(2, 0), cell(1, 1), cell(3, 1), cell(2, 2), cell(1, 0), cell(3, 0), cell(1, 2), cell(3, 2)]);
+    // A corner of the mat: only what stays on it.
+    expect(nearbyOrigins(cell(0, 0), { w: 1, h: 1 }, 5, 3)).toEqual([cell(1, 0), cell(0, 1), cell(1, 1)]);
+    // A 3-wide partner on a 5-wide mat at x 2 cannot go right.
+    expect(nearbyOrigins(cell(2, 0), { w: 3, h: 1 }, 5, 3).map((c) => c.x)).not.toContain(3);
+  });
+
+  test('settle: where it was let go when that is free; else the nearest free; a partner beside another first; nowhere near: back', () => {
+    const free = (taken: ReadonlyArray<string>) => (o: { x: number; y: number }) => !taken.includes(`${o.x},${o.y}`);
+    expect(settleOrigin(cell(1, 1), { w: 1, h: 1 }, 3, 3, free([]))).toEqual(cell(1, 1));
+    expect(settleOrigin(cell(1, 1), { w: 1, h: 1 }, 3, 3, free(['1,1']))).toEqual(cell(1, 0));
+    expect(settleOrigin(cell(1, 1), { w: 1, h: 1 }, 3, 3, free(['1,1', '1,0', '0,1']))).toEqual(cell(2, 1));
+    // The preferred one wins over a nearer one.
+    expect(settleOrigin(cell(1, 1), { w: 1, h: 1 }, 3, 3, free(['1,1']), (o) => o.x === 2 && o.y === 2)).toEqual(cell(2, 2));
+    // Nothing within a cell: it bounces back.
+    expect(settleOrigin(cell(0, 0), { w: 1, h: 1 }, 3, 3, free(['0,0', '1,0', '0,1', '1,1']))).toBeNull();
+  });
+});
+

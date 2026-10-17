@@ -1,6 +1,6 @@
 export { LEVEL_CHROME, SANDBOX_CHROME, portraitChrome } from './chrome';
 export { Spotlight } from './Spotlight';
-export { Stage } from './Stage';
+export { BUBBLE_MS, Stage } from './Stage';
 export type { StageProps } from './Stage';
 export { computeGeometry, showcaseGeometry } from './layout';
 export type { StageGeometry } from './layout';
@@ -15,6 +15,7 @@ export { Confetti } from './Confetti';
 export { Buddy } from './Block';
 export { WorkPicture } from './WorkPicture';
 export { pictureOf } from './picture';
+export { MERGE_ON } from './merge';
 export type { Picture, PicturedBlock } from './picture';
 export { Face } from './Face';
 export type { Mood } from './Face';

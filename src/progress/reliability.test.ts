@@ -5,7 +5,7 @@ import { createInitialState } from './migrate';
 import { reduce } from './reducer';
 import { sanitize } from './sanitize';
 import type { ProgressState, ProgressStorage } from './schema';
-import { BACKUP_KEY, STORAGE_KEY, createSaver, loadArchive, memoryStorage } from './store';
+import { BACKUP_KEY, RESET_BACKUP_KEY, STORAGE_KEY, createSaver, loadArchive, memoryStorage } from './store';
 import type { SaveResult } from './store';
 
 const ok = { matched: true, benchCount: 1, reason: 'matched' } as const;
@@ -253,8 +253,10 @@ describe('saver (review P2: one ordered writer)', () => {
     expect(await done).toEqual({ ok: true });
     await saver.idle();
     expect(g.items.get(STORAGE_KEY)).toBe(serialize(fresh));
-    // The queued older state was dropped, not written before the reset.
-    expect(g.writes).toEqual([serialize(old), null, serialize(fresh)]);
+    // The queued older state was dropped, not written before the reset; the
+    // stored archive was copied aside first (Phase 20 Q10).
+    expect(g.writes).toEqual([serialize(old), serialize(old), null, serialize(fresh)]);
+    expect(g.items.get(RESET_BACKUP_KEY)).toBe(serialize(old));
   });
 
   test('a save made right after reset is written after the reset, not swallowed by it', async () => {
@@ -270,6 +272,22 @@ describe('saver (review P2: one ordered writer)', () => {
     await saver.idle();
     expect(languageOf(g.items.get(STORAGE_KEY))).toBe('en');
     expect(g.items.get(STORAGE_KEY)).toBe(serialize(next));
+  });
+
+  test('Phase 20 Q10: a reset keeps the archive it clears under its own key; with no archive there is nothing to keep', async () => {
+    const before = serialize(played());
+    const storage = memoryStorage({ [STORAGE_KEY]: before });
+    const saver = createSaver(storage);
+    const fresh = createInitialState(9);
+    expect((await saver.reset(fresh)).ok).toBe(true);
+    expect(await storage.getItem(RESET_BACKUP_KEY)).toBe(before);
+    expect(await storage.getItem(STORAGE_KEY)).toBe(serialize(fresh));
+    const empty = memoryStorage();
+    expect((await createSaver(empty).reset(fresh)).ok).toBe(true);
+    expect(await empty.getItem(RESET_BACKUP_KEY)).toBeNull();
+    // A backup that cannot be written does not stop the reset.
+    const stubborn: ProgressStorage = { ...memoryStorage({ [STORAGE_KEY]: before }), setItem: (key, value) => (key === RESET_BACKUP_KEY ? Promise.reject(new Error('full')) : storage.setItem(key, value)) };
+    expect((await createSaver(stubborn).reset(fresh)).ok).toBe(true);
   });
 
   test('a reset that cannot reach storage reports the failure', async () => {

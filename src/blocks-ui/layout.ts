@@ -199,6 +199,38 @@ export function resolveDrop(geo: StageGeometry, topLeft: { readonly x: number; r
   return { kind: 'bench', origin: makeCell(x, y) };
 }
 
+// Where a piece let go over a taken spot may land instead (Phase 20, play
+// review Q12: a partner half a cell off, or a block on a taken cell, bounced
+// all the way back). Every origin within one cell of where it was let go that
+// keeps the piece on the mat, nearest first: the four sides, then the corners,
+// each in reading order. The stage takes the first the core accepts (a partner
+// first trying those where it would touch another partner).
+export function nearbyOrigins(origin: Cell, footprint: Footprint, cols: number, rows: number): ReadonlyArray<Cell> {
+  const out: { readonly cell: Cell; readonly d: number }[] = [];
+  for (let dy = -1; dy <= 1; dy += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      const x = origin.x + dx;
+      const y = origin.y + dy;
+      if ((dx === 0 && dy === 0) || x < 0 || y < 0 || x + footprint.w > cols || y + footprint.h > rows) {
+        continue;
+      }
+      out.push({ cell: makeCell(x, y), d: Math.abs(dx) + Math.abs(dy) });
+    }
+  }
+  return out.sort((a, b) => a.d - b.d || a.cell.y - b.cell.y || a.cell.x - b.cell.x).map((o) => o.cell);
+}
+
+// Where a piece let go at `origin` comes to rest: there when `accepts` it,
+// else the first nearby origin it accepts, one where `prefer` holds first (a
+// partner beside another partner). Null: nowhere near fits; it bounces back.
+export function settleOrigin(origin: Cell, footprint: Footprint, cols: number, rows: number, accepts: (o: Cell) => boolean, prefer?: (o: Cell) => boolean): Cell | null {
+  if (accepts(origin)) {
+    return origin;
+  }
+  const near = nearbyOrigins(origin, footprint, cols, rows).filter(accepts);
+  return (prefer === undefined ? undefined : near.find(prefer)) ?? near[0] ?? null;
+}
+
 export interface TrayItem {
   readonly id: string;
   readonly footprint: Footprint;

@@ -125,11 +125,12 @@ describe('album page (2026-10-15 review Q)', () => {
     expect(all('[data-testid^="album-group-"]').map((g) => g.dataset.testid)).toEqual(['album-group-ch1', 'album-group-ch2']);
     expect(all('[data-testid^="album-card-"]').map((c) => c.dataset.testid)).toEqual(['album-card-ch1-n2', 'album-card-ch1-n12', 'album-card-ch2-n8']);
     expect(all('[data-testid^="album-card-"]').map((c) => c.textContent)).toEqual(['2', '17★', '7★']);
-    // Each picture: a face per partner or cluster, all smiling (2 singles together; 10 + 5 + 2; 5 + 2).
+    // Each picture: one face per character, all smiling (2 singles together; 10 + 5 + 2
+    // and 5 + 2 joined into one 17 and one 7, Phase 20 F1).
     const faces = (id: string) => all(`[data-testid="album-card-${id}"] [data-testid^="face-"]`).map((f) => f.dataset.testid);
     expect(faces('ch1-n2')).toEqual(['face-happy']);
-    expect(faces('ch1-n12')).toEqual(['face-happy', 'face-happy', 'face-happy']);
-    expect(faces('ch2-n8')).toEqual(['face-happy', 'face-happy']);
+    expect(faces('ch1-n12')).toEqual(['face-happy']);
+    expect(faces('ch2-n8')).toEqual(['face-happy']);
     // Nothing to collect: no "3 of 19", no frame for a stop not built yet.
     expect(container.textContent).not.toMatch(/\d+\s*\/\s*\d+/);
     expect(q('album-card-ch1-n1')).toBeNull();
