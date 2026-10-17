@@ -1,0 +1,25 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "expo-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "expo",
+        "start",
+        "--web",
+        "--port",
+        "8081"
+      ],
+      "port": 8081
+    },
+    {
+      "name": "static-dist",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/serve-dist.mjs"
+      ],
+      "port": 8787
+    }
+  ]
+}

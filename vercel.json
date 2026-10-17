@@ -1,0 +1,17 @@
+{
+  "buildCommand": "pnpm build:web",
+  "outputDirectory": "dist",
+  "framework": null,
+  "cleanUrls": true,
+  "headers": [
+    { "source": "/:path((?!_expo/static/).*)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+    { "source": "/_expo/static/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] }
+  ],
+  "rewrites": [
+    { "source": "/play/:nodeId", "destination": "/play/[nodeId].html" },
+    { "source": "/island/:chapterId", "destination": "/island/[chapterId].html" },
+    { "source": "/album", "destination": "/album.html" },
+    { "source": "/sandbox", "destination": "/sandbox.html" },
+    { "source": "/:path*", "destination": "/" }
+  ]
+}

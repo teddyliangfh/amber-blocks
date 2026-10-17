@@ -1,0 +1,29 @@
+/* Phone-first shell: fill the dynamic viewport, no rubber-banding, no text
+   selection or long-press menus under a dragging finger. */
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100dvh;
+  margin: 0;
+  background: #cfe9f7;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: ui-rounded, 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', 'PingFang SC', system-ui, sans-serif;
+}
+
+body {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+
+/* Fredoka is loaded one weight per family name; never let the browser smear a
+   fake bold on top of it. Chinese falls back to a real bold system face. */
+* {
+  font-synthesis-weight: none !important;
+}

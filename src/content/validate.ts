@@ -1,0 +1,211 @@
+import { DEFAULT_SYMMETRY, apply, assertInvariants, groupSize, judge, variants } from '../core';
+import type { BenchState, Bounds, Cell, Group } from '../core';
+import { holdsMaterial } from './bench';
+import { assertDistractors } from './distractors';
+import type { Puzzle, QuestionSpec } from './schema';
+import { benchPair, questionAt, samePair, stepCount } from './steps';
+import type { Pair } from './steps';
+
+// Refuses any puzzle a child could not finish. Every failure throws: a content
+// bug must surface in tests, never degrade into a skipped stop.
+
+function fits(cells: ReadonlyArray<Cell>, bounds: Bounds): boolean {
+  return cells.every((c) => c.x >= 0 && c.y >= 0 && c.x < bounds.cols && c.y < bounds.rows);
+}
+
+function assertPartnersFit(state: BenchState): void {
+  for (const group of state.groups.values()) {
+    if (!fits(group.shape, state.bounds)) {
+      throw new Error(`content: partner ${group.id} does not fit the bench`);
+    }
+  }
+}
+
+function assertDistinctPartners(groups: ReadonlyArray<Group>, sizes: ReadonlyArray<number>): void {
+  const pool = [...groups];
+  for (const size of sizes) {
+    const index = pool.findIndex((g) => groupSize(g) === size);
+    if (index === -1) {
+      throw new Error(`content: no distinct partner of size ${size} for the answer`);
+    }
+    pool.splice(index, 1);
+  }
+}
+
+// A sum asked several ways: as many allowed pairs as ways, and no other pair
+// in the tray makes the sum, so "two ways" means exactly the allowed two.
+function assertWays(spec: Extract<QuestionSpec, { kind: 'sum_composition' }>, puzzle: Puzzle, groups: ReadonlyArray<Group>): void {
+  const ways = spec.ways ?? 1;
+  if (!Number.isInteger(ways) || ways < 1 || (puzzle.ways ?? 1) !== ways) {
+    throw new Error(`content: ways must be a positive integer the puzzle carries, got ${spec.ways}`);
+  }
+  if (spec.allowed.length < ways) {
+    throw new Error(`content: ${ways} ways to make ${spec.sum} need at least ${ways} allowed pairs`);
+  }
+  if (ways === 1) {
+    return;
+  }
+  groups.forEach((a, i) => {
+    for (const b of groups.slice(i + 1)) {
+      const pair = [groupSize(a), groupSize(b)] as const;
+      if (pair[0] + pair[1] === spec.sum && !spec.allowed.some((p) => samePair(p, pair))) {
+        throw new Error(`content: ${pair[0]} + ${pair[1]} also make ${spec.sum} but is not one of the ways`);
+      }
+    }
+  });
+}
+
+// "Who's missing?": the given partner is the only thing on the mat, the
+// allowed pair is exactly it and its other half, and only one partner in the
+// tray finishes it.
+function assertGiven(spec: Extract<QuestionSpec, { kind: 'sum_composition' }>, puzzle: Puzzle): void {
+  const { initial } = puzzle;
+  const given = spec.given;
+  if (given === undefined) {
+    if (puzzle.given !== undefined || initial.bench.size !== 0) {
+      throw new Error('content: material must start in the tray');
+    }
+    return;
+  }
+  const allowed = spec.allowed[0];
+  if (spec.allowed.length !== 1 || allowed === undefined || !samePair(allowed, [given, spec.sum - given])) {
+    throw new Error(`content: with ${given} given, the only allowed pair is ${given} + ${spec.sum - given}`);
+  }
+  if ((spec.ways ?? 1) !== 1) {
+    throw new Error('content: a given partner is asked one way');
+  }
+  const group = puzzle.given === undefined ? undefined : initial.groups.get(puzzle.given);
+  if (group === undefined || groupSize(group) !== given || initial.bench.size !== given || !group.unitIds.every((u) => initial.bench.has(u))) {
+    throw new Error(`content: the given ${given} must be all there is on the mat at the start`);
+  }
+  const finishers = [...initial.groups.values()].filter((g) => g.id !== group.id && groupSize(g) === spec.sum - given);
+  if (finishers.length !== 1) {
+    throw new Error(`content: ${finishers.length} partners in the tray finish ${given} + ? = ${spec.sum}`);
+  }
+}
+
+export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
+  const { question, initial, solution } = puzzle;
+  assertInvariants(initial);
+  // Only a given partner starts on the mat (checked with the sum below).
+  if (initial.bench.size !== 0 && !(spec.kind === 'sum_composition' && spec.given !== undefined)) {
+    throw new Error('content: material must start in the tray');
+  }
+
+  switch (question.kind) {
+    case 'quantity':
+    case 'quantity_shape': {
+      if (spec.kind !== 'quantity' && spec.kind !== 'quantity_shape') {
+        throw new Error(`content: question ${question.kind} does not match spec ${spec.kind}`);
+      }
+      if (spec.extra < 1) {
+        throw new Error('content: extra must be at least 1');
+      }
+      const decoys = spec.decoys ?? [];
+      if (spec.handles === undefined && decoys.length > 0) {
+        throw new Error('content: decoys come with handles');
+      }
+      const expected = question.target + spec.extra + decoys.reduce((a, b) => a + b, 0);
+      if (initial.units.size !== expected) {
+        throw new Error(`content: expected ${expected} units, got ${initial.units.size}`);
+      }
+      if (spec.handles !== undefined) {
+        if (spec.kind === 'quantity' && spec.targets.length !== 1) {
+          throw new Error('content: handles need a single-target pool');
+        }
+        const sum = spec.handles.reduce((a, b) => a + b, 0);
+        if (spec.kind === 'quantity_shape' && sum !== question.target) {
+          throw new Error(`content: a shape's handles must make ${question.target}, not ${sum}`);
+        }
+        assertPartnersFit(initial);
+        // Otherwise the tray's partners are exactly the answer and need no thought.
+        if (sum === question.target && decoys.length === 0) {
+          throw new Error('content: handles need at least one decoy partner');
+        }
+      }
+      if (question.kind === 'quantity_shape') {
+        if (question.template.cells.length !== question.target) {
+          throw new Error(`content: template has ${question.template.cells.length} cells for target ${question.target}`);
+        }
+        for (const variant of variants(question.template, question.symmetry ?? DEFAULT_SYMMETRY)) {
+          if (!fits(variant, initial.bounds)) {
+            throw new Error('content: a template variant does not fit the bench');
+          }
+        }
+      }
+      break;
+    }
+    case 'addition_exact':
+    case 'sum_composition': {
+      if (spec.kind !== 'addition_exact' && spec.kind !== 'sum_composition') {
+        throw new Error(`content: question ${question.kind} does not match spec ${spec.kind}`);
+      }
+      assertDistractors(question, spec.distractors);
+      assertPartnersFit(initial);
+      const groups = [...initial.groups.values()];
+      if (question.kind === 'addition_exact') {
+        assertDistinctPartners(groups, question.operands);
+      } else {
+        for (const pair of question.allowed) {
+          assertDistinctPartners(groups, pair);
+        }
+      }
+      if (spec.kind === 'sum_composition') {
+        assertWays(spec, puzzle, groups);
+        assertGiven(spec, puzzle);
+      }
+      break;
+    }
+  }
+  if (puzzle.given !== undefined && !(spec.kind === 'sum_composition' && spec.given !== undefined)) {
+    throw new Error('content: a given partner comes from a sum spec with `given`');
+  }
+  if (puzzle.ways !== undefined && spec.kind !== 'sum_composition') {
+    throw new Error('content: ways come from a sum spec');
+  }
+
+  // Putting everything out is how a child finds "too many": it must never bounce.
+  if (!holdsMaterial(initial)) {
+    throw new Error('content: the material does not fit the bench all at once');
+  }
+
+  // A sequence: every step is a shape of the same count, and the reference
+  // answer passes each one in turn on the way to the last.
+  const steps = puzzle.steps ?? [question];
+  if (spec.kind === 'quantity_shape' && spec.sequence === true) {
+    if (steps.length !== spec.templates.length || steps.length < 2) {
+      throw new Error('content: a sequence asks every template, at least two');
+    }
+    for (const step of steps) {
+      if (step.kind !== 'quantity_shape' || step.template.cells.length !== spec.target) {
+        throw new Error('content: every step of a sequence is a shape of the same count');
+      }
+    }
+  } else if (puzzle.steps !== undefined) {
+    throw new Error('content: steps come from a sequence spec');
+  }
+
+  // A sum asked several ways: each way passes once, with a pair the earlier
+  // ways did not use.
+  const last = stepCount(puzzle) - 1;
+  const used: Pair[] = [];
+  let state = initial;
+  let reached = 0;
+  solution.forEach((cmd, index) => {
+    const r = apply(state, cmd);
+    if (!r.ok) {
+      throw new Error(`content: reference solution step ${index} (${cmd.type}) rejected: ${r.reason}`);
+    }
+    state = r.value;
+    if (reached < last && judge(state, questionAt(puzzle, reached, used)).matched) {
+      if (puzzle.ways !== undefined) {
+        used.push(benchPair(state)!);
+      }
+      reached += 1;
+    }
+  });
+  const verdict = judge(state, questionAt(puzzle, last, used));
+  if (reached !== last || !verdict.matched) {
+    throw new Error(`content: reference solution does not pass: ${verdict.matched ? 'a step was skipped' : verdict.reason}`);
+  }
+}

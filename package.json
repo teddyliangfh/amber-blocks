@@ -1,0 +1,140 @@
+{
+  "name": "amber-blocks",
+  "version": "1.0.0",
+  "packageManager": "pnpm@10.22.0",
+  "main": "expo-router/entry",
+  "dependencies": {
+    "@expo-google-fonts/fredoka": "^0.4.1",
+    "@expo/ui": "~58.0.15",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "~58.0.7",
+    "expo-constants": "~58.0.10",
+    "expo-device": "~58.0.5",
+    "expo-font": "~58.0.7",
+    "expo-glass-effect": "~58.0.3",
+    "expo-image": "~58.0.13",
+    "expo-linking": "~58.0.11",
+    "expo-router": "~58.0.17",
+    "expo-splash-screen": "~58.0.7",
+    "expo-status-bar": "~58.0.3",
+    "expo-symbols": "~58.0.4",
+    "expo-system-ui": "~58.0.5",
+    "expo-web-browser": "~58.0.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native": "0.88.0-rc.4",
+    "react-native-gesture-handler": "~3.2.1",
+    "react-native-reanimated": "4.7.0",
+    "react-native-safe-area-context": "~5.9.1",
+    "react-native-screens": "~4.28.0",
+    "react-native-web": "~0.21.4",
+    "react-native-worklets": "0.13.0"
+  },
+  "devDependencies": {
+    "@types/jest": "29.5.14",
+    "@types/react": "~19.3.0",
+    "@types/react-dom": "~19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "~58.0.4",
+    "fast-check": "^4.10.2",
+    "jest": "~29.7.0",
+    "jest-expo": "~58.0.9",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "lint": "expo lint",
+    "test": "jest",
+    "test:core": "jest src/core",
+    "typecheck": "tsc --noEmit",
+    "test:content": "jest src/content",
+    "test:gate": "jest --coverage",
+    "lint:purity": "! grep -rnE \"from [\\x27\\\"](react|expo|@expo|react-native|@react-native-async-storage)|\\\\b(document|window)\\\\b\" src/core src/content src/progress",
+    "test:progress": "jest src/progress",
+    "test:ui": "jest src/blocks-ui src/screens src/audio-i18n src/web-shell",
+    "build:web": "expo export -p web",
+    "serve:web": "node tools/serve-dist.mjs"
+  },
+  "private": true,
+  "pnpm": {
+    "overrides": {
+      "react-refresh": "0.19.0",
+      "@react-native/normalize-colors": "$react-native",
+      "@typescript-eslint/types": "8.71.1",
+      "@typescript-eslint/parser": "8.71.1",
+      "@typescript-eslint/eslint-plugin": "8.71.1",
+      "@typescript-eslint/typescript-estree": "8.71.1",
+      "@typescript-eslint/utils": "8.71.1",
+      "@typescript-eslint/visitor-keys": "8.71.1",
+      "@typescript-eslint/scope-manager": "8.71.1",
+      "@typescript-eslint/type-utils": "8.71.1",
+      "@typescript-eslint/project-service": "8.71.1",
+      "@typescript-eslint/tsconfig-utils": "8.71.1",
+      "prop-types>react-is": "18.3.1"
+    }
+  },
+  "jest": {
+    "projects": [
+      {
+        "displayName": "logic",
+        "preset": "jest-expo",
+        "testMatch": [
+          "<rootDir>/src/**/*.test.ts"
+        ]
+      },
+      {
+        "displayName": "web-ui",
+        "preset": "jest-expo/web",
+        "testMatch": [
+          "<rootDir>/src/**/*.test.web.tsx"
+        ],
+        "setupFiles": [
+          "<rootDir>/tools/jest-setup-web.js"
+        ]
+      }
+    ],
+    "collectCoverageFrom": [
+      "src/core/**/*.ts",
+      "!src/core/**/*.test.ts",
+      "!src/core/index.ts",
+      "src/content/**/*.ts",
+      "!src/content/**/*.test.ts",
+      "!src/content/index.ts",
+      "src/progress/**/*.ts",
+      "!src/progress/**/*.test.ts",
+      "!src/progress/index.ts",
+      "src/blocks-ui/layout.ts",
+      "src/screens/level-session.ts",
+      "src/audio-i18n/speak.ts",
+      "src/blocks-ui/tray.ts",
+      "src/screens/hints.ts",
+      "src/screens/progress-store.tsx",
+      "src/screens/LevelScreen.tsx",
+      "src/screens/sandbox-session.ts",
+      "src/screens/SandboxScreen.tsx"
+    ],
+    "coverageThreshold": {
+      "./src/core/": {
+        "lines": 95,
+        "branches": 95,
+        "functions": 95,
+        "statements": 95
+      },
+      "./src/content/": {
+        "lines": 95,
+        "branches": 95,
+        "functions": 95,
+        "statements": 95
+      },
+      "./src/progress/": {
+        "lines": 95,
+        "branches": 95,
+        "functions": 95,
+        "statements": 95
+      }
+    }
+  }
+}
