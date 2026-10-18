@@ -30,6 +30,11 @@ export default function Root({ children }: PropsWithChildren) {
             delete both when the game goes public. */}
         <meta name="robots" content="noindex, nofollow" />
         <link rel="manifest" href="/manifest.json" />
+        {/* The tab icon: Amber, the game's block character. The .ico (16 / 32 / 48,
+            each drawn from the SVG at its own size) is a file in public/, so the
+            export no longer adds this link itself; the SVG stays sharp on dense screens. */}
+        <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/icon-180.png" />
         {/* The title and the page language come from the root layout (expo-router Head). */}
         <ScrollViewStyleReset />

@@ -1466,3 +1466,11 @@ brief 第 4 节列出、本轮按要求没做的：三个伙伴合体、凑到 1
 - Safari 字体下家长区清空键与重置键是否仍隔 ≥ 60px。
 - 冷启动占位在真实网络与 Vercel 上的样子；部署后用 `curl -I` 看 `X-Robots-Tag`。
 - bulb / count / star 图标在小尺寸上孩子能否认出。
+
+## 网页图标：Amber（2026-10-18，Phase 20 之后）
+
+- [x] Ted 要求换掉标签页上的 Expo 占位图标。比较了三个方向（单个琥珀色积木角色 / 琥珀积木加一个红色 1 / 2 × 2 四块一张脸），在 16 / 32 / 64 / 180px、浅色与深色标签栏上并排渲染：后两个在 16px 时红块和脸都成了噪点，选单个积木角色——游戏里同样的塑料、底边、高光和脸，琥珀色（`THEME.amber` / `amberDeep`），名字就叫 Amber。
+- [x] `public/favicon.svg`（64 格绘制）；`public/favicon.ico` 内含 16 / 32 / 48 三张 PNG，每张直接从 SVG 按该尺寸渲染（Expo 自己生成时是从 48 缩下去，16px 发糊）；`assets/images/favicon.png` 换成 48px 新图（`app.json web.favicon` 不改）。`public/` 里有 `favicon.ico` 时 Expo 导出不再自己加 `<link rel="icon">`，所以 `+html.tsx` 写了 ico（带 sizes）与 svg 两条。
+- [x] 主屏幕图标：`assets/brand/app-icon.svg`（天空色底、沙丘、Amber 微微倾斜跳起、沙上有影子；满版，主要内容在中间 80%）→ `public/icon-180.png`（apple-touch-icon）、`icon-512.png`（manifest），不透明。草稿里的一朵云挡住积木一角，删了。
+- [x] `pnpm build:web` 后 `dist/` 里的 favicon.ico / favicon.svg / icon-180 / icon-512 都是新图，html 里三条 icon 链接；静态服务（8787）四个文件都能加载。typecheck、lint 通过（只改了 `+html.tsx` 与资源）。
+- 没做：原生 App 图标（`assets/images/icon.png`、Android 自适应图标、iOS `assets/expo.icon`）仍是 Expo 模板；没在真机上看主屏幕图标。渲染用的脚本（headless Chromium 渲染 SVG、打包 ICO）在会话草稿目录，不在仓库里。
