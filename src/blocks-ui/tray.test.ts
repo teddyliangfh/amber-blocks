@@ -46,15 +46,26 @@ function shown(view: TrayView): number {
 
 const partnerNodes = ['ch1-n10', 'ch1-n11', 'ch1-n12', ...CHAPTERS[1]!.nodes.map((n) => n.id as string)];
 
+// The partners a stop deals onto the mat: a given one, or the row to send back from.
+function onMatAtStart(puzzle: ReturnType<typeof puzzleOf>): ReadonlyArray<string> {
+  return puzzle.given !== undefined ? [puzzle.given] : (puzzle.onMat ?? []);
+}
+
+// The stop's material with every partner in the tray.
+function full(puzzle: ReturnType<typeof puzzleOf>) {
+  return onMatAtStart(puzzle).reduce((s, id) => run(s, { type: 'returnGroup', groupId: id as never }), puzzle.initial);
+}
+
 describe('tray plan (review P1: tray identity is fixed at the start of a stop)', () => {
   test.each(partnerNodes)('%s: taking any one partner out leaves one outline, everything else stays put', (nodeId) => {
     const puzzle = puzzleOf(nodeId);
     const plan = setup(puzzle);
-    // A stop that starts with a partner on the mat (Phase 19) shows its outline
-    // from the start; with that partner put back, the tray is full like any other.
+    // A stop that starts with a partner on the mat (Phase 19), or several to
+    // send back (Phase 21), shows their outlines from the start; with them put
+    // back, the tray is full like any other.
     const opening = trayView(plan, puzzle.initial);
-    expect(opening.emptyPartners.map((e) => e.spot.id)).toEqual(puzzle.given === undefined ? [] : [puzzle.given]);
-    const start = puzzle.given === undefined ? puzzle.initial : run(puzzle.initial, { type: 'returnGroup', groupId: puzzle.given });
+    expect(opening.emptyPartners.map((e) => e.spot.id)).toEqual(onMatAtStart(puzzle));
+    const start = full(puzzle);
     const before = trayView(plan, start);
     const objectCount = plan.objects.length;
     expect(shown(opening)).toBe(objectCount);
@@ -102,7 +113,8 @@ describe('tray plan (review P1: tray identity is fixed at the start of a stop)',
   test.each(partnerNodes)('%s: after the reference solution the tray still shows the same objects', (nodeId) => {
     const puzzle = puzzleOf(nodeId);
     const plan = setup(puzzle);
-    const before = spots(trayView(plan, puzzle.initial));
+    // Every object at its spot (a partner sent back during the answer included, Phase 21).
+    const before = spots(trayView(plan, full(puzzle)));
     const solved = puzzle.solution.reduce(run, puzzle.initial);
     const view = trayView(plan, solved);
     expect(shown(view)).toBe(plan.objects.length);

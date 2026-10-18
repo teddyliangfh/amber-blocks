@@ -42,6 +42,9 @@ interface Need {
   // Every partner dealt (by size) and how many single blocks come with them.
   readonly partners: ReadonlyArray<number>;
   readonly loose: number;
+  // What the stop deals onto the mat itself, which must lie on it as it is,
+  // with no spare row or column (Phase 21: the row to send the extra back from).
+  readonly dealt?: Box;
 }
 
 function needOf(spec: QuestionSpec): Need {
@@ -73,9 +76,16 @@ function needOf(spec: QuestionSpec): Need {
     }
     case 'sum_composition': {
       // A given partner (Phase 19) is one of the allowed pair's sizes, so it is
-      // counted here like every partner the tray deals.
+      // counted here like every partner the tray deals. Partners on the mat to
+      // send back (Phase 21) are the allowed pair and the extras, in a row.
+      const shapes = spec.allowed.map(([a, b]) => sideBySide(a, b));
+      if (spec.onMat !== undefined) {
+        const partners = [...spec.onMat, ...spec.distractors];
+        const dealt = { w: spec.onMat.reduce((w, n) => w + numberBox(n).w, 0), h: Math.max(...spec.onMat.map((n) => numberBox(n).h)) };
+        return { shapes: [...shapes, ...partners.map(numberBox)], partners, loose: 0, dealt };
+      }
       const partners = partnerSizesFor({ kind: 'sum_composition', sum: spec.sum, allowed: spec.allowed }, spec.distractors);
-      return { shapes: [...spec.allowed.map(([a, b]) => sideBySide(a, b)), ...partners.map(numberBox)], partners, loose: 0 };
+      return { shapes: [...shapes, ...partners.map(numberBox)], partners, loose: 0 };
     }
   }
 }
@@ -116,8 +126,8 @@ export function holdsAll(bounds: Bounds, partners: ReadonlyArray<Box & { readonl
 // without dealing anything).
 export function fitBench(spec: QuestionSpec): Bounds {
   const need = needOf(spec);
-  let cols = Math.max(MIN_BENCH.cols, ...need.shapes.map((s) => s.w + BENCH_MARGIN));
-  let rows = Math.max(MIN_BENCH.rows, ...need.shapes.map((s) => s.h + BENCH_MARGIN));
+  let cols = Math.max(MIN_BENCH.cols, ...need.shapes.map((s) => s.w + BENCH_MARGIN), need.dealt?.w ?? 0);
+  let rows = Math.max(MIN_BENCH.rows, ...need.shapes.map((s) => s.h + BENCH_MARGIN), need.dealt?.h ?? 0);
   const partners = need.partners.map((n) => ({ ...numberBox(n), cells: n }));
   // Grow downwards: on a phone the width is what sets the block size.
   while (!holdsAll({ cols, rows }, partners, need.loose)) {

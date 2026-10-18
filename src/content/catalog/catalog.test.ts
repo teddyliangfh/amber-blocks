@@ -2,7 +2,10 @@ import { benchFor } from '../bench';
 import { materialize } from '../generate';
 import { CHAPTERS, CONTENT_VERSION, findChapter, findNode } from './index';
 import { chapterId, nodeId } from '../ids';
-import type { PuzzleRef } from '../schema';
+import type { PuzzleRef, QuestionSpec } from '../schema';
+import type { ShapeTemplate } from '../../core';
+import { DEFAULT_SYMMETRY, variants } from '../../core';
+import { STAIRS_6, TEN_2X5 } from './shapes';
 
 const ref = (chapter: string, node: string, contentVersion = CONTENT_VERSION): PuzzleRef => ({
   contentVersion,
@@ -13,11 +16,11 @@ const ref = (chapter: string, node: string, contentVersion = CONTENT_VERSION): P
 });
 
 describe('catalog', () => {
-  test('map: two islands, three legs of four with a boss each, then eight join stops', () => {
+  test('map: two islands, three legs of four with a boss each, then twelve join stops', () => {
     expect(CHAPTERS.map((c) => c.id)).toEqual(['ch1', 'ch2']);
     expect(CHAPTERS[0]?.nodes).toHaveLength(12);
     expect(CHAPTERS[0]?.nodes.filter((n) => n.role === 'boss').map((n) => n.id)).toEqual(['ch1-n4', 'ch1-n8', 'ch1-n12']);
-    expect(CHAPTERS[1]?.nodes).toHaveLength(8);
+    expect(CHAPTERS[1]?.nodes).toHaveLength(12);
     expect(CHAPTERS[1]?.nodes.filter((n) => n.role === 'boss').map((n) => n.id)).toEqual(['ch2-n4', 'ch2-n8']);
     const seventeen = CHAPTERS[0]?.nodes[11]?.spec;
     expect(seventeen).toEqual({ kind: 'quantity', targets: [17], extra: 2, handles: [10, 5, 2], decoys: [4] });
@@ -37,6 +40,9 @@ describe('catalog', () => {
       'ch1-n1': '3x3', 'ch1-n2': '3x3', 'ch1-n3': '5x3', 'ch1-n4': '4x3', 'ch1-n5': '6x3', 'ch1-n6': '5x5',
       'ch1-n7': '6x4', 'ch1-n8': '6x5', 'ch1-n9': '6x3', 'ch1-n10': '6x3', 'ch1-n11': '6x4', 'ch1-n12': '6x5',
       'ch2-n1': '4x3', 'ch2-n2': '5x3', 'ch2-n3': '5x3', 'ch2-n4': '6x3', 'ch2-n5': '6x3', 'ch2-n6': '7x3', 'ch2-n7': '8x3', 'ch2-n8': '8x3',
+      // Phase 21: the ten is judged lying down only, so its mat is not tall;
+      // the row to send back from and the 10 with its other half fill nine columns.
+      'ch2-n9': '6x3', 'ch2-n10': '9x3', 'ch2-n11': '6x4', 'ch2-n12': '9x3',
     });
   });
 
@@ -52,26 +58,49 @@ describe('catalog', () => {
     }
   });
 
-  test('Phase 19: Join Island is three joins, the free-sum mini boss, three "who\'s missing?" stops and 7 made two ways', () => {
+  test('Phase 21: Join Island is twelve stops, a new kind of move every two or three', () => {
     const specs = CHAPTERS[1]!.nodes.map((n) => [n.id, n.role, n.spec]);
     expect(specs).toEqual([
       ['ch2-n1', 'normal', { kind: 'addition_exact', pairs: [[1, 1]], distractors: [3] }],
       ['ch2-n2', 'normal', { kind: 'addition_exact', pairs: [[2, 1]], distractors: [4] }],
       ['ch2-n3', 'normal', { kind: 'addition_exact', pairs: [[2, 2]], distractors: [3, 1] }],
+      ['ch2-n9', 'normal', { kind: 'quantity_shape', target: 10, templates: [TEN_2X5], symmetry: { rotation: false, mirror: false }, extra: 1, handles: [5, 5], decoys: [4] }],
       ['ch2-n4', 'boss', { kind: 'sum_composition', sum: 5, allowed: [[2, 3], [4, 1]], distractors: [5] }],
+      ['ch2-n10', 'normal', { kind: 'sum_composition', sum: 7, onMat: [3, 4, 2], allowed: [[3, 4]], distractors: [] }],
       ['ch2-n5', 'normal', { kind: 'sum_composition', sum: 5, given: 2, allowed: [[2, 3]], distractors: [1, 4] }],
       ['ch2-n6', 'normal', { kind: 'sum_composition', sum: 6, given: 4, allowed: [[4, 2]], distractors: [1, 3] }],
+      ['ch2-n11', 'normal', { kind: 'quantity_shape', target: 6, templates: [STAIRS_6], extra: 1, handles: [1, 2, 3], decoys: [4] }],
       ['ch2-n7', 'normal', { kind: 'sum_composition', sum: 7, given: 3, allowed: [[3, 4]], distractors: [2, 5] }],
+      ['ch2-n12', 'normal', { kind: 'sum_composition', sum: 13, given: 10, allowed: [[10, 3]], distractors: [2, 4] }],
       ['ch2-n8', 'boss', { kind: 'sum_composition', sum: 7, allowed: [[3, 4], [5, 2]], ways: 2, distractors: [1] }],
     ]);
     for (const node of CHAPTERS[1]!.nodes) {
       const s = node.spec;
+      if (s.kind === 'quantity_shape') {
+        // Of the partners alone, only the handles cover the picture: the decoy
+        // makes no other set that does (2 + 4 is 6, but a 4 is no step of the stairs).
+        const partners = [...s.handles!, ...s.decoys!];
+        const sets = subsets(partners).filter((set) => set.reduce((a, b) => a + b, 0) === s.target);
+        const covering = sets.filter((set) => coversWithBars(set, s.templates[0]!, s.symmetry));
+        expect(`${node.id} ${covering.map((set) => [...set].sort().join('+')).join(' ')}`).toBe(`${node.id} ${[...s.handles!].sort().join('+')}`);
+        continue;
+      }
       if (s.kind !== 'sum_composition') {
         continue;
       }
       // No distractor finishes the partner already on the mat.
       if (s.given !== undefined) {
         expect(s.distractors.filter((d) => d + s.given! === s.sum)).toEqual([]);
+      }
+      // The row to send back from: exactly one pair in it makes 7, 3 + 4, side
+      // by side; the 2 at the end is the only thing to send back.
+      if (s.onMat !== undefined) {
+        const row = s.onMat;
+        const pairs = row.flatMap((_, i) => row.slice(i + 1).map((__, k) => [i, i + 1 + k] as const)).filter(([i, j]) => row[i]! + row[j]! === s.sum);
+        expect(pairs).toEqual([[0, 1]]);
+        const p = materializeFor(node.id);
+        expect(p.solution).toEqual([{ type: 'returnGroup', groupId: p.onMat![2] }]);
+        expect(p.prompt).toBe('prompt.send_away');
       }
       // The boss's tray makes 7 exactly the two allowed ways: 3 + 4 and 5 + 2.
       if (s.ways !== undefined) {
@@ -84,7 +113,14 @@ describe('catalog', () => {
     const seven = materializeFor('ch2-n7');
     expect(groupSizeOf(seven, seven.given!)).toBe(3);
     expect(seven.prompt).toBe('prompt.missing_part');
+    const teen = materializeFor('ch2-n12');
+    expect(groupSizeOf(teen, teen.given!)).toBe(10);
     expect(materializeFor('ch2-n8').ways).toBe(2);
+    // Every two or three stops the move changes (brief 21: no more than two of a kind in a row).
+    const move = (s: QuestionSpec) =>
+      s.kind === 'quantity_shape' ? 'shape' : s.kind === 'addition_exact' ? 'join' : s.kind !== 'sum_composition' ? 'quantity' : s.onMat !== undefined ? 'send' : s.given !== undefined ? 'missing' : s.ways !== undefined ? 'ways' : 'free';
+    const moves = CHAPTERS[1]!.nodes.map((n) => move(n.spec));
+    expect(moves).toEqual(['join', 'join', 'join', 'shape', 'free', 'send', 'missing', 'missing', 'shape', 'missing', 'missing', 'ways']);
   });
 
   test('AC-47: a ref from another content version or an unknown node is refused', () => {
@@ -126,4 +162,31 @@ function materializeFor(id: string) {
 
 function groupSizeOf(p: ReturnType<typeof materializeFor>, id: NonNullable<ReturnType<typeof materializeFor>['given']>): number {
   return p.initial.groups.get(id)!.unitIds.length;
+}
+
+// Every sub-multiset of sizes (by position).
+function subsets(sizes: ReadonlyArray<number>): ReadonlyArray<ReadonlyArray<number>> {
+  return sizes.reduce<ReadonlyArray<ReadonlyArray<number>>>((all, n) => [...all, ...all.map((set) => [...set, n])], [[]]);
+}
+
+// Can rigid partner bars (one row up to 5, a partner is never turned) cover
+// some turn of the picture exactly? Tries every way, from the top-left gap.
+function coversWithBars(sizes: ReadonlyArray<number>, picture: ShapeTemplate, symmetry = DEFAULT_SYMMETRY): boolean {
+  const bar = (n: number) => Array.from({ length: Math.min(n, 5) }, (_, x) => ({ x, y: 0 })).concat(Array.from({ length: Math.max(0, n - 5) }, (_, x) => ({ x, y: 1 })));
+  return variants(picture, symmetry).some((cells) => {
+    const key = (c: { x: number; y: number }) => `${c.x},${c.y}`;
+    const inside = new Set(cells.map(key));
+    const order = [...cells].sort((a, b) => a.y - b.y || a.x - b.x);
+    const fill = (left: ReadonlyArray<number>, covered: ReadonlySet<string>): boolean => {
+      const next = order.find((c) => !covered.has(key(c)));
+      if (next === undefined) {
+        return left.length === 0;
+      }
+      return left.some((n, i) => {
+        const mine = bar(n).map((c) => key({ x: c.x + next.x, y: c.y + next.y }));
+        return mine.every((k) => inside.has(k) && !covered.has(k)) && fill(left.filter((_, j) => j !== i), new Set([...covered, ...mine]));
+      });
+    };
+    return fill(sizes, new Set());
+  });
 }

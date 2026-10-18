@@ -1,6 +1,6 @@
 // Minimal static server for the exported web build, with the same fallbacks a
 // static host (Vercel, see vercel.json) applies: a static route such as /parent,
-// /album or /sandbox serves its own .html, /play/<id> serves the pre-rendered dynamic
+// /album, /sandbox or /challenge serves its own .html, /play/<id> serves the pre-rendered dynamic
 // route (and /island/<id> likewise), anything unknown falls back to index.html.
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';

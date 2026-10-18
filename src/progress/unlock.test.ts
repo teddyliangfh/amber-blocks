@@ -20,9 +20,12 @@ function completeAll(state: ProgressState, ids: ReadonlyArray<string>): Progress
 describe('unlock', () => {
   test('map order flattens chapters in order', () => {
     expect(mapOrder().map((e) => e.nodeId).slice(0, 5)).toEqual(['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5']);
-    expect(mapOrder()).toHaveLength(20);
+    expect(mapOrder()).toHaveLength(24);
     expect(nextNodeOf(nodeId('ch1-n12'))).toBe('ch2-n1');
-    expect(nextNodeOf(nodeId('ch2-n7'))).toBe('ch2-n8');
+    // Phase 21: the new stops sit between the old ones.
+    expect(nextNodeOf(nodeId('ch2-n3'))).toBe('ch2-n9');
+    expect(nextNodeOf(nodeId('ch2-n7'))).toBe('ch2-n12');
+    expect(nextNodeOf(nodeId('ch2-n12'))).toBe('ch2-n8');
     expect(nextNodeOf(nodeId('ch2-n8'))).toBeNull();
     expect(chapterOf(nodeId('ch2-n1')).id).toBe('ch2');
     expect(() => nextNodeOf(nodeId('nope'))).toThrow(/unknown node/);
@@ -51,7 +54,7 @@ describe('unlock', () => {
     expect(statusOf(island, nodeId('ch2-n1'))).toBe('available');
     expect(chapterCompletion(island, chapterId('ch1'))).toEqual({ done: 12, total: 12 });
     expect(defaultCurrent({ ...island, current: null })).toBe('ch2-n1');
-    const all = completeAll(island, ['ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n4', 'ch2-n5', 'ch2-n6', 'ch2-n7', 'ch2-n8']);
+    const all = completeAll(island, ['ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8']);
     expect(defaultCurrent({ ...all, current: null })).toBe('ch2-n8');
   });
 
@@ -96,7 +99,7 @@ describe('unlock', () => {
     expect(reduce(elsewhere.value, { type: 'enter', nodeId: nodeId('ch2-n3') }).ok).toBe(true);
     // Finishing it opens the next stop the usual way.
     const done = reduce(entered.value, { type: 'complete', nodeId: nodeId('ch2-n3'), verdict: { matched: true, benchCount: 4, reason: 'matched' } });
-    expect(done.ok && statusOf(done.value, nodeId('ch2-n4'))).toBe('available');
+    expect(done.ok && statusOf(done.value, nodeId('ch2-n9'))).toBe('available');
     // An unknown stop is refused.
     expect(reduce(fresh, { type: 'startAt', nodeId: nodeId('ch9-n1') })).toEqual({ ok: false, reason: 'unknown-node' });
   });

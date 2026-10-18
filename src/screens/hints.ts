@@ -1,8 +1,8 @@
 import { copyKey } from '../content';
 import type { CopyKey, Puzzle } from '../content';
-import { areTouching, clusters } from '../core';
-import type { BenchState, Group, UnitId } from '../core';
-import { matOf, onlyGiven, roomBeside, sameWayAgain, solvedParts } from './level-session';
+import { DEFAULT_SYMMETRY, areTouching, clusters, variants } from '../core';
+import type { BenchState, Cell, Group, Question, UnitId } from '../core';
+import { matOf, onlyGiven, onlyOnMat, roomBeside, sameWayAgain, solvedParts } from './level-session';
 import type { LevelSession } from './level-session';
 
 // What the help button says, chosen from the current verdict and from what is
@@ -51,14 +51,17 @@ export function feedbackFor(session: LevelSession): AnswerFeedback {
   if (sameWayAgain(session)) {
     return { tone: 'building', title: line('feedback.another'), detail: line('hint.another-way', { n: target }) };
   }
-  // A "who's missing?" stop opens with a partner on the mat: that is the
-  // start too. Once that partner has gone back, "here is 2" is no longer true,
-  // so an empty mat there asks for two partners.
-  if (verdict.benchCount === 0 || onlyGiven(session)) {
+  // A "who's missing?" stop opens with a partner on the mat, and a "send the
+  // extra away" stop with too many (Phase 21): that is the start too. Once they
+  // have gone back, "here is 2" (or "too many") is no longer true, so an empty
+  // mat there asks for two partners.
+  const opening = onlyGiven(session) || onlyOnMat(session);
+  if (verdict.benchCount === 0 || opening) {
+    const dealt = puzzle.given !== undefined || puzzle.onMat !== undefined;
     return {
       tone: 'start',
       title: line('feedback.start'),
-      detail: puzzle.given !== undefined && !onlyGiven(session) ? line('prompt.sum_composition', { n: target }) : { key: puzzle.prompt, params: promptParams(puzzle) },
+      detail: dealt && !opening ? line('prompt.sum_composition', { n: target }) : { key: puzzle.prompt, params: promptParams(puzzle) },
     };
   }
   // Two other partners joined that make the same total (3 + 1 on a 2 + 2 stop):
@@ -112,9 +115,50 @@ export function feedbackFor(session: LevelSession): AnswerFeedback {
   if (session.step > 0 && verdict.reason === 'shape-mismatch') {
     return { tone: 'building', title: line('feedback.change'), detail };
   }
-  const key = verdict.reason === 'shape-mismatch' ? 'feedback.shape'
+  // Right count, but partners that cannot make the picture however they are
+  // moved (2 + 4 on the stairs, Phase 21): the partners need changing, not the shape.
+  const key = verdict.reason === 'shape-mismatch' ? (shapeInReach(session) ? 'feedback.shape' : 'feedback.partners')
     : verdict.reason === 'groups-mismatch' ? 'feedback.partners' : 'feedback.join';
   return { tone: 'adjust', title: line(key), detail };
+}
+
+// Can these pieces cover an accepted turn of the picture exactly, moved but
+// never turned (a partner is rigid, and its shape is the one it was dealt
+// with): every partner inside, single blocks on the cells left? A shape stop
+// built from partners can have the right count and no way to the picture
+// (Phase 21: 2 + 4 is 6 blocks, and no stairs).
+function covers(shapes: ReadonlyArray<ReadonlyArray<Cell>>, loose: number, q: Extract<Question, { kind: 'quantity_shape' }>): boolean {
+  if (shapes.reduce((a, x) => a + x.length, loose) !== q.template.cells.length) {
+    return false;
+  }
+  const key = (c: Cell) => `${c.x},${c.y}`;
+  return variants(q.template, q.symmetry ?? DEFAULT_SYMMETRY).some((cells) => {
+    const inside = new Set(cells.map(key));
+    const place = (left: ReadonlyArray<ReadonlyArray<Cell>>, taken: ReadonlySet<string>): boolean => {
+      const [shape, ...rest] = left;
+      if (shape === undefined) {
+        return true;
+      }
+      const head = shape[0]!;
+      return cells.some((c) => {
+        const mine = shape.map((x) => key({ x: x.x - head.x + c.x, y: x.y - head.y + c.y }));
+        return mine.every((k) => inside.has(k) && !taken.has(k)) && place(rest, new Set([...taken, ...mine]));
+      });
+    };
+    return place(shapes, new Set());
+  });
+}
+
+// The mat as it is could make the picture, if moved about.
+function shapeInReach(session: LevelSession): boolean {
+  const q = session.puzzle.question;
+  if (q.kind !== 'quantity_shape') {
+    return true;
+  }
+  const state = matOf(session);
+  const partners = benchPartners(state);
+  const inGroup = grouped(state);
+  return covers(partners.map((g) => g.shape), [...state.bench.keys()].filter((u) => !inGroup.has(u)).length, q);
 }
 
 function grouped(state: BenchState): ReadonlySet<UnitId> {
@@ -247,6 +291,10 @@ export function hintFor(session: LevelSession): Line {
       if (verdict.reason === 'count-mismatch') {
         return countHint(state, q.target, verdict.benchCount);
       }
+      // Partners that cannot make the picture: change one (asked-for help names which).
+      if (verdict.reason === 'shape-mismatch' && !shapeInReach(session)) {
+        return { key: copyKey('feedback.swap'), params: {} };
+      }
       return { key: copyKey(verdict.reason === 'not-one-cluster' ? 'hint.not-one-cluster' : 'hint.shape-mismatch'), params: {} };
     case 'addition_exact': {
       const [a, b] = q.operands;
@@ -318,7 +366,7 @@ function lookHere(session: LevelSession): AnswerFocus {
   if (verdict.matched) {
     return NO_FOCUS;
   }
-  const template = puzzle.question.kind === 'quantity_shape' && (verdict.benchCount === 0 || verdict.reason === 'shape-mismatch');
+  const template = puzzle.question.kind === 'quantity_shape' && (verdict.benchCount === 0 || (verdict.reason === 'shape-mismatch' && shapeInReach(session)));
   if (verdict.reason === 'not-one-cluster') {
     // Everything outside the biggest group of touching blocks.
     const parts = clusters(state).map((c) => c.unitIds);
@@ -337,7 +385,10 @@ function lookHere(session: LevelSession): AnswerFocus {
 // so this is tiny). The help names its first step: what to send back or put
 // back, and the partner to bring right after, if that is next. Null when the
 // next step is only to keep adding (that is building, not a correction).
-function quantityPlan(state: BenchState, target: number): Guidance | null {
+// `accepts`: whether the partners and single blocks of an end state could
+// make what the stop asks (a shape stop: cover its picture); every count is
+// fine for a quantity stop.
+function quantityPlan(state: BenchState, target: number, accepts: (shapes: ReadonlyArray<ReadonlyArray<Cell>>, loose: number) => boolean = () => true): Guidance | null {
   const groups = [...state.groups.values()];
   const onBench = groups.map((g) => g.unitIds.every((u) => state.bench.has(u)));
   const loose = benchLoose(state);
@@ -346,9 +397,10 @@ function quantityPlan(state: BenchState, target: number): Guidance | null {
   const key = (mask: number, k: number) => mask * 64 + k;
   const startMask = onBench.reduce((m, on, i) => (on ? m | (1 << i) : m), 0);
   const total = (mask: number, k: number) => groups.reduce((sum, g, i) => (mask & (1 << i) ? sum + size(g) : sum), 0) + k;
+  const done = (mask: number, k: number) => total(mask, k) === target && accepts(groups.filter((_, i) => mask & (1 << i)).map((g) => g.shape), k);
   const seen = new Map<number, ReadonlyArray<Move>>([[key(startMask, loose.length), []]]);
   const queue: [number, number][] = [[startMask, loose.length]];
-  let path: ReadonlyArray<Move> | null = total(startMask, loose.length) === target ? [] : null;
+  let path: ReadonlyArray<Move> | null = done(startMask, loose.length) ? [] : null;
   while (path === null && queue.length > 0) {
     const [mask, k] = queue.shift()!;
     const sofar = seen.get(key(mask, k))!;
@@ -377,7 +429,7 @@ function quantityPlan(state: BenchState, target: number): Guidance | null {
       }
       const moves = [...sofar, move];
       seen.set(key(m, kk), moves);
-      if (total(m, kk) === target) {
+      if (done(m, kk)) {
         path = moves;
         break;
       }
@@ -496,8 +548,14 @@ function sameSum(session: LevelSession): Guidance | null {
 // asked two ways, the other half not there yet on a "who's missing?" stop
 // (whose card title no longer says how many are missing), and two other
 // partners that make the total too (Phase 20).
+// The opening of a "send the extra away" stop asks too (Phase 21): it is too
+// many, and the help climbs to which one to send back.
 export function asksForHelp(session: LevelSession, f: AnswerFeedback = feedbackFor(session)): boolean {
-  return f.tone === 'adjust' || (f.tone === 'building' && (sameWayAgain(session) || session.whole.given !== undefined || f.title.key === copyKey('feedback.same-sum')));
+  return (
+    f.tone === 'adjust' ||
+    onlyOnMat(session) ||
+    (f.tone === 'building' && (sameWayAgain(session) || session.whole.given !== undefined || session.whole.onMat !== undefined || f.title.key === copyKey('feedback.same-sum')))
+  );
 }
 
 // The way made stands on its own and nothing else is on the mat: make the
@@ -536,10 +594,12 @@ export function guidanceFor(session: LevelSession, level: 1 | 2): Guidance {
   }
   const state = matOf(session);
   const aside = sameWayAgain(session) && state.bench.size === 0;
+  // A shape from partners plans towards partners that can make the picture.
+  const accepts = q.kind === 'quantity_shape' ? (shapes: ReadonlyArray<ReadonlyArray<Cell>>, loose: number) => covers(shapes, loose, q) : undefined;
   const plan =
     q.kind === 'quantity' || q.kind === 'quantity_shape'
-      ? verdict.reason === 'count-mismatch'
-        ? quantityPlan(state, q.target)
+      ? verdict.reason === 'count-mismatch' || (verdict.reason === 'shape-mismatch' && !shapeInReach(session))
+        ? quantityPlan(state, q.target, accepts)
         : null
       : verdict.reason === 'not-merged'
         ? null

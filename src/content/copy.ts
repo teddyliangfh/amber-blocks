@@ -36,6 +36,8 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
   'prompt.sum_composition': { zh: '找两个伙伴，拼出 {n}', en: 'Find two partners that make {n}', params: ['n'] },
   // A partner is already on the mat (Phase 19 "who's missing?"): find the other half.
   'prompt.missing_part': { zh: '已经有 {a} 了，再找一个伙伴，拼成 {n}', en: 'Here is {a}. Find one more partner to make {n}', params: ['a', 'n'] },
+  // Partners already on the mat make too many (Phase 21 "send the extra away").
+  'prompt.send_away': { zh: '工作台上多了，送走多的，拼成 {n}', en: 'Too many! Send one back to make {n}', params: ['n'] },
 
   'feedback.matched.quantity': { zh: '{n}，就是 {n} 块', en: '{n}. {n} blocks', params: ['n'] },
   // One block: "one. one block", not "one blocks" (Phase 20, play review Q6).

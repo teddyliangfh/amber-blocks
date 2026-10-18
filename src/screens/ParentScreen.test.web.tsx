@@ -11,6 +11,7 @@ import { materialize, nodeId, sandboxMaterial } from '../content';
 import type { ProgressState } from '../progress';
 import { RESET_BACKUP_KEY, STORAGE_KEY, createInitialState, deserialize, memoryStorage, reduce, serialize } from '../progress';
 import ch1Finished from '../progress/__fixtures__/archive-v1-phase11-ch1-finished.json';
+import v6AllFinished from '../progress/__fixtures__/archive-v6-phase20-all-finished.json';
 import { ParentScreen } from './ParentScreen';
 import { ProgressProvider } from './progress-store';
 
@@ -66,6 +67,16 @@ describe('parent area after a content upgrade', () => {
     await open(JSON.stringify({ ...ch1Finished, contentVersion: 2, nodes: [] }));
     expect(text('storage-status')).toBe('进度会自动保存在这台设备的浏览器里。');
     expect(text('storage-upgraded')).toBeNull();
+  });
+
+  test('Phase 21: a version 6 archive gains four stops and loses no work: no upgrade notice, no stops listed; play starts at the first new one', async () => {
+    await open(JSON.stringify(v6AllFinished));
+    expect(text('storage-status')).toBe('进度会自动保存在这台设备的浏览器里。');
+    expect(text('storage-upgraded')).toBeNull();
+    // Twelve Join Island chips, each with its number; play rests on the first new stop, 4th on the island.
+    const chips = [...container.querySelectorAll('[data-testid^="start-ch2-n"]')].map((c) => c.textContent);
+    expect(chips).toEqual(['1+1', '2+1', '2+2', '10', '5', '7', '5', '6', '6', '7', '13', '7']);
+    expect(text('start-chosen')).toBe('现在从 合体岛 第 4 站 开始');
   });
 
   test('review K: the map is reached from here, not from the child menu', async () => {

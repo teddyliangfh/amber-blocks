@@ -152,6 +152,29 @@ export function givenMaterial(given: number, beside: number, sizes: ReadonlyArra
   return { state: r.value, partnerIds: material.partnerIds, given: id };
 }
 
+// "Send the extra away" material (Phase 21): the tray partners as dealt (the
+// distractors, in tray order), then the partners on the mat, left to right,
+// which move straight onto it: one joined row from the left edge, in the
+// middle of the mat's height. Their tray slots stay their home (core
+// invariant 1), so each can go back.
+export function onMatMaterial(row: ReadonlyArray<number>, sizes: ReadonlyArray<number>, bounds: Bounds, prefix: string): PartnerMaterial & { readonly onMat: ReadonlyArray<GroupId> } {
+  const material = partnerMaterial([...sizes, ...row], bounds, prefix);
+  const ids = material.partnerIds.slice(sizes.length);
+  const height = Math.max(...row.map((n) => Math.max(...bodyOf(n).map((c) => c.y)) + 1));
+  const y = Math.max(0, Math.floor((bounds.rows - height) / 2));
+  let state = material.state;
+  let x = 0;
+  ids.forEach((id, i) => {
+    const r = apply(state, { type: 'takeGroup', groupId: id, origin: cell(x, y) });
+    if (!r.ok) {
+      throw new Error(`content: could not put partner ${id} on the mat: ${r.reason}`);
+    }
+    state = r.value;
+    x += Math.max(...bodyOf(row[i]!).map((c) => c.x)) + 1;
+  });
+  return { state, partnerIds: material.partnerIds, onMat: ids };
+}
+
 type UnitIdList = ReturnType<typeof unitIds>;
 
 const MAX_RESHUFFLES = 8;

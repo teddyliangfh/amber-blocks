@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { CONTENT_VERSION, chapterId, materialize, nodeId } from '../content';
 import { apply } from '../core';
+import { bossOutlineCells } from './BossOutline';
 import { computeGeometry } from './layout';
 import { MERGE_BLINK_MS, MERGE_SEAM_MS } from './merge';
 import { Stage } from './Stage';
@@ -73,6 +74,31 @@ describe('Stage (2026-10-15 review D: the first partner stop showed one block)',
     render('ch1-n10', { demo: 1, demoPiece: groupId });
     expect(all('demo-hand')).toHaveLength(1);
     expect(all('demo-ghost')).toHaveLength(5);
+  });
+
+  test('Phase 21 ch2-n10: the hand carries the 2 from the mat back to the tray; without demoBack a piece on the mat is not carried', () => {
+    const puzzle = puzzleOf('ch2-n10');
+    const two = puzzle.onMat![2]! as string;
+    // Nothing waits in the tray at the start: every partner is on the mat.
+    render('ch2-n10', { demo: 1, demoPiece: two, demoBack: true });
+    expect(all('demo-hand')).toHaveLength(1);
+    expect(all('demo-ghost')).toHaveLength(2);
+    render('ch2-n10', { demo: 1, demoPiece: two });
+    expect(all('demo-hand')).toHaveLength(0);
+  });
+
+  test('Phase 21 boss entrance: a row of n dashed cells across the middle with a sleeping face, the first lit ones filled; none without the prop', () => {
+    render('ch2-n4', { outline: { n: 5, lit: 2 } });
+    expect(all('boss-outline')).toHaveLength(1);
+    expect(all('boss-cell-lit')).toHaveLength(2);
+    expect(all('boss-cell')).toHaveLength(3);
+    expect(all('boss-face')).toHaveLength(1);
+    render('ch2-n4');
+    expect(all('boss-outline')).toHaveLength(0);
+    // In a row across the middle of the mat, wrapping only when too long.
+    expect(bossOutlineCells({ cols: 6, rows: 3 }, 5)).toEqual([0, 1, 2, 3, 4].map((x) => ({ x, y: 1 })));
+    expect(bossOutlineCells({ cols: 8, rows: 3 }, 7)).toEqual([0, 1, 2, 3, 4, 5, 6].map((x) => ({ x, y: 1 })));
+    expect(bossOutlineCells({ cols: 3, rows: 4 }, 5)).toEqual([{ x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 0, y: 2 }, { x: 1, y: 2 }]);
   });
 
   test('a loose stop still shows one block; no demo number, no hand', () => {

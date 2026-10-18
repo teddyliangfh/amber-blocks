@@ -5,7 +5,7 @@ import { THEME } from '../blocks-ui';
 // Small drawn icons in the toy style: chunky rounded strokes in the app's ink,
 // the same on every platform (the emoji and symbol glyphs they replace changed
 // shape and weight from one phone to the next).
-export type IconName = 'menu' | 'play' | 'gear' | 'speaker' | 'again' | 'album' | 'close' | 'sandbox' | 'map' | 'tidy' | 'undo' | 'bulb' | 'star' | 'count';
+export type IconName = 'menu' | 'play' | 'gear' | 'speaker' | 'again' | 'album' | 'close' | 'sandbox' | 'map' | 'tidy' | 'undo' | 'bulb' | 'star' | 'count' | 'dice';
 
 export function Icon({ name, size, color = THEME.ink }: { readonly name: IconName; readonly size: number; readonly color?: string }) {
   const s = size;
@@ -177,6 +177,24 @@ export function Icon({ name, size, color = THEME.ink }: { readonly name: IconNam
           ))}
           <View style={{ position: 'absolute', left: s * 0.26 - finger / 2, top: s * 0.32, width: finger, height: s * 0.42, borderRadius: finger / 2, backgroundColor: color }} />
           <View style={{ position: 'absolute', left: s * 0.14, top: s * 0.58, width: s * 0.44, height: s * 0.34, borderRadius: s * 0.12, backgroundColor: color }} />
+        </View>
+      );
+    }
+    case 'dice': {
+      // A die tipped a little, showing five: "a surprise one" (Phase 21, free
+      // play's random puzzle). A thinner outline than the other icons leaves the
+      // five pips room to read at 28px.
+      const d = s * 0.78;
+      const edge = Math.max(2, s * 0.09);
+      const inner = d - 2 * edge;
+      const pip = Math.max(2.5, s * 0.13);
+      return (
+        <View style={[styles.box, { width: s, height: s }]}>
+          <View style={{ width: d, height: d, borderRadius: s * 0.18, borderWidth: edge, borderColor: color, transform: [{ rotate: '-12deg' }] }}>
+            {[[0.22, 0.22], [0.78, 0.22], [0.5, 0.5], [0.22, 0.78], [0.78, 0.78]].map(([x, y]) => (
+              <View key={`${x},${y}`} style={{ position: 'absolute', left: inner * x! - pip / 2, top: inner * y! - pip / 2, width: pip, height: pip, borderRadius: pip / 2, backgroundColor: color }} />
+            ))}
+          </View>
         </View>
       );
     }

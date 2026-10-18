@@ -8,6 +8,7 @@ import { hueFor } from '../content';
 import { cellToPx, countTarget, footprintOf, labelSpot, resolveDrop, settleOrigin } from './layout';
 import type { Footprint, Rect, StageGeometry } from './layout';
 import type { CheerMove } from './cheer';
+import { BossOutline } from './BossOutline';
 import { DemoHand } from './DemoHand';
 import type { Mood } from './Face';
 import { Spotlight } from './Spotlight';
@@ -62,6 +63,9 @@ export interface StageProps {
   // middle of the mat. A stop that starts with a partner on the mat (Phase 19)
   // puts the other half right beside it instead of on top of it.
   readonly demoTo?: Cell;
+  // The hand carries `demoPiece`, a partner on the mat, back to its outline in
+  // the tray instead (Phase 21: send the extra away).
+  readonly demoBack?: boolean;
   // A counting round just finished (0: none): the counted blocks blink together once.
   readonly wink?: number;
   // Only the mat: no sandbox (finished work on show; pass no tray objects either).
@@ -74,6 +78,10 @@ export interface StageProps {
   readonly merge?: boolean;
   // A character is joining: the parts it is made of and its total, for the join sound.
   readonly onJoin?: (parts: ReadonlyArray<number>, total: number) => void;
+  // A boss's entrance (Phase 21): a dashed outline of the answer, `n` cells in
+  // a row across the middle of the mat, its first `lit` cells lit. Scenery
+  // under the pieces: no touch, no judging, no snapping (BossOutline).
+  readonly outline?: { readonly n: number; readonly lit: number };
   // Numbers that pop up above a block for a moment (free play: a group of blocks
   // just changed size). `tick` makes each one new.
   readonly bubbles?: ReadonlyArray<{ readonly at: Cell; readonly n: number; readonly tick: number }>;
@@ -166,7 +174,7 @@ function headOf(cells: ReadonlyArray<Cell>): Cell {
   return cells.reduce((best, c) => (c.y < best.y || (c.y === best.y && c.x < best.x) ? c : best));
 }
 
-export function Stage({ state, geometry, trayObjects, enabled, countOrder, matched, mood: moodOf, celebrateTick, onCommand, onPreview, onTapUnit, onTapTray, onDragActive, onFeel, spotlight = [], demo = 0, demoPiece, demoTo: demoCell, wink = 0, trayHidden = false, cheer = 'hop', merge = false, onJoin, bubbles = [] }: StageProps) {
+export function Stage({ state, geometry, trayObjects, enabled, countOrder, matched, mood: moodOf, celebrateTick, onCommand, onPreview, onTapUnit, onTapTray, onDragActive, onFeel, spotlight = [], demo = 0, demoPiece, demoTo: demoCell, demoBack = false, wink = 0, trayHidden = false, cheer = 'hop', merge = false, onJoin, bubbles = [], outline }: StageProps) {
   const [preview, setPreview] = useState<Preview | null>(null);
   // The last thing tapped in the tray, and its hop. Ticks count down from -1
   // so they never match a solve's (useCheer plays each tick once).
@@ -672,21 +680,39 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
     scale: p.spot.scale,
   });
   const asUnit = (u: (typeof tray.units)[number]) => ({ at: { x: u.spot.x, y: u.spot.y }, colors: colorsFor(state.units.get(u.unitId)?.hue ?? 'n10'), cells: [gridCell(0, 0)], scale: u.spot.scale });
+  // Back to the tray: from where the partner sits on the mat, full size, to its outline.
+  const backGroup = demoBack && demoPiece !== undefined ? state.groups.get(demoPiece as GroupId) : undefined;
+  const backHome = backGroup !== undefined && allOnBench(state, backGroup) ? plan.spots.get(backGroup.id) : undefined;
+  const back =
+    backGroup !== undefined && backHome !== undefined
+      ? {
+          at: cellToPx(geometry, footprintOf(backGroup.unitIds.map((u) => state.bench.get(u)!)).origin),
+          colors: colorsFor(hueFor(groupSize(backGroup))),
+          cells: footprintOf(backGroup.shape).offsets,
+          scale: 1,
+          home: backHome,
+        }
+      : null;
   const givenPartner = tray.partners.find((p) => p.group.id === demoPiece);
   const givenUnit = tray.units.find((u) => u.unitId === demoPiece);
   const demoFrom =
-    givenPartner !== undefined
-      ? asPartner(givenPartner)
-      : givenUnit !== undefined
-        ? asUnit(givenUnit)
-        : tray.units[0] !== undefined
-          ? asUnit(tray.units[0])
-          : tray.partners[0] !== undefined
-            ? asPartner(tray.partners[0])
-            : null;
+    back !== null
+      ? back
+      : givenPartner !== undefined
+        ? asPartner(givenPartner)
+        : givenUnit !== undefined
+          ? asUnit(givenUnit)
+          : tray.units[0] !== undefined
+            ? asUnit(tray.units[0])
+            : tray.partners[0] !== undefined
+              ? asPartner(tray.partners[0])
+              : null;
   const demoTo = (() => {
     if (demoFrom === null) {
       return null;
+    }
+    if (back !== null) {
+      return { x: back.home.x, y: back.home.y };
     }
     if (demoCell !== undefined) {
       return cellToPx(geometry, demoCell);
@@ -724,6 +750,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
           return <View key={`e${spot.id}-${c.x},${c.y}`} style={[styles.emptySlot, { left: spot.x + c.x * unit + 4, top: spot.y + c.y * unit + 4, width: unit - 8, height: unit - 8, borderRadius: slotRadius(unit - 8) }]} />;
         }),
       )}
+      {outline !== undefined ? <BossOutline geometry={geometry} n={outline.n} lit={outline.lit} colors={colorsFor(hueFor(outline.n))} /> : null}
       {preview?.cells.map((c) => {
         const p = cellToPx(geometry, c);
         return <View key={`p${c.x},${c.y}`} style={[styles.preview, { left: p.x + 3, top: p.y + 3, width: cell - 6, height: cell - 6, borderRadius: slotRadius(cell - 6) }]} />;
@@ -754,7 +781,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
       })}
 
       {demo > 0 && demoFrom !== null && demoTo !== null ? (
-        <DemoHand key={demo} from={demoFrom.at} to={demoTo} cell={cell} colors={demoFrom.colors} cells={demoFrom.cells} fromScale={demoFrom.scale} />
+        <DemoHand key={demo} from={demoFrom.at} to={demoTo} cell={cell} colors={demoFrom.colors} cells={demoFrom.cells} fromScale={demoFrom.scale} toScale={back !== null ? back.home.scale : 1} />
       ) : null}
       {rings.map((r) => (
         <Spotlight key={`s${r.id}`} rect={r.rect} />

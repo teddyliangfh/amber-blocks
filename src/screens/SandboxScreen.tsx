@@ -24,11 +24,12 @@ import { say, voice } from './voice';
 // right / wrong sound, no paper, no cheer and no next stop. What stays is what
 // the blocks do by themselves: the pick-up, drop and put-back sounds, clusters
 // that take their count's colour, and counting with its numbers and its total.
-// The mat is kept as the child leaves it (progress `sandbox`).
+// The mat is kept as the child leaves it (progress `sandbox`). The die opens a
+// random puzzle (Phase 21, ChallengeScreen); coming back finds the mat as it was.
 
 const TEXT = {
-  zh: { title: '自由玩', map: '回地图', tidy: '全部收回', undo: '撤销', recount: '再数一遍' },
-  en: { title: 'Free play', map: 'Map', tidy: 'Put all back', undo: 'Undo', recount: 'Count again' },
+  zh: { title: '自由玩', map: '回地图', tidy: '全部收回', undo: '撤销', recount: '再数一遍', random: '随机题' },
+  en: { title: 'Free play', map: 'Map', tidy: 'Put all back', undo: 'Undo', recount: 'Count again', random: 'Random' },
 } as const;
 
 // The "like this" hand on an empty mat, with a level's timing: after this long
@@ -234,6 +235,12 @@ export function SandboxScreen() {
     router.dismissTo('/');
   }, [router]);
 
+  // A random puzzle on its own page (Phase 21); this page stays underneath as it is.
+  const onRandom = useCallback(() => {
+    voice.stop();
+    router.push('/challenge');
+  }, [router]);
+
   const onDragActive = useCallback(
     (active: boolean) => {
       if (active) {
@@ -281,7 +288,8 @@ export function SandboxScreen() {
   );
   const mapButton = <ToolButton icon="map" label={text.map} onPress={onMap} testID="sandbox-map" />;
   const tools = (
-    <View style={styles.tools}>
+    <View style={[styles.tools, landscape ? styles.toolsSide : null]}>
+      <ToolButton icon="dice" label={text.random} onPress={onRandom} testID="sandbox-random" />
       <ToolButton icon="tidy" label={text.tidy} onPress={onTidy} enabled={session.history.state.bench.size > 0} testID="sandbox-tidy" />
       <ToolButton icon="undo" label={text.undo} onPress={onUndo} enabled={canUndo(session)} testID="sandbox-undo" />
     </View>
@@ -363,6 +371,8 @@ const styles = StyleSheet.create({
   signText: { fontSize: 20, fontFamily: FONT.display, color: THEME.ink },
   signTextSmall: { fontSize: 15 },
   tools: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  // Three tools do not fit the landscape column in a row: two, then one.
+  toolsSide: { flexWrap: 'wrap', justifyContent: 'center', width: 140, rowGap: 6 },
   tool: { width: 64, alignItems: 'center', gap: 2 },
   toolOff: { opacity: 0.4 },
   toolLabel: { fontSize: 12, lineHeight: 14, fontFamily: FONT.body, fontWeight: '800', color: THEME.inkSoft, textAlign: 'center' },

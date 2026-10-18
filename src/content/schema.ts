@@ -73,6 +73,11 @@ export type QuestionSpec =
       // the same tray, each time accepting any allowed pair not used yet; it is
       // solved once every way has been built. 1 when left out.
       readonly ways?: number;
+      // "Send the extra away" (Phase 21): partners of these sizes are already
+      // on the mat when the stop opens, joined in one row from the left, and
+      // they make more than the sum. The child sends back what is too many.
+      // `allowed` is then the one pair left, side by side in the row.
+      readonly onMat?: ReadonlyArray<number>;
     };
 
 export interface PuzzleRef {
@@ -107,7 +112,10 @@ export interface Puzzle {
   // The partner already on the mat at the start (a sum with `given`). It keeps
   // its home slot in the tray, so taking it back is always possible.
   readonly given?: GroupId;
-  // All material, in the tray except a given partner; partners already defined with their shapes.
+  // The partners already on the mat at the start, left to right (a sum with
+  // `onMat`). Each keeps its home slot in the tray, so any can go back.
+  readonly onMat?: ReadonlyArray<GroupId>;
+  // All material, in the tray except a given partner or the partners on the mat; partners already defined with their shapes.
   readonly initial: BenchState;
   readonly display: PuzzleDisplay;
   readonly prompt: CopyKey;

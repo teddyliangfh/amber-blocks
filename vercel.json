@@ -13,6 +13,7 @@
     { "source": "/island/:chapterId", "destination": "/island/[chapterId].html" },
     { "source": "/album", "destination": "/album.html" },
     { "source": "/sandbox", "destination": "/sandbox.html" },
+    { "source": "/challenge", "destination": "/challenge.html" },
     { "source": "/:path*", "destination": "/" }
   ]
 }

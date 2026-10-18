@@ -1,4 +1,4 @@
-import { DEFAULT_SYMMETRY, apply, assertInvariants, groupSize, judge, variants } from '../core';
+import { DEFAULT_SYMMETRY, apply, areTouching, assertInvariants, clusters, groupSize, judge, variants } from '../core';
 import type { BenchState, Bounds, Cell, Group } from '../core';
 import { holdsMaterial } from './bench';
 import { assertDistractors } from './distractors';
@@ -62,7 +62,7 @@ function assertGiven(spec: Extract<QuestionSpec, { kind: 'sum_composition' }>, p
   const { initial } = puzzle;
   const given = spec.given;
   if (given === undefined) {
-    if (puzzle.given !== undefined || initial.bench.size !== 0) {
+    if (puzzle.given !== undefined || (initial.bench.size !== 0 && spec.onMat === undefined)) {
       throw new Error('content: material must start in the tray');
     }
     return;
@@ -84,11 +84,75 @@ function assertGiven(spec: Extract<QuestionSpec, { kind: 'sum_composition' }>, p
   }
 }
 
+// "Send the extra away" (Phase 21): the partners on the mat, more than the
+// sum, are all there is on the mat, in one joined row; exactly one pair of
+// them makes the sum, it is the one allowed pair and its two sit side by side
+// (the extras are at the ends, so sending them back is the only move needed);
+// and no other two partners anywhere make the sum, so there is one way to
+// send back and nothing else to build.
+function assertOnMat(spec: Extract<QuestionSpec, { kind: 'sum_composition' }>, puzzle: Puzzle, groups: ReadonlyArray<Group>): void {
+  const row = spec.onMat;
+  if (row === undefined) {
+    if (puzzle.onMat !== undefined) {
+      throw new Error('content: partners on the mat come from a sum spec with `onMat`');
+    }
+    return;
+  }
+  if (spec.given !== undefined || (spec.ways ?? 1) !== 1) {
+    throw new Error('content: partners on the mat are asked alone: no given partner, one way');
+  }
+  const total = row.reduce((a, b) => a + b, 0);
+  if (total <= spec.sum) {
+    throw new Error(`content: ${row.join(' + ')} on the mat is not more than ${spec.sum}`);
+  }
+  const allowed = spec.allowed[0];
+  if (spec.allowed.length !== 1 || allowed === undefined) {
+    throw new Error('content: with partners on the mat, there is one allowed pair');
+  }
+  const making: (readonly [number, number])[] = [];
+  row.forEach((a, i) => row.forEach((b, j) => {
+    if (j > i && a + b === spec.sum) {
+      making.push([i, j]);
+    }
+  }));
+  const [only] = making;
+  if (making.length !== 1 || only === undefined) {
+    throw new Error(`content: ${making.length} pairs on the mat make ${spec.sum}`);
+  }
+  const [i, j] = only;
+  if (!samePair(allowed, [row[i]!, row[j]!])) {
+    throw new Error(`content: ${row[i]} + ${row[j]} on the mat is not the allowed ${allowed[0]} + ${allowed[1]}`);
+  }
+  if (j !== i + 1) {
+    throw new Error(`content: ${row[i]} and ${row[j]} are not next to each other on the mat`);
+  }
+  groups.forEach((a, k) => {
+    for (const b of groups.slice(k + 1)) {
+      const pair = [groupSize(a), groupSize(b)] as const;
+      const isTheOne = puzzle.onMat?.[i] !== undefined && [a.id, b.id].includes(puzzle.onMat[i]!) && [a.id, b.id].includes(puzzle.onMat[j]!);
+      if (pair[0] + pair[1] === spec.sum && !isTheOne) {
+        throw new Error(`content: ${pair[0]} + ${pair[1]} also make ${spec.sum}`);
+      }
+    }
+  });
+  const { initial } = puzzle;
+  const ids = puzzle.onMat ?? [];
+  const placed = ids.map((id) => initial.groups.get(id));
+  if (ids.length !== row.length || initial.bench.size !== total || placed.some((g, k) => g === undefined || groupSize(g) !== row[k] || !g.unitIds.every((u) => initial.bench.has(u)))) {
+    throw new Error(`content: ${row.join(', ')} must be all there is on the mat at the start`);
+  }
+  const left = (g: Group) => Math.min(...g.unitIds.map((u) => initial.bench.get(u)!.x));
+  const parts = placed as ReadonlyArray<Group>;
+  if (clusters(initial).length !== 1 || parts.some((g, k) => k > 0 && (!areTouching(initial, parts[k - 1]!, g) || left(parts[k - 1]!) >= left(g)))) {
+    throw new Error('content: the partners on the mat must start in one joined row, left to right');
+  }
+}
+
 export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
   const { question, initial, solution } = puzzle;
   assertInvariants(initial);
-  // Only a given partner starts on the mat (checked with the sum below).
-  if (initial.bench.size !== 0 && !(spec.kind === 'sum_composition' && spec.given !== undefined)) {
+  // Only a given partner, or partners to send back, start on the mat (checked with the sum below).
+  if (initial.bench.size !== 0 && !(spec.kind === 'sum_composition' && (spec.given !== undefined || spec.onMat !== undefined))) {
     throw new Error('content: material must start in the tray');
   }
 
@@ -153,6 +217,7 @@ export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
       if (spec.kind === 'sum_composition') {
         assertWays(spec, puzzle, groups);
         assertGiven(spec, puzzle);
+        assertOnMat(spec, puzzle, groups);
       }
       break;
     }
@@ -162,6 +227,9 @@ export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
   }
   if (puzzle.ways !== undefined && spec.kind !== 'sum_composition') {
     throw new Error('content: ways come from a sum spec');
+  }
+  if (puzzle.onMat !== undefined && spec.kind !== 'sum_composition') {
+    throw new Error('content: partners on the mat come from a sum spec');
   }
 
   // Putting everything out is how a child finds "too many": it must never bounce.

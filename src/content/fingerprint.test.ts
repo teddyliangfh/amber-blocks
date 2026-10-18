@@ -20,7 +20,9 @@ import type { Puzzle } from './schema';
 // Version 6 (2026-10-16, Phase 19) changed only Join Island 5–7 (a partner on
 // the mat from the start) and added ch2-n8 (7 made two ways); every other stop,
 // Number Island and Join Island 1–4 included, is byte-identical to version 5.
-const FINGERPRINT_VERSION = 6;
+// Version 7 (2026-10-18, Phase 21) added Join Island n9 – n12 between the old
+// stops; all twenty stops before are byte-identical to version 6.
+const FINGERPRINT_VERSION = 7;
 const FINGERPRINTS: Readonly<Record<string, string>> = {
   'ch1-n1': 'df3b63c2',
   'ch1-n2': '795c9b41',
@@ -42,6 +44,10 @@ const FINGERPRINTS: Readonly<Record<string, string>> = {
   'ch2-n6': '0d3f2cd6',
   'ch2-n7': 'dfc97337',
   'ch2-n8': '681b29c8',
+  'ch2-n9': '86c69617',
+  'ch2-n10': '3ec25ced',
+  'ch2-n11': '808c3608',
+  'ch2-n12': '53dc5454',
 };
 
 const REFS = [1, 7, 4242].flatMap((seed) => [0, 1, 2].map((attemptVariant) => ({ seed, attemptVariant })));
@@ -63,6 +69,8 @@ function describePuzzle(p: Puzzle): string {
     // (where it sits is part of what the stop deals) (Phase 19).
     ...(p.ways === undefined ? [] : [p.ways]),
     ...(p.given === undefined ? [] : [p.given, [...s.bench.entries()]]),
+    // And partners on the mat to send back (Phase 21).
+    ...(p.onMat === undefined ? [] : [p.onMat, [...s.bench.entries()]]),
   ]);
 }
 

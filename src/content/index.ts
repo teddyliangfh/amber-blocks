@@ -5,7 +5,7 @@ export { chapterId, nodeId } from './ids';
 
 export type { Chapter, NodeSpec, Puzzle, PuzzleDisplay, PuzzleRef, QuestionSpec } from './schema';
 
-export { CHAPTERS, CONTENT_CHANGES, CONTENT_VERSION, COUNT_TO_PASS, findChapter, findNode } from './catalog';
+export { BOSS_ENTRANCE, CHAPTERS, CONTENT_CHANGES, CONTENT_VERSION, COUNT_TO_PASS, findChapter, findNode } from './catalog';
 
 export { materialize, materializeNode } from './generate';
 export { validate } from './validate';
@@ -21,3 +21,6 @@ export { bodyOf, handlesFor, hueFor } from './material';
 export { BENCH_MARGIN, MIN_BENCH, benchFor, fitBench } from './bench';
 
 export { SANDBOX, sandboxMaterial } from './sandbox';
+
+export type { Challenge, ChallengeKind } from './challenge';
+export { CHALLENGE_RULES, challengeCap, nextChallenge } from './challenge';

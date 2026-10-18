@@ -6,10 +6,11 @@ import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { materialize, nodeId } from '../content';
+import { CHAPTERS, materialize, nodeId } from '../content';
 import { STORAGE_KEY, createInitialState, memoryStorage, reduce, serialize } from '../progress';
 import type { ProgressState } from '../progress';
-import { ADVANCE, MapScreen, SKIP_AFTER_MS, advanceOf } from './MapScreen';
+import { ADVANCE, MapScreen, SKIP_AFTER_MS, advanceOf, labelOf } from './MapScreen';
+import v6AllFinished from '../progress/__fixtures__/archive-v6-phase20-all-finished.json';
 import { ProgressProvider } from './progress-store';
 import { PARENT_HINT_MS } from './ui';
 
@@ -51,7 +52,7 @@ const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top:
 
 function finishedUpTo(upTo: string): ProgressState {
   let s = createInitialState(5);
-  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n4', 'ch2-n5', 'ch2-n6', 'ch2-n7', 'ch2-n8'];
+  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8'];
   for (const id of order.slice(0, order.indexOf(upTo))) {
     const e = reduce(s, { type: 'enter', nodeId: nodeId(id) });
     const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
@@ -208,6 +209,50 @@ describe('the way on (2026-10-15 review H)', () => {
       });
       expect(mockRouter.push).toHaveBeenCalledWith('/parent');
       expect(hint()).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe('Phase 21: Join Island has twelve stops', () => {
+  test('each new stop is labelled with its number: the ten 10, the send-away 7, the stairs 6, the teen 13', () => {
+    const labels = CHAPTERS[1]!.nodes.map((n) => labelOf(n).label);
+    expect(labels).toEqual(['1+1', '2+1', '2+2', '10', '5', '7', '5', '6', '6', '7', '13', '7']);
+    expect(labelOf(CHAPTERS[1]!.nodes[10]!).number).toBe(13);
+  });
+
+  test('a finished version 6 archive: all twelve drawn, the marker on the first new stop, the four new ones awake, no cup', async () => {
+    jest.useFakeTimers();
+    try {
+      mockParams.current = {};
+      await act(async () => {
+        root.render(
+          <SafeAreaProvider initialMetrics={metrics}>
+            <ProgressProvider storage={memoryStorage({ [STORAGE_KEY]: JSON.stringify(v6AllFinished) })}>
+              <MapScreen />
+            </ProgressProvider>
+          </SafeAreaProvider>,
+        );
+      });
+      for (let i = 0; i < 4; i += 1) {
+        await act(async () => {
+          jest.advanceTimersByTime(1);
+          await Promise.resolve();
+        });
+      }
+      for (const n of CHAPTERS[1]!.nodes) {
+        expect(container.querySelector(`[data-testid="stop-${n.id}"]`)).not.toBeNull();
+      }
+      for (const id of ['ch2-n9', 'ch2-n10', 'ch2-n11', 'ch2-n12']) {
+        expect(container.querySelector(`[data-testid="stop-${id}"]`)?.getAttribute('aria-label')).toBe(`${id} available`);
+      }
+      expect(container.querySelector('[data-testid="stop-ch2-n8"]')?.getAttribute('aria-label')).toBe('ch2-n8 completed');
+      expect(container.querySelector('[data-testid="map-trophy"]')).toBeNull();
+      // ▶ plays where the map rests.
+      mockRouter.push.mockClear();
+      act(() => (container.querySelector('[data-testid="play"]') as HTMLElement).click());
+      expect(mockRouter.push).toHaveBeenLastCalledWith({ pathname: '/play/[nodeId]', params: { nodeId: 'ch2-n9' } });
     } finally {
       jest.useRealTimers();
     }

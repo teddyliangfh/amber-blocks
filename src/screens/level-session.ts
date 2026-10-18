@@ -300,10 +300,24 @@ export function onlyGiven(session: LevelSession): boolean {
   return given !== null && bench.size === given.unitIds.length && given.unitIds.every((u) => bench.has(u));
 }
 
+// Nothing on the mat but the partners a "send the extra away" stop starts
+// with, all of them (anywhere on it): its opening (Phase 21). Too many is the
+// task here, not a mistake yet.
+export function onlyOnMat(session: LevelSession): boolean {
+  const ids = session.whole.onMat;
+  if (ids === undefined) {
+    return false;
+  }
+  const state = session.history.state;
+  const units = ids.flatMap((id) => state.groups.get(id)?.unitIds ?? []);
+  return state.bench.size === units.length && units.every((u) => state.bench.has(u));
+}
+
 // The stop as it opens: an empty mat, or only the partner a "who's missing?"
-// stop starts with. The card gives the task and the hand may show the first move.
+// stop starts with, or the row a "send the extra away" stop starts with. The
+// card gives the task and the hand may show the first move.
 export function atStart(session: LevelSession): boolean {
-  return session.history.state.bench.size === 0 || onlyGiven(session);
+  return session.history.state.bench.size === 0 || onlyGiven(session) || onlyOnMat(session);
 }
 
 // A sum asked several ways, past its first way, with the mat still showing a
@@ -370,7 +384,8 @@ export function roomBeside(session: LevelSession): boolean {
 // Past the first way of a sum asked several ways, a partner of a way not made
 // yet; on a "who's missing?" stop the other half lands beside the given
 // partner wherever it sits now: on its right, else on its left where there is
-// no room on the right.
+// no room on the right. On a "send the extra away" stop the first move takes
+// the extra from the mat back to the tray (Phase 21).
 export function demoMove(session: LevelSession): Command | undefined {
   const { whole, puzzle } = session;
   const state = session.history.state;
@@ -378,6 +393,13 @@ export function demoMove(session: LevelSession): Command | undefined {
   if (session.used.length > 0 && q.kind === 'sum_composition') {
     const sizes = new Set(q.allowed.flat());
     return whole.solution.find((c) => c.type === 'takeGroup' && sizes.has(groupSize(state.groups.get(c.groupId)!)));
+  }
+  // A "send the extra away" stop with everything sent back: a partner of the
+  // pair left comes over, as on any free sum (the hand puts it mid-mat).
+  if (whole.onMat !== undefined && !onlyOnMat(session) && q.kind === 'sum_composition') {
+    const sizes: ReadonlyArray<number> = q.allowed[0] ?? [];
+    const g = [...state.groups.values()].find((x) => sizes.includes(groupSize(x)) && x.unitIds.every((u) => !state.bench.has(u)));
+    return g === undefined ? undefined : { type: 'takeGroup', groupId: g.id, origin: { x: 0, y: 0 } };
   }
   const first = whole.solution[0];
   const given = givenPartner(session);

@@ -22,6 +22,8 @@ src/blocks-ui/
   UnitView.tsx     单位块（托盘或工作台）
   PartnerView.tsx  整组伙伴（托盘或工作台），数字标签贴在身上
   Stage.tsx        工作台网格 + 托盘 + 所有可拖对象；接收 BenchState 与回调 onCommand / onTapUnit / onTapTray / onJoin；合体状态机、接缝光、数字气泡
+  DemoHand.tsx     示范手：虚影 + 手指从托盘到工作台（或反过来，Phase 21）
+  BossOutline.tsx  Boss 登场：答案大小的虚线轮廓 + 睡脸 + 亮格（Phase 21）；纯函数 `bossOutlineCells`
   merge.ts         纯函数：`mergedClusters`（含伙伴、≥ 2 个部分的簇：总数、部分、头块、接缝）；`MERGE_ON` 与合体时长常量
   picture.ts       纯函数：作品册缩略图怎么上色（合体后的样子）
 ```
@@ -45,11 +47,14 @@ src/blocks-ui/
 - 就近吸附（D-085）：落在被占的格子时，`settleOrigin` 在 1 格内按"上下左右、再对角，各按阅读顺序"（`nearbyOrigins`）找 core 接受的位置，伙伴优先选贴住其他伙伴的；吸附虚影用同一个结果；落回自己原位算 same；都不行才 `blocked`。
 - 托盘点按（D-084）：托盘里的单块 / 伙伴被点（Tap，与 Pan 互斥）时跳一下（`useCheer` hop，用负数 tick，不会与过关的 tick 撞号），并回调 `onTapTray(n)`（单块 1）。
 - 数字气泡（D-088）：`bubbles` 属性里的每一项在那一格上方冒一个伙伴徽章样式的数字，`BUBBLE_MS`（800ms）内淡入、停留、淡出；减少动效时不上浮。
+- 示范手反向（Phase 21，D-089）：`demoBack` 为真且 `demoPiece` 是工作台上的伙伴时，虚影从它在工作台上的位置（原大）飞回它在托盘里的轮廓（托盘比例，`DemoHand toScale`）；否则照旧从托盘飞到工作台（`demoTo` 或中间）。减少动效时虚影只在起点闪。
+- Boss 轮廓（Phase 21，D-094）：`outline = { n, lit }` 时，`bossOutlineCells` 把 n 格排成工作台中间的一行（太长才折行），画在所有积木之下：每格虚线框（`hueFor(n)` 的 edge 色），前 `lit` 格填 pale 色，第一格一张 `sleepy` 脸；整体 `useBreathe` 呼吸（减少动效时不呼吸）。`pointerEvents="none"`，不参与落点、吸附与判题。
 - 单块 / 整组语义不混：伙伴整体是一个可拖对象，不能拖伙伴的单块（第二章及第一章 10 / 12 / 17 的握把）；其余第一章站只有单块。
 
 ## 验证
 
 - `layout.test.ts`：几何、落点钳位、托盘宽高约束、伙伴内点中格子；常见手机竖 / 横屏 × 全题库边界检查；2026-10-16：每个视口 × 19 站工作台格与托盘块 ≥ 40px（不到 40 的四处列成清单：17 站在 375 × 553 与 360 × 568 是 34px，受托盘宽度限制；12 / 17 站在 640 × 304 横屏 38px），390 × 844 的 1 站与 3 + 4 站托盘空沙 ≤ 40% / 45%，360 × 640 的 4 变身站托盘高 ≥ 托盘块 + 16，托盘下方沙地放下即放回，8 列工作台用满宽度。
 - `merge.test.ts`（Phase 20）：3 + 4 一个簇（总数、部分、头块、接缝、key 稳定）；分开、单个伙伴、只有散块都不合；3 + 两块单块是 5；8 砖、17。`picture.test.ts`：合体后的颜色与一张脸。`Stage.test.web.tsx`：打开即合好、新解的接缝 → 眨眼 + `onJoin` → 合体、同一解再合不闪、数字气泡。`layout.test.ts`：`nearbyOrigins` / `settleOrigin`。
+- Phase 21：`Stage.test.web.tsx` 送走站的示范手带着 2 从工作台回托盘（不给 `demoBack` 时工作台上的伙伴不被搬）、Boss 轮廓 5 格亮 2 格 + 睡脸、`bossOutlineCells` 居中与折行；`merge.test.ts` 楼梯一个 6、部分 [1, 2, 3]；`layout.test.ts` 新站不进"比旧工作台小"的比较（它们没有旧工作台），全部视口 ≥ 40px 的清单不变。
 - `tray.test.ts`：10 / 12 / 17 与第二章每站：任一伙伴搬出 → 只多一个轮廓，其余对象位置比例不变；放回 → 与开题一致；参考解完成后对象数不变。
 - 浏览器（iPhone 竖屏 390×844、横屏 844×390）：整组搬出 / 放回 / 移动、点数、横屏侧边托盘。验证方法见 `tasks/todo.md` 的 Phase 11。

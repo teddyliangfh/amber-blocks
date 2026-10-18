@@ -1,4 +1,4 @@
-import { cell, groupSize } from '../core';
+import { areTouching, cell, groupSize } from '../core';
 import type { BenchState, Bounds, Cell, Command, Group, Question, UnitId } from '../core';
 
 // A reference solution written in core commands. It exists so that validate()
@@ -133,6 +133,62 @@ function besideGiven(question: Extract<Question, { kind: 'sum_composition' }>, i
   return [{ type: 'takeGroup', groupId: missing.id, origin: cell(x, y) }];
 }
 
+// "Send the extra away": the allowed pair on the mat (the one that sits
+// joined, if any) stays where it is; every other partner on the mat goes back
+// to the tray. validate() refuses a pair that is not joined.
+function sendAway(question: Extract<Question, { kind: 'sum_composition' }>, initial: BenchState, placed: ReadonlyArray<Group>): ReadonlyArray<Command> {
+  for (const joined of [true, false]) {
+    for (const [a, b] of question.allowed) {
+      for (const x of placed) {
+        const y = placed.find((g) => g !== x && groupSize(x) === a && groupSize(g) === b && (!joined || areTouching(initial, x, g)));
+        if (y !== undefined) {
+          return placed.filter((g) => g !== x && g !== y).map((g): Command => ({ type: 'returnGroup', groupId: g.id }));
+        }
+      }
+    }
+  }
+  throw new Error(`content: no allowed pair for ${question.sum} is on the mat`);
+}
+
+// Partners that cover a picture exactly, each put down whole as it is: from the
+// top-left cell not covered yet, a partner whose first block fits there and
+// whose body stays inside the picture, then the next. Rows as wide as the
+// picture fill a rectangle (the 8 brick, the ten); stairs need one partner a
+// step (Phase 21: 2 + 4 makes 6 but no stairs, 1 + 2 + 3 does).
+function cover(groups: ReadonlyArray<Group>, picture: ReadonlyArray<Cell>): ReadonlyArray<Command> | undefined {
+  const key = (c: Cell) => `${c.x},${c.y}`;
+  const inside = new Set(picture.map(key));
+  const order = [...picture].sort((a, b) => a.y - b.y || a.x - b.x);
+  const place = (left: ReadonlyArray<Group>, covered: ReadonlySet<string>): ReadonlyArray<Command> | undefined => {
+    const next = order.find((c) => !covered.has(key(c)));
+    if (next === undefined) {
+      return left.length === 0 ? [] : undefined;
+    }
+    for (const g of left) {
+      const head = [...g.shape].sort((a, b) => a.y - b.y || a.x - b.x)[0]!;
+      const origin = cell(next.x - head.x, next.y - head.y);
+      const mine = g.shape.map((c) => key(cell(c.x + origin.x, c.y + origin.y)));
+      if (mine.every((k) => inside.has(k) && !covered.has(k))) {
+        const rest = place(left.filter((x) => x !== g), new Set([...covered, ...mine]));
+        if (rest !== undefined) {
+          return [{ type: 'takeGroup', groupId: g.id, origin }, ...rest];
+        }
+      }
+    }
+    return undefined;
+  };
+  return place(groups, new Set());
+}
+
+// Every set of partners adding up to exactly `target`, in tray order (the
+// order partnersAddingUpTo tries them in).
+function setsAddingUpTo(groups: ReadonlyArray<Group>, target: number): ReadonlyArray<ReadonlyArray<Group>> {
+  if (target === 0) {
+    return [[]];
+  }
+  return groups.flatMap((g, i) => (groupSize(g) <= target ? setsAddingUpTo(groups.slice(i + 1), target - groupSize(g)).map((rest) => [g, ...rest]) : []));
+}
+
 // A sum asked several ways: one allowed pair after another, each joined up,
 // then sent back to make room for the next.
 function everyWay(question: Extract<Question, { kind: 'sum_composition' }>, initial: BenchState, ways: number): ReadonlyArray<Command> {
@@ -175,12 +231,16 @@ export function buildSolution(question: Question, initial: BenchState, steps: Re
       const template = question.template.cells;
       let first: ReadonlyArray<Command>;
       if (initial.groups.size > 0) {
-        // Partners laid in rows as wide as the picture, so they fill it.
-        const groups = partnersAddingUpTo([...initial.groups.values()], question.target);
-        if (groups === undefined) {
+        // The first partners adding up to the target that cover the picture.
+        const sets = setsAddingUpTo([...initial.groups.values()], question.target);
+        if (sets.length === 0) {
           throw new Error(`content: no partners add up to ${question.target}`);
         }
-        first = packPartners(groups, { cols: Math.max(...template.map((c) => c.x)) + 1, rows: initial.bounds.rows });
+        const covered = sets.map((groups) => cover(groups, template)).find((c) => c !== undefined);
+        if (covered === undefined) {
+          throw new Error(`content: no partners adding up to ${question.target} cover the picture`);
+        }
+        first = covered;
       } else {
         const units = looseUnitsInTray(initial).slice(0, question.target);
         first = units.map((unitId, i) => ({ type: 'take', unitId, to: template[i] as Cell }));
@@ -209,7 +269,11 @@ export function buildSolution(question: Question, initial: BenchState, steps: Re
       return packPartners(groups, initial.bounds);
     }
     case 'sum_composition': {
-      const given = [...initial.groups.values()].find((g) => g.unitIds.every((u) => initial.bench.has(u)));
+      const placed = [...initial.groups.values()].filter((g) => g.unitIds.every((u) => initial.bench.has(u)));
+      if (placed.length > 1) {
+        return sendAway(question, initial, placed);
+      }
+      const given = placed[0];
       if (given !== undefined) {
         return besideGiven(question, initial, given);
       }

@@ -51,7 +51,7 @@ afterEach(() => {
 });
 
 const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } };
-const ORDER = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n4', 'ch2-n5', 'ch2-n6', 'ch2-n7', 'ch2-n8'];
+const ORDER = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8'];
 
 function finished(count: number, language: 'zh' | 'en' = 'zh'): ProgressState {
   let s = { ...createInitialState(5), language };
@@ -112,8 +112,8 @@ describe('island page (2026-10-15 review I)', () => {
   });
 
   test('the last island: every island done, back to the map; its boss is 7 made two ways, drawn as the last way when there is no picture', async () => {
-    await open(finished(20, 'en'), 'ch2');
-    expect(container.querySelectorAll('[data-testid="island-cheer"]')).toHaveLength(8);
+    await open(finished(24, 'en'), 'ch2');
+    expect(container.querySelectorAll('[data-testid="island-cheer"]')).toHaveLength(12);
     // No album picture and no saved work: the reference answer's end, the second way (5 + 2, Phase 19).
     expect([...container.querySelectorAll('[data-testid="island-work"] [data-testid^="partner-"]')].map((p) => p.getAttribute('data-testid')).filter((t) => /^partner-\d+$/.test(t!)).sort()).toEqual(['partner-2', 'partner-5']);
     expect(q('island-line')?.textContent).toBe('Every island is done!');

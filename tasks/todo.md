@@ -1474,3 +1474,110 @@ brief 第 4 节列出、本轮按要求没做的：三个伙伴合体、凑到 1
 - [x] 主屏幕图标：`assets/brand/app-icon.svg`（天空色底、沙丘、Amber 微微倾斜跳起、沙上有影子；满版，主要内容在中间 80%）→ `public/icon-180.png`（apple-touch-icon）、`icon-512.png`（manifest），不透明。草稿里的一朵云挡住积木一角，删了。
 - [x] `pnpm build:web` 后 `dist/` 里的 favicon.ico / favicon.svg / icon-180 / icon-512 都是新图，html 里三条 icon 链接；静态服务（8787）四个文件都能加载。typecheck、lint 通过（只改了 `+html.tsx` 与资源）。
 - 没做：原生 App 图标（`assets/images/icon.png`、Android 自适应图标、iOS `assets/expo.icon`）仍是 Expo 模板；没在真机上看主屏幕图标。渲染用的脚本（headless Chromium 渲染 SVG、打包 ICO）在会话草稿目录，不在仓库里。
+
+# Phase 21：合体岛换花样 + 自由玩随机题（2026-10-18，D-089 – D-096，内容版本 7）
+
+按 [tasks/brief-phase-21.md](brief-phase-21.md) 21-1 → 21-2 → 21-3 做完，第 8 项（Boss 登场，可选）也做了。没有执行任何 git 命令；没有新增依赖、没改 `package.json`；core 没改（`judge.ts` 没动）；`schemaVersion` 不变、没加存档字段；没加任何自动语音（新句子都在点按时说）；新动画都有减少动效分支（Boss 轮廓不呼吸、只亮格；示范手反向时只在起点闪）。`pnpm lint:purity` 每节都是零命中；随机题的随机数由界面传入种子，content 里没有 `Math.random`。
+
+顺序说明：先用当前 v6 代码生成三份种子存档（临时 jest 测试写文件、用完删除），冻结在 `src/progress/__fixtures__/archive-v6-phase20-{all-finished,ch2-half,ch1-half}.json`（种子 4242；全通的地图停在 ch2-n8、自由玩里摆着三块；合体岛做到 4 站、5 站把 4 贴在 2 旁边；数字岛做到 6 站、7 站拿出三块），之后才改题库。
+
+## 21-1 内容引擎：三种新动作（D-089、D-090）
+
+- [x] 1. 送走多的：`schema.ts` 的 `sum_composition.onMat?`、`Puzzle.onMat?`；`material.ts onMatMaterial`（托盘 = 干扰（可为空）+ 这一排，home 槽位在末尾；core `takeGroup` 从最左列起排成一排、竖直居中）；`generate.ts` 用 `prompt.send_away`（新文案，中英各一）；`solution.ts sendAway`（多出的依次 `returnGroup`）；`validate.ts assertOnMat`（和大于 sum、一对、一排里凑出 sum 的位置对恰好一个且就是它且相邻、全部材料里没有别的一对凑出 sum、开局恰好是这一排且连成一排、不与 given / ways 混用）；`bench.ts` 那一排原样放下、不加余量（`Need.dealt`）。
+- [x] 2. 新模板 `TEN_2X5`、`STAIRS_6`（`catalog/shapes.ts`）。核对：右对齐楼梯是左对齐转 90°，默认对称判对；1 不在 2 的端上的"楼梯"判 shape-mismatch。用伙伴拼的造型参考解改为 `cover`（第一组加起来够数、又能按原样铺满图形的伙伴），旧 20 站的参考解与改动前逐条相同（HEAD 的旧 `solution.ts` 临时对比，6 个种子 × 3 个 variant）。
+- [x] 3. 十几：`given: 10` 的 `fitBench` 是 9 × 3，10 两排在第 0–4 列、3 落在第 5 列，托盘里恰好一个 3。
+- 门禁（21-1 结束）：`pnpm lint` 0；`pnpm typecheck` 通过；`pnpm lint:purity` 零命中；`pnpm test:gate` 56 suite / 827 测试，content 97.97 / 95.17（门禁 95）；`pnpm build:web` 通过。目录没改，指纹全部不变。
+
+## 21-2 合体岛目录（内容版本 7）与界面（D-091 – D-094）
+
+- [x] 4. `catalog/chapter-2.ts` 12 站（新站 n9 – n12 插在表中位置，原 8 站一字未改）；n12 的干扰取 [2, 4]（brief 没给，选的是 3 两边的数，都补不成 13）；n9 / n11 的 extra 取 1（同 8 砖）。n9 的十只认横放（`TEN_LYING`，D-090）：可转向时工作台 6 × 6，iPhone SE / 360 × 640 / 640 × 360 横屏上块只有 34–38px，横放的两个 5 也立不起来。`CONTENT_VERSION = 7`、`CONTENT_CHANGES[7] = []`；`fingerprint.test.ts` 版本 7，原 20 站指纹与版本 6 逐字节相同，新站 n9 `86c69617`、n10 `3ec25ced`、n11 `808c3608`、n12 `53dc5454`（描述里只为带 `onMat` 的站追加那一排与工作台）。地图 `labelOf` 不用改：新站标 10 / 7 / 6 / 13；地图与家长区芯片 12 个都排得下（数字岛本来就 12 站）。
+- [x] 5. 迁移 v6 → v7（`progress/migrate.ts`）：`UPGRADE_CURRENT = 'first-open'`，`onwardFrom` 导出、带规则参数；完成记录、作品、作品册、自由玩原样（同一引用）；全通存档 `current` → ch2-n9。家长区"题库更新过"不出现、不列站（没有收起作品，`issue` 为 null）。
+- [x] 6. 送走站界面：`level-session onlyOnMat` 并入 `atStart`；`hints.ts` 开题卡（`dealt && !opening` 才改说"找两个伙伴"）、`asksForHelp` 加开题与 onMat 站的拼搭态；`demoMove` 全部送回后搬那一对的伙伴；`Stage demoBack` + `DemoHand toScale`（虚影从工作台回托盘轮廓）；`LevelScreen` 对 `returnGroup` 传 `demoBack`。过关：3 + 4 合体成 7（Phase 20 合体照常）。
+- [x] 7. 三个伙伴：合体、join 音（`mergedClusters` 部分 [1, 2, 3] → 依次响再响总数）、过关句"1、2 和 3，一共 6 块"本来就对；求助在"2 + 4 够数但搭不成"时进死路（"照着小图摆一摆"），已修（D-093，`hints.ts covers` / `shapeInReach` / `quantityPlan accepts`）。核对 `stack`：动作是 `stack`，但合体后楼梯是一个角色、整体跳一次（D-087 同一错开序号），不是一级比一级高——没改，列入需要 Ted 决定。
+- [x] 8.（可选）Boss 登场：`BOSS_ENTRANCE`（`content/catalog/index.ts`，默认 ch2-n4、ch2-n8）、`blocks-ui/BossOutline.tsx`（`bossOutlineCells`、虚线格、pale 亮格、`sleepy` 脸、`useBreathe`）、`Stage outline` 属性（画在积木下、不接触摸）；`LevelScreen` 在没答对时传 `{ n, lit: matOf(session).bench.size }`。没做"拼满后醒来"：答对即消失，合体接着演。
+- 门禁（21-2 结束）：lint 0、typecheck、purity 零命中；`pnpm test:gate` 56 suite / 917 测试，覆盖率全部 97.57 / 93.89，content 97.97 / 95.17、core 100 / 99.09、progress 99.04 / 97.67、screens 96.09 / 91.57；`pnpm build:web` 通过。
+
+## 21-3 自由玩"随机题"（D-095、D-096）
+
+- [x] 9. `content/challenge.ts`：`nextChallenge` / `challengeCap` / `CHALLENGE_RULES`（规则见 D-095；上限取"已完成站里最大的数，不小于 3"，避免只完成 1 站时上限变成 1 而无题可出）；`content/index.ts` 导出。
+- [x] 10. 界面：`LevelScreen.tsx` 拆成 `LevelPlay` + `PlayHost`（地图站的 `LevelScreen` 宿主与原来行为相同，原关卡测试一条没改就通过）；`ChallengeScreen.tsx`（什么都不存、`key` 按轮次、答对卡片说拼了什么、底栏"回自由玩 / 再来一题"、菜单"回自由玩"）；路由 `src/app/challenge.tsx`、`vercel.json` 在兜底规则前加 `/challenge → /challenge.html`、`tools/serve-dist.mjs` 注释（`/challenge` 本来就由 `${pathname}.html` 规则服务）、typed routes 用 expo-router 自带生成器刷新（`.expo/types/router.d.ts` 有 `/challenge`）；`icons.tsx` 新 `dice`；`SandboxScreen` 底栏加骰子"随机题 / Random"（横屏侧栏三个工具折成两行）。React Compiler lint：`LevelPlay` 不能把用到 ref 的回调传进渲染期的函数调用，所以"再玩一次"由 `LevelPlay` 先画成药丸 / 圆形两种，宿主只挑；随机题首题用"先写 ref 再 setState"的写法（同 SandboxScreen）。
+- 浏览器发现并修：英文"Back to free play"+"One more"两个药丸在 375 宽要 394px（"One more"出屏），改为英文与横屏时"回自由玩"是圆形 sandbox 图标键（同 2026-10-16 L-1 "再玩一次"的做法），中文竖屏仍是药丸。
+- 门禁（21-3 结束）：lint 0、purity 零命中；`pnpm test:gate` 58 suite / 932 测试；typecheck 有一处测试文件类型错误（mock 的 `args[0]` 是 unknown），已修，再跑通过；`pnpm build:web` 导出 `/challenge`。
+
+### 改了期望的旧测试（逐条）
+
+- `content/catalog/catalog.test.ts`："eight join stops" → twelve；工作台表加 n9 6x3 / n10 9x3 / n11 6x4 / n12 9x3；"Phase 19: Join Island is three joins …" → "Phase 21: Join Island is twelve stops …"（12 站 spec 全表、造型站只用伙伴铺得满的只有 handles、送走站只有相邻的 3 + 4、n12 是 10、动作序列）。
+- `content/demo.test.ts`：twenty → twenty-four stops（Boss 仍是 5 个）。
+- `content/fingerprint.test.ts`：版本 7，描述追加 `onMat`，四个新指纹（原 20 个不变）。
+- `content/bench.test.ts` "fitting it changed nothing but the mat"：对比用的旧工作台取"旧固定尺寸与新尺寸的较大者"——送走站那一排 9 宽放不进旧的 8 × 6；旧站仍在 6 × 5 / 8 × 6 上比。
+- `progress/demo.test.ts`：合体岛 8 / 8 → 12 / 12。
+- `progress/store.test.ts`：`richState` 按新地图顺序多完成 n9 / n10 / n11（否则 n5 锁着进不去），完成数 18 → 21（两处）。
+- `progress/unlock.test.ts`：地图 20 → 24；ch2-n7 的下一站是 ch2-n12（另断言 n3 → n9、n12 → n8）；完成整岛的顺序；家长从 ch2-n3 开始、完成后打开的是 ch2-n9（原来 ch2-n4）。
+- `progress/upgrade.test.ts` v5 → v6 那组改为"v5 → v6 → v7"：`v5Finished` 用版本 5 自己的地图（`V5_CHAPTERS`），因为 v7 的解锁顺序变了；去掉 `CONTENT_VERSION` 是 6 的断言；全通 v5 存档 `current` → ch2-n9（原 ch2-n8），n9 – n12 可玩、n8 锁着（前一站是 n12）、合体岛 7 / 12、打完五站全通；`loadArchive` 后 `current` 是 ch2-n9；"地图只从已完成站移到没完成的下一站" → 停在已完成的 ch1-n3 时移到 ch2-n9（原来不动，D-092 新规则）。
+- `blocks-ui/tray.test.ts`：开局轮廓与"全部放回托盘"的起点从 given 推广到 onMat；"参考解之后对象不变"改为和"全部在托盘"的样子比（送走站参考解把 2 送回托盘，原来的开局样子里没有它）。
+- `blocks-ui/layout.test.ts` "no stop got smaller blocks than with the old mats"：Phase 21 的四站不比（它们没有旧工作台，送走站在 8 列上放不下）。全部视口 ≥ 40px 的清单没有改。
+- 界面测试里写死的地图顺序（`LevelScreen.test.web.tsx`、`LevelScreen.sound.test.web.tsx` 的 `unlockedTo`，`AlbumScreen`、`IslandDoneScreen`、`MapScreen` 的 `ORDER` / `finishedUpTo`）：换成 24 站的新顺序。
+- `screens/IslandDoneScreen.test.web.tsx` "the last island"：完成 20 → 24 站、角色 8 → 12 个。
+- `screens/hints.test.ts` 合体岛"按帮助操作总能完成"属性测试：站表加 ch2-n10、ch2-n12（两种模式都过）。
+
+### 新测试（+116，816 → 932；手写 50 条，其余是按目录展开的 `test.each`：指纹 +4、托盘 +8、真实手机 × 新站等）
+
+- `content/generate.test.ts` +9：送走站开局位置、home 槽位、参考解 1 步、左端多一个也行、九种非法规格、一排不连；十与楼梯模板、三个种子都由参考解搭出且诱饵留在托盘、楼梯一级一个伙伴、转向 / 少一块 / 多一块 / 不连通 / 不像；够数但铺不满的伙伴不是参考解；10 + ? = 13 的工作台与参考解。
+- `content/challenge.test.ts`（新文件）+9：确定性、上限、新存档只出 1–3、ch1-n3 后只多方块、数字岛通关后五种造型且过 6 用握把、1 + 1 后有加法（和 ≤ 10、干扰不同尺寸）、全通后十与楼梯、不连着出同一题、各进度大量种子全部过 `validate` 且参考解判对。
+- `progress/upgrade.test.ts` +6：v6 → v7 三份冻结存档什么都不丢（作品同一引用、作品册、自由玩）、全通存档四站可玩且地图停在 n9、合体岛做到一半、数字岛做到一半、经 `loadArchive` 不报升级不备份、`UPGRADE_CURRENT` 两种规则与边界。
+- `screens/level-session.test.ts` +3、`screens/hints.test.ts` +6：送走站开题 / 一次过关 / 送错 / 全部送回；开题卡中英、开题阶梯、送错阶梯、过关句；楼梯 2 + 4、多了不引向 2 + 4、三部分过关句。
+- `screens/LevelScreen.test.web.tsx` +4：n10 全流程（开题、示范手反向、问两下点名 2、送走过关、第二拍合体）、n9 / n11（十站起来、楼梯 stack、三部分过关句）、n12、Boss 轮廓（n4 亮格与消失、n8 第二种重新亮、普通站没有）。`LevelScreen.sound.test.web.tsx` +1：送走站开题与挪动不响"需要调整"，送错才响，送走响 success。
+- `screens/ChallengeScreen.test.web.tsx`（新文件）+5：新存档进页出 1–3 的数字题、答对两个按钮 / 再来一题换题 / 回自由玩 / 全程零写入（存档原串不变，自由玩摆法在内）、按进度出题、菜单（没有重新挑战）与英文圆形回键、存档没读到时不出题。`SandboxScreen.test.web.tsx` +1：骰子进 `/challenge`、不写存档、摆法不动。
+- `screens/MapScreen.test.web.tsx` +2：新站标签；v6 全通存档 12 站都画出、四个新站 available、没有奖杯、▶ 进 ch2-n9。`screens/ParentScreen.test.web.tsx` +1：v6 存档不提示升级、不列站、芯片 12 个、"现在从 合体岛 第 4 站 开始"。
+- `blocks-ui/Stage.test.web.tsx` +2：送走站示范手（`demoBack`）、Boss 轮廓与 `bossOutlineCells`。`blocks-ui/merge.test.ts` +1：楼梯一个 6、部分 [1, 2, 3]。
+
+## 浏览器走查（Checkpoint 21）
+
+内建浏览器（`preview_start expo-web`，dev 模式），视口 375 × 812 为主，抽查 360 × 640 与 667 × 331；拖放用面板的 `left_click_drag`；存档种子用冻结的 v6 存档（临时复制到 `public/` 给页面 `fetch`，走查后已删除）或在页面里改 localStorage；页面里包了 `AudioParam.setValueAtTime` 与 `speechSynthesis.speak / cancel` 记录音高与语音，MutationObserver 记录示范手 / 接缝 / 下一站 / 彩纸出现的时刻。没有听声音。截图 21 张 `docs/review-assets/p21-01` … `p21-21`。
+
+- [x] v6 全通存档升级：地图合体岛 8 / 12，四个新站 available，标记停在新的"10"（ch2-n9），没有奖杯（`p21-01`）；localStorage 里仍是 v6、`current` ch2-n8（没收起作品就不写回，第一次改动后才是 v7）。
+- [x] ch2-n9：云朵 10、两排 5 的小图、托盘 5 / 4 / 单块 / 5；两个 5 叠成两排 → 一个紫色的 10、一张脸、"10"徽章（`p21-02`）。
+- [x] ch2-n10：开局卡片 ✦"动手试试看 / 工作台上多了，送走多的，拼成 7"，3 + 4 + 2 在工作台上、托盘三个轮廓（`p21-03`）；约 5 秒示范手把 2 的虚影从工作台搬向托盘（`p21-04`）；点卡片一下说"工作台上多了，送走多的，拼成 七"并依次亮出 1–9（九个点数音），两下说"把 二 送回去"、卡片同句、光圈套住 2（`p21-05`）；开局没有"需要调整"音。把 2 拖回托盘 → 云朵"3 + 4 = 7"、"拼对啦！"，601ms 后彩纸 + 下一站，接缝 → join 音 329.63 / 349.23 / 493.88（3、4、7），一个粉色的 7（`p21-06`），没有语音。
+- [x] ch2-n11：1、2、3 一级一个伙伴搭成楼梯 → join 音 261.63 / 293.66 / 329.63 / 440（1、2、3、6），一个紫色的 6、一张脸（`p21-07`）。
+- [x] ch2-n12：10 两排已在工作台上（托盘里留两排轮廓），中文题目"已经有 10 了，再找一个伙伴，拼成 13"在 375 宽折成两行（"13"单独一行，在卡内）；3 拖到右边 → "10 + 3 = 13"、一个 13（与 10 同色，`hueFor` 封顶 n10）（`p21-08`）。
+- [x] 自由玩 → 随机题：清空存档进自由玩，底栏"回地图 / 随机题（骰子）/ 全部收回 / 撤销"，摆两块（`p21-09`）；点骰子 → `/challenge`"拼出 2 块"（`p21-10`）；拼对 → 卡片"2，就是 2 块"、底栏"回自由玩 + 再来一题"（`p21-11`）；再来一题 → "拼出 3 块"、再来一题 → "2"；菜单"继续 / 帮助 / 撤销 / 回自由玩 / ⚙"（`p21-12`）；回自由玩 → 两块原样、撤销仍可用（同一页从栈里回来，`p21-13`）；全程 localStorage 原串不变。数字岛通关的存档刷新 6 次：3 转角、4 方块 / 长条、3、6 塔、4、4，没有加法；再加上 ch2-n1 刷新 7 次：2 + 7、6 塔、6 + 4、2、9、3 转角、5 + 2（`p21-14`）。
+- [x] 英文：ch2-n10 "Give it a try / Too many! Send one back to make 7" 一行（`p21-15`）；英文随机题答对后两个药丸要 394px、"One more"出屏 → 改成圆形回键后 71–300px（`p21-16`）。
+- [x] 360 × 640：ch2-n10 9 列工作台块 40px、用满屏宽，卡片一行（`p21-17`）。667 × 331 横屏：ch2-n10 工作台与托盘、侧栏云朵与两行卡片（`p21-18`）；随机题答对后侧栏圆形回键 + "再来一题"在 168px 侧栏内（下沿 326 / 331，`p21-19`）。
+- [x] Boss 登场（ch2-n4，去掉完成记录的全通存档）：工作台中间五格虚线 + 睡脸；2 放在上一行 → 亮 2 格、"还不到 5"（`p21-20`）；3 贴上 → 轮廓消失、"2 + 3 = 5"、合体成一个蓝色的 5（`p21-21`）。
+- [x] 控制台：0 error；warning 只有 dev 模式 RN-web 的 `useNativeDriver` 回退。一次面板点击菜单键没反应（DOM 命中的是菜单键，JS `click()` 能打开），在同样的"答对 → 再来一题 → 点菜单"顺序下复现不出，记为面板工具的偶发。
+
+## Checkpoint 21（最终）
+
+- [x] 门禁（文档写完后最后一次）：`pnpm lint` 0 问题；`pnpm typecheck` 通过；`pnpm lint:purity` 零命中；`pnpm test:gate` 58 suite / 932 测试全过（基线 816；11.1s），覆盖率全部 97.6 / 93.83（语句 / 分支，基线 97.58 / 93.82），content 98.12 / 95.23（基线 98.04 / 95.4，分支降 0.17，仍过门禁 95）、core 100 / 99.09、progress 99.04 / 97.67（基线 99.03 / 97.61）、blocks-ui 98.09 / 92.15、screens 96.08 / 91.39；jest 输出里没有 console error / warning；`pnpm build:web` 9 个静态路由（多了 `/challenge`），dist 2.9 MB。
+- [x] 没有删测试；改了期望的旧测试逐条见上。
+- [x] 规格与文档：决策 D-089 – D-096；`SPEC-content.md`（`onMat`、新模板、`cover` 参考解、目录到内容版本 7、工作台尺寸、`BOSS_ENTRANCE`、随机题出题器）、`SPEC-progress.md`（v6 → v7、`UPGRADE_CURRENT`）、`SPEC-screens.md`（送走站、三个伙伴的求助、Boss 登场、随机题页面、测试清单）、`SPEC-blocks-ui.md`（示范手反向、Boss 轮廓）；README「当前实现」；`docs/level-progression.md` §5 改为现状。
+
+### 需要 Ted 决定（都留了一处可改的常量或一行）
+
+1. 合体岛 12 站的顺序与四个新站的数字（`catalog/chapter-2.ts`，brief 的表）；n12 的干扰 [2, 4]、n9 / n11 的 extra 1 是我补的。
+2. n9 的十只认横放（`TEN_LYING`）：改成默认可转向是一行，代价是工作台 6 × 6、小屏块 34–38px。另：单块可以顶替伙伴，5 + 4（诱饵）+ 1 块单块也搭得成两排的十（同 8 砖的 4 + 3 + 1）；要排除就把 n9 的诱饵改成 3。
+3. 送走站多出的伙伴只放在两端（`validate` 要求相邻）；全部材料里不许有别的一对凑出和（比 brief 的"一种送法"更严）。
+4. 送走站开题也走求助阶梯（第 2 下"把 2 送回去"）；"还差谁"站开题不走（只说题目）。两者不一致是有意的：送走站不送任何一个，工作台上就一直是开题。
+5. `UPGRADE_CURRENT = 'first-open'`（迁移后停在已完成的站 → 第一个"前一站已完成、自己没完成"的站，可能往回走，如停在 n4 的存档移到 n9）；`'next'` 是 Phase 19 的规则。
+6. 楼梯合体后整体跳一次（D-087），不是 brief 设想的"一个比一个跳得高"。要后者需要给合体角色单独的动作，或楼梯不合体。
+7. `BOSS_ENTRANCE` 只给合体岛两个 Boss；轮廓在带着半成品刷新时也显示（不只是进站那一刻）；答对即消失，没有"醒来"一拍。
+8. 随机题 `CHALLENGE_RULES`：上限不小于 3；过 6 的数字题用 `handlesFor`（7–10 是一个 7–10 的伙伴 + 诱饵，一次拖拽就过）；图形题沿用原站的 handles / decoys；加法和 ≤ 10；先选题型再选题（三种题型等概率，数字题的数并不均匀地常出大数）。
+9. 按钮文案"随机题 / Random"、"再来一题 / One more"、"回自由玩 / Back to free play"；英文与横屏时"回自由玩"是圆形图标键（没有字）。随机题答对卡片说"拼了什么"（"2，就是 2 块"），没有新文案。
+
+### 已知遗留（按 brief 不顺手修）
+
+- v6 → v7 没有收起作品，`progress-store` 读完不写回，存档在第一次改动前仍是 v6（每次打开都迁移一遍，结果相同）。K-1（D-057）只对 `upgraded` / `repaired` 写回。
+- 9 列工作台和 8 列一样贴着屏幕边（Q13），送走站求助的光圈在右边被裁掉一点（`p21-05`）。
+- 13（以及 12、17）合体后与 10 同色（`hueFor` 封顶 n10）。
+- 中文"已经有 10 了，再找一个伙伴，拼成 13"在 375 宽折两行（在卡内）。
+- dev 模式下关卡在面板里要 3–5 秒才画出舞台（截图里有几张空白，是渲染时机，不是功能）。
+- 随机题没有"重新挑战"菜单项；`PlayHost.onReplay` 对随机题恒为 true（界面上没有入口）。
+
+### 只能真机确认
+
+- 孩子能否看懂"送走多的"：开局三个伙伴都在工作台上，会不会先去托盘拿东西；示范手反向（从工作台飞回托盘）是否看得出是"拿走"。
+- 9 列工作台 40px 的块（360 宽）手指抓取；贴边的伙伴与 iOS Safari 左缘返回手势。
+- 楼梯站孩子会不会拿 4 + 2 去试，"数量够了，再找对伙伴"能否引导到换伙伴。
+- Boss 轮廓的呼吸与睡脸是否被当成"可以点"的东西；亮格是否被注意到。
+- 随机题的骰子按钮孩子是否会反复点；"再来一题"的节奏是否让孩子停不下来（不计进度、没有奖励，是有意的）。
+- 英文圆形"回自由玩"键家长能否认出是"回去"。

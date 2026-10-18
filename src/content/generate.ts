@@ -5,7 +5,7 @@ import { copyKey } from './copy';
 import { assertDistractors, partnerSizesFor } from './distractors';
 import { pickPair, pickTarget, pickTemplate } from './envelope';
 import type { CopyKey } from './ids';
-import { givenMaterial, handleMaterial, looseMaterial, partnerMaterial, partnerOrder } from './material';
+import { givenMaterial, handleMaterial, looseMaterial, onMatMaterial, partnerMaterial, partnerOrder } from './material';
 import { seeded } from './rng';
 import type { NodeSpec, Puzzle, PuzzleRef, QuestionSpec } from './schema';
 import { buildSolution } from './solution';
@@ -14,6 +14,9 @@ import { validate } from './validate';
 function promptFor(question: Question, spec: QuestionSpec): CopyKey {
   if (spec.kind === 'sum_composition' && spec.given !== undefined) {
     return copyKey('prompt.missing_part');
+  }
+  if (spec.kind === 'sum_composition' && spec.onMat !== undefined) {
+    return copyKey('prompt.send_away');
   }
   return copyKey(`prompt.${question.kind}`);
 }
@@ -29,6 +32,7 @@ export function materializeNode(node: NodeSpec, bounds: Bounds, ref: PuzzleRef, 
   let partnerIds: ReadonlyArray<GroupId> = [];
   let steps: ReadonlyArray<Question> | undefined;
   let given: GroupId | undefined;
+  let onMat: ReadonlyArray<GroupId> | undefined;
 
   switch (spec.kind) {
     case 'quantity': {
@@ -89,6 +93,16 @@ export function materializeNode(node: NodeSpec, bounds: Bounds, ref: PuzzleRef, 
         given = material.given;
         break;
       }
+      if (spec.onMat !== undefined) {
+        // The partners on the mat start there, the distractors in the tray,
+        // shuffled as usual (validate checks the row and the one pair left).
+        assertDistractors(question, spec.distractors);
+        const material = onMatMaterial(spec.onMat, partnerOrder(ref, spec.distractors), bounds, prefix);
+        initial = material.state;
+        partnerIds = material.partnerIds;
+        onMat = material.onMat;
+        break;
+      }
       const material = partnerMaterial(partnerOrder(ref, partnerSizesFor(question, spec.distractors)), bounds, prefix);
       initial = material.state;
       partnerIds = material.partnerIds;
@@ -103,6 +117,7 @@ export function materializeNode(node: NodeSpec, bounds: Bounds, ref: PuzzleRef, 
     ...(steps === undefined ? {} : { steps }),
     ...(ways === undefined ? {} : { ways }),
     ...(given === undefined ? {} : { given }),
+    ...(onMat === undefined ? {} : { onMat }),
     initial,
     display: {
       target: question.kind === 'quantity' || question.kind === 'quantity_shape' ? question.target : question.kind === 'sum_composition' ? question.sum : null,

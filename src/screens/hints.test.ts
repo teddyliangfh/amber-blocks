@@ -554,7 +554,7 @@ describe('asked-for help points at the blocks (review: hints must point at objec
     const onBench = (s: LevelSession) => [...s.history.state.groups.values()].filter((g) => g.unitIds.every((u) => s.history.state.bench.has(u)));
     const inTray = (s: LevelSession) => [...s.history.state.groups.values()].filter((g) => g.unitIds.every((u) => !s.history.state.bench.has(u)));
     const stuck: string[] = [];
-    for (const id of ['ch2-n4', 'ch2-n5', 'ch2-n6', 'ch2-n7', 'ch2-n8']) {
+    for (const id of ['ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n7', 'ch2-n12', 'ch2-n8']) {
       const p = puzzleOf(id);
       const { cols, rows } = p.initial.bounds;
       for (let seed = 1; seed <= 80; seed += 1) {
@@ -953,5 +953,91 @@ describe('Phase 20: the help ladder, what is said, and what the child found', ()
       { type: 'takeGroup', groupId: partner(p, 1).id, origin: { x: 0, y: 2 } },
     ]);
     expect(feedbackFor(apart).tone).toBe('adjust');
+  });
+});
+
+describe('Phase 21: send the extra away (ch2-n10)', () => {
+  const p = puzzleOf('ch2-n10');
+  const [three, four, two] = p.onMat!;
+  const card = (s: LevelSession, lang: 'zh' | 'en' = 'zh') => {
+    const f = feedbackFor(s);
+    return { tone: f.tone, title: format(f.title.key, lang, f.title.params), detail: format(f.detail.key, lang, f.detail.params) };
+  };
+  const asked = (s: LevelSession, n: number) => {
+    const h = helpAt(s, n);
+    return { line: format(h.line.key, 'zh', h.line.params), focus: h.focus.objects, countUp: h.countUp };
+  };
+
+  test('the opening gives the task, not "2 too many"; asked, help climbs to the one to send back', () => {
+    const s = play(p, []);
+    expect(card(s)).toEqual({ tone: 'start', title: '动手试试看', detail: '工作台上多了，送走多的，拼成 7' });
+    expect(card(s, 'en').detail).toBe('Too many! Send one back to make 7');
+    expect(promptParams(p)).toEqual({ n: 7 });
+    expect(asksForHelp(s)).toBe(true);
+    // First ask: the task again, the nine blocks numbered (too many, seen).
+    expect(asked(s, 1)).toEqual({ line: '工作台上多了，送走多的，拼成 7', focus: [], countUp: true });
+    // Second and third: the 2, named and lit.
+    expect(asked(s, 2)).toEqual({ line: '把 2 送回去', focus: [two], countUp: false });
+    expect(asked(s, 3)).toEqual({ line: '把 2 送回去', focus: [two], countUp: false });
+    expect(format(cardFor(s, 2, true, helpAt(s, 2).line).detail.key, 'zh', { a: 2 })).toBe('把 2 送回去');
+    // Moving the 2 about on the mat is still the opening.
+    expect(card(play(p, [{ type: 'moveGroup', groupId: two!, delta: { x: 0, y: -1 } }])).tone).toBe('start');
+  });
+
+  test('the wrong one sent back is a mistake, judged as usual; help names the 2, then the swap', () => {
+    const s = play(p, [{ type: 'returnGroup', groupId: four! }]);
+    expect(card(s)).toMatchObject({ tone: 'adjust', title: '换个伙伴试试看' });
+    expect(asked(s, 2)).toEqual({ line: '把 2 送回去', focus: [two], countUp: false });
+    expect(asked(s, 3)).toEqual({ line: '把 2 送回去，换 4 过来', focus: [two, four], countUp: false });
+    // Everything back: the row is gone, so the task is two partners again.
+    const empty = play(p, [{ type: 'returnGroup', groupId: four! }, { type: 'returnGroup', groupId: three! }, { type: 'returnGroup', groupId: two! }]);
+    expect(card(empty)).toEqual({ tone: 'start', title: '动手试试看', detail: '找两个伙伴，拼出 7' });
+    // Only the 3 back: the other half is named, as on a "who's missing?" stop.
+    const three3 = play(p, [{ type: 'returnGroup', groupId: four! }, { type: 'returnGroup', groupId: two! }]);
+    expect(card(three3).title).toBe('还不到 7');
+    expect(asked(three3, 2)).toEqual({ line: '把 4 搬过来', focus: [four], countUp: false });
+  });
+
+  test('the 2 sent back is right: 3 plus 4 makes 7', () => {
+    const s = play(p, p.solution);
+    expect(card(s)).toEqual({ tone: 'success', title: '拼对啦！', detail: '3 加 4，一共 7' });
+  });
+});
+
+describe('Phase 21: three partners on the stairs (ch2-n11)', () => {
+  const p = puzzleOf('ch2-n11');
+  const take = (n: number, x: number, y: number): Command => ({ type: 'takeGroup', groupId: partner(p, n).id, origin: { x, y } });
+  const asked = (s: LevelSession, n: number) => {
+    const h = helpAt(s, n);
+    return { line: format(h.line.key, 'zh', h.line.params), focus: h.focus.objects };
+  };
+
+  test('1 + 2 + 3 the wrong way round is still "now the shape"; 2 + 4 is the right count but no stairs: swap a partner, and help names the 4', () => {
+    const wrongShape = play(p, [take(3, 0, 0), take(2, 3, 0), take(1, 5, 0)]);
+    expect(format(feedbackFor(wrongShape).title.key, 'zh')).toBe('数量对了，再看看形状');
+    expect(say(wrongShape)).toBe('照着小图摆一摆');
+    expect(guidanceFor(wrongShape, 1).focus.template).toBe(true);
+    const bars = play(p, [take(4, 0, 0), take(2, 0, 1)]);
+    expect(bars.verdict.reason).toBe('shape-mismatch');
+    expect(feedbackFor(bars).tone).toBe('adjust');
+    expect(format(feedbackFor(bars).title.key, 'zh')).toBe('数量够了，再找对伙伴');
+    expect(say(bars)).toBe('换个伙伴试试看');
+    expect(guidanceFor(bars, 1).focus.template).toBe(false);
+    expect(asked(bars, 2)).toEqual({ line: '把 4 送回去', focus: [partner(p, 4).id] });
+    expect(asked(bars, 3).line).toMatch(/^把 4 送回去，换 [13] 过来$/);
+  });
+
+  test('too many with the 4: help never leads to 4 + 2, which cannot make stairs', () => {
+    const s = play(p, [take(4, 0, 0), take(3, 0, 1)]);
+    expect(format(feedbackFor(s).title.key, 'zh', feedbackFor(s).title.params)).toBe('多了 1 块');
+    // Sending the 3 back and bringing the 2 would make 6 blocks, and no stairs.
+    expect(asked(s, 2)).toEqual({ line: '把 4 送回去', focus: [partner(p, 4).id] });
+    expect(asked(s, 3).line).toMatch(/^把 4 送回去，换 [12] 过来$/);
+  });
+
+  test('built from 1, 2 and 3: the success line names all three, top to bottom', () => {
+    const s = play(p, p.solution);
+    expect(s.verdict.matched).toBe(true);
+    expect(say(s)).toBe('1、2 和 3，一共 6 块');
   });
 });

@@ -1,14 +1,15 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { LayoutChangeEvent } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Confetti, FONT, LEVEL_CHROME, MERGE_ON, Spotlight, Stage, THEME, cheerFor, colorsFor, computeGeometry, trayObjects, useBreathe, usePop } from '../blocks-ui';
-import { COUNT_TO_PASS, copyKey, format, hueFor, materialize, nodeId as makeNodeId } from '../content';
-import type { NodeId, Puzzle } from '../content';
-import type { Command, UnitId } from '../core';
+import { BOSS_ENTRANCE, COUNT_TO_PASS, copyKey, format, hueFor, materialize, nodeId as makeNodeId } from '../content';
+import type { Lang, NodeId, Puzzle } from '../content';
+import type { BenchState, Command, UnitId } from '../core';
 import { chapterOf, nextNodeOf, statusOf } from '../progress';
 import { createCorrectionVoice } from './correction-voice';
 import { asksForHelp, biggestFirst, cardFor, feedbackFor, guidanceFor, helpAt, matchedFeedback, promptParams } from './hints';
@@ -16,7 +17,8 @@ import type { AskedHelp, Line } from './hints';
 import { AnswerFeedback } from './AnswerFeedback';
 import { Cloud, SkyCloud } from './Cloud';
 import { Icon } from './icons';
-import { atStart, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, previewCommand, recount, solvedEquation, startSession, undoCommand } from './level-session';
+import type { IconName } from './icons';
+import { atStart, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, matOf, previewCommand, recount, solvedEquation, startSession, undoCommand } from './level-session';
 import type { LevelSession } from './level-session';
 import { LevelRecovery } from './LevelRecovery';
 import { useProgress } from './progress-store';
@@ -63,44 +65,61 @@ function correctionOf(session: LevelSession): Line | null {
   return f.tone === 'adjust' ? f.detail : null;
 }
 
-export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) {
+// The buttons under a right (or finished) answer are the host's; these are
+// what it gets to build them with.
+export interface PlayActionParts {
+  readonly solved: boolean;
+  readonly compact: boolean;
+  readonly landscape: boolean;
+  // The breathing for the bright button (the way on once right).
+  readonly breathe: ReturnType<typeof useBreathe>;
+  // "Play again" (the same puzzle from the start, its own round), as a pill
+  // and as the round icon used where a row is short of room.
+  readonly again: { readonly pill: ReactNode; readonly round: ReactNode };
+}
+
+// Where a puzzle played on the level page comes from and where it goes
+// (Phase 21): a map stop is saved move by move, completed, kept in the album
+// and leads on to the next stop (LevelScreen); a random puzzle from free play
+// keeps nothing at all (ChallengeScreen). The play is the same (LevelPlay).
+export interface PlayHost {
+  // Saved work to open with, and whether the puzzle was finished before this visit.
+  readonly work: BenchState | null;
+  readonly finished: boolean;
+  // A boss: its star, the fanfare, more paper, the 17's "biggest first".
+  readonly boss: boolean;
+  // A boss's entrance outline (BOSS_ENTRANCE).
+  readonly entrance: boolean;
+  // The very first stop shows the "like this" hand sooner.
+  readonly firstStop: boolean;
+  // COUNT_TO_PASS: the way on waits for a full count, the first time.
+  readonly countToPass: boolean;
+  // The opening mat (which may already be right), then every change to it.
+  readonly onOpen: (session: LevelSession) => void;
+  readonly onMat: (session: LevelSession) => void;
+  // "Play again" / "start over" asks first: false keeps the round as it is.
+  readonly onReplay: () => boolean;
+  // "Start over" in the menu.
+  readonly restartable: boolean;
+  // What the card says under a right answer.
+  readonly next: (session: LevelSession) => Line;
+  // The buttons under a right (or finished) answer; null: none.
+  readonly actions: (parts: PlayActionParts) => ReactNode;
+  // The menu's way out.
+  readonly exit: { readonly title: string; readonly icon: IconName; readonly testID: string; readonly onPress: () => void };
+}
+
+// The puzzle being played: the mat, the card, the cloud, help, counting, the
+// two-beat solve and the menu. It reads and writes no progress itself.
+export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; readonly lang: Lang; readonly host: PlayHost }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const win = useWindowDimensions();
   // Landscape phones: the target and buttons move to a side column so the stage keeps its height.
   const landscape = win.width > win.height;
   const compact = !landscape && win.height < LEVEL_CHROME.compactBelow;
-  const { state, dispatch } = useProgress();
-  const nodeId = makeNodeId(rawNodeId) as NodeId;
-  const lang = state?.language ?? 'zh';
   const text = MENU[lang];
-
-  // Enter the stop once progress is loaded; a locked stop bounces back to the map.
-  const entered = state?.nodes.get(nodeId);
-  useEffect(() => {
-    if (state === null || entered !== undefined) {
-      return;
-    }
-    const r = dispatch({ type: 'enter', nodeId });
-    if (!r.ok) {
-      router.replace('/');
-    }
-  }, [state, entered, dispatch, nodeId, router]);
-
-  // Depends on the ref only: saving work must not re-materialize the stop or reset the session.
-  // A ref this build cannot play shows the recovery view instead of crashing.
-  const ref = entered?.ref;
-  const built = useMemo((): { puzzle: Puzzle | null; failed: boolean } => {
-    if (ref === undefined) {
-      return { puzzle: null, failed: false };
-    }
-    try {
-      return { puzzle: materialize(ref), failed: false };
-    } catch {
-      return { puzzle: null, failed: true };
-    }
-  }, [ref]);
-  const puzzle = built.puzzle;
+  const { onOpen, onMat: saveWork, onReplay, boss, firstStop } = host;
   const [session, setSession] = useState<LevelSession | null>(null);
   const sessionRef = useRef<LevelSession | null>(null);
   // Whether the stop was finished before this visit (COUNT_TO_PASS leaves those alone).
@@ -156,20 +175,17 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
   useEffect(() => () => corrections.dispose(), [corrections]);
 
   useEffect(() => {
-    if (puzzle === null || sessionRef.current?.whole === puzzle) {
+    if (sessionRef.current?.whole === puzzle) {
       return;
     }
-    const s = startSession(puzzle, entered?.work ?? null, state?.completedNodeIds.has(nodeId) ?? false);
-    setFinishedBefore(state?.completedNodeIds.has(nodeId) ?? false);
+    const s = startSession(puzzle, host.work, host.finished);
+    setFinishedBefore(host.finished);
     sessionRef.current = s;
     setSession(s);
     clearHelp();
     // Saved work that is already right shows as right, without a second
-    // celebration. It is the stop's album picture too (a no-op when it already is;
-    // an archive from before the album fills it in on the next visit).
-    if (s.verdict.matched) {
-      dispatch({ type: 'complete', nodeId, verdict: s.verdict, work: s.history.state });
-    }
+    // celebration (the host keeps it: a stop's album picture).
+    onOpen(s);
     play('arrive');
     if (AUTO_SPEECH.prompt) {
       say(lang, puzzle.prompt, promptParams(puzzle));
@@ -262,27 +278,15 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
         demos.current += 1;
         setDemo(demos.current);
       },
-      nodeId === FIRST_STOP && demos.current === 0 ? DEMO_FIRST_STOP_MS : DEMO_AFTER_MS,
+      firstStop && demos.current === 0 ? DEMO_FIRST_STOP_MS : DEMO_AFTER_MS,
     );
-    const hide = setTimeout(() => setDemo(0), (nodeId === FIRST_STOP && demos.current === 0 ? DEMO_FIRST_STOP_MS : DEMO_AFTER_MS) + DEMO_SHOWN_MS);
+    const hide = setTimeout(() => setDemo(0), (firstStop && demos.current === 0 ? DEMO_FIRST_STOP_MS : DEMO_AFTER_MS) + DEMO_SHOWN_MS);
     return () => {
       clearTimeout(show);
       clearTimeout(hide);
     };
-  }, [emptyMat, menuOpen, stirred, nodeId]);
+  }, [emptyMat, menuOpen, stirred, firstStop]);
 
-
-  // One dispatch, so one write, per change to the mat. A right mat (the last
-  // step on a stop in steps: the verdict only matches there) is saved,
-  // completed and kept as the stop's album picture together (2026-10-15 review
-  // Q); any other mat is only saved and leaves the picture alone.
-  const saveWork = useCallback(
-    (next: LevelSession) => {
-      const work = next.history.state;
-      dispatch(next.verdict.matched ? { type: 'complete', nodeId, verdict: next.verdict, work } : { type: 'saveWork', nodeId, work });
-    },
-    [dispatch, nodeId],
-  );
 
   // History (completedNodeIds) only unlocks the map. What the screen shows as
   // right or wrong is the current verdict; the celebration is the solve event.
@@ -333,7 +337,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
         pendingSolve.current = solves.current;
         setSettling(true);
         setCelebration(0);
-        play(isBossStop(nodeId) ? 'fanfare' : 'success');
+        play(boss ? 'fanfare' : 'success');
         if (AUTO_SPEECH.success) {
           const fb = matchedFeedback(next);
           say(lang, fb.key, fb.params);
@@ -352,7 +356,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
         }
       }
     },
-    [saveWork, nodeId, lang, corrections, setAskCount, armSettle, dropSettle],
+    [saveWork, boss, lang, corrections, setAskCount, armSettle, dropSettle],
   );
 
   const onCommand = useCallback(
@@ -463,9 +467,8 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
 
   // Re-challenge a finished stop: the completion and the unlocked map stay, the
   // work is cleared and this round's answer and celebration start over.
-  const completed = state?.completedNodeIds.has(nodeId) ?? false;
   const onRechallenge = useCallback(() => {
-    if (puzzle === null || !dispatch({ type: 'replay', nodeId }).ok) {
+    if (!onReplay()) {
       return;
     }
     voice.stop();
@@ -483,13 +486,14 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
     if (AUTO_SPEECH.prompt) {
       say(lang, puzzle.prompt, promptParams(puzzle));
     }
-  }, [dispatch, nodeId, puzzle, lang, corrections, dropSettle, clearHelp]);
+  }, [onReplay, puzzle, lang, corrections, dropSettle, clearHelp]);
 
   // The help button and the feedback card ask for help. Help that has
   // something to correct climbs a rung each time it is asked on the same answer
   // (hints.ts helpAt) and the card shows what it said; otherwise the card's own
   // line again (the task, the next step), pointing at the shape picture on a
   // shape stop. A right answer says what was built, then what the card says.
+  const nextLine = host.next;
   const onAskHelp = useCallback(() => {
     const current = sessionRef.current;
     if (current === null) {
@@ -512,18 +516,21 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
     }
     if (f.tone === 'success') {
       const built = matchedFeedback(current);
-      const card = cardFor(current, 0, nextNodeOf(nodeId) !== null).detail;
+      const card = nextLine(current);
       say(lang, built.key, built.params);
-      say(lang, card.key, card.params, false);
+      // (A card that already says what was built says it once.)
+      if (card.key !== built.key || JSON.stringify(card.params) !== JSON.stringify(built.params)) {
+        say(lang, card.key, card.params, false);
+      }
       return;
     }
     say(lang, f.detail.key, f.detail.params);
     // The 17 boss on an empty mat: which partner to start with.
-    const big = isBossStop(nodeId) ? biggestFirst(current) : null;
+    const big = boss ? biggestFirst(current) : null;
     if (big !== null) {
       say(lang, big.line.key, big.line.params, false);
     }
-  }, [lang, corrections, nodeId, setAskCount]);
+  }, [lang, corrections, boss, nextLine, setAskCount]);
 
   const onDragActive = useCallback(
     (active: boolean) => {
@@ -541,37 +548,9 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
   );
 
   const onPrompt = useCallback(() => {
-    if (puzzle !== null) {
-      corrections.activity();
-      say(lang, puzzle.prompt, promptParams(puzzle));
-    }
+    corrections.activity();
+    say(lang, puzzle.prompt, promptParams(puzzle));
   }, [lang, puzzle, corrections]);
-
-  const onNext = useCallback(() => {
-    const next = nextNodeOf(nodeId);
-    voice.stop();
-    // A finished stop keeps its way out even when the mat is wrong now (D-038),
-    // but a wrong mat is not carried on to the next stop or the island page: the
-    // button says "back to the map" and goes only there (2026-10-16 review D-038
-    // side effect: the wrong work was saved and the hop played as if right).
-    if (sessionRef.current?.verdict.matched !== true) {
-      router.replace('/');
-      return;
-    }
-    // The last stop of a finished island opens the island's own page (2026-10-15 review I).
-    const island = chapterOf(nodeId);
-    if (state !== null && (next === null || chapterOf(next).id !== island.id) && island.nodes.every((n) => state.completedNodeIds.has(n.id))) {
-      router.replace({ pathname: '/island/[chapterId]', params: { chapterId: island.id } });
-      return;
-    }
-    if (next === null || state === null || statusOf(state, next) === 'locked') {
-      router.replace('/');
-      return;
-    }
-    // The way on goes through the map, where the marker hops to the next stop
-    // and it opens by itself (MapScreen ADVANCE).
-    router.replace({ pathname: '/', params: { from: nodeId, to: next } });
-  }, [nodeId, router, state]);
 
   const [stageSize, setStageSize] = useState<{ width: number; height: number } | null>(null);
   const onStageLayout = useCallback((e: LayoutChangeEvent) => {
@@ -581,9 +560,9 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
 
   // The tray's objects come from the stop's starting material, never from the
   // current state, so taking things out cannot reshuffle what is left.
-  const objects = useMemo(() => (puzzle === null ? [] : trayObjects(puzzle.initial)), [puzzle]);
+  const objects = useMemo(() => trayObjects(puzzle.initial), [puzzle]);
   const geometry = useMemo(() => {
-    if (stageSize === null || puzzle === null) {
+    if (stageSize === null) {
       return null;
     }
     return computeGeometry(stageSize.width, stageSize.height, puzzle.initial.bounds, objects.map((o) => o.footprint));
@@ -591,7 +570,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
 
   const order = useMemo(() => (session === null ? new Map<UnitId, number>() : countOrder(session)), [session]);
   const guide = useMemo((): AskedHelp | null => (session === null ? null : asks > 0 ? helpAt(session, asks) : pointed ? { ...guidanceFor(session, 1), countUp: false } : null), [session, asks, pointed]);
-  const biggest = useMemo(() => (session === null || asks === 0 || !isBossStop(nodeId) ? null : biggestFirst(session)), [session, asks, nodeId]);
+  const biggest = useMemo(() => (session === null || asks === 0 || !boss ? null : biggestFirst(session)), [session, asks, boss]);
   const spotlight = useMemo(
     () => [...(guide !== null && guide.focus.objects.length > 0 ? guide.focus.objects : carry), ...(biggest?.focus.objects ?? [])],
     [guide, carry, biggest],
@@ -599,16 +578,13 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
   const shownCounts = useMemo(() => (countUp === null ? order : new Map(countUp.units.slice(0, countUp.shown).map((u, i) => [u, i + 1]))), [countUp, order]);
   const breathe = useBreathe(session?.verdict.matched ?? false);
 
-  if (built.failed) {
-    return <LevelRecovery nodeId={nodeId} />;
-  }
-  if (puzzle === null || session === null) {
+  if (session === null) {
     return <View style={[styles.root, { paddingTop: insets.top }]} />;
   }
 
-  // Only for a stop that was entered: the static export renders this route with a placeholder id.
-  const hasNext = nextNodeOf(nodeId) !== null;
-  const feedback = cardFor(session, asks > 0 ? 2 : 0, hasNext, guide?.line);
+  // A right answer's card says what the host says comes next.
+  const card = cardFor(session, asks > 0 ? 2 : 0, true, guide?.line);
+  const feedback = card.tone === 'success' ? { ...card, detail: host.next(session) } : card;
   // The stop as asked right now (the current step's picture on a stop in steps).
   const q = session.puzzle.question;
   const title = solvedEquation(session) ?? (q.kind === 'addition_exact' ? `${q.operands[0]} + ${q.operands[1]}` : String(q.kind === 'sum_composition' ? q.sum : q.target));
@@ -616,28 +592,15 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
   // The hand shows the first move of the reference answer: on a partner stop a
   // whole partner (never a decoy), on a loose stop one block. Past the first way
   // of a two-ways stop, a partner of the other way; on a "who's missing?" stop
-  // the other half, put down beside the partner already there (Phase 19).
+  // the other half, put down beside the partner already there (Phase 19); on a
+  // "send the extra away" stop the extra, from the mat back to the tray (Phase 21).
   const first = demoMove(session);
-  const demoPiece = first === undefined ? undefined : first.type === 'takeGroup' ? (first.groupId as string) : first.type === 'take' ? (first.unitId as string) : undefined;
+  const demoPiece = first === undefined ? undefined : first.type === 'takeGroup' || first.type === 'returnGroup' ? (first.groupId as string) : first.type === 'take' ? (first.unitId as string) : undefined;
   const demoTo = puzzle.given !== undefined && first?.type === 'takeGroup' ? first.origin : undefined;
   const template = session.puzzle.display.template;
-  const chapter = chapterOf(nodeId);
-  const isBoss = chapter.nodes.find((n) => n.id === nodeId)?.role === 'boss';
+  const isBoss = boss;
   const solved = session.verdict.matched;
   const groundTop = geometry === null || geometry.arrangement !== 'below' ? null : geometry.tray.y - 18;
-
-  const nextStop = nextNodeOf(nodeId);
-  const islandDone = (nextStop === null || chapterOf(nextStop).id !== chapter.id) && chapter.nodes.every((n) => state?.completedNodeIds.has(n.id) ?? false);
-  // Wrong right now: only back to the map (see onNext).
-  const nextTitle = !solved
-    ? text.done
-    : islandDone
-      ? landscape
-        ? format(copyKey('island.done.short'), lang)
-        : format(copyKey('island.done'), lang, { island: format(chapter.title, lang) })
-      : hasNext
-        ? text.next
-        : text.done;
   const small = compact || landscape;
   const targetNumber = q.kind === 'addition_exact' ? q.operands[0] + q.operands[1] : q.kind === 'sum_composition' ? q.sum : q.target;
   const targetColors = colorsFor(hueFor(targetNumber));
@@ -673,30 +636,21 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
         {guide?.focus.template ? <Spotlight rect={{ x: 0, y: 0, ...templateSize }} radius={12} /> : null}
       </View>
     ) : null;
-  // A finished stop always keeps its way on (2026-10-15 review: one more block
-  // after solving took the button away, which felt like a punishment). Right
-  // now: the bright, breathing button beside "play again"; finished before but
-  // changed since: a plain one on its own, while the card says what is on the mat.
-  // Beside the island's own long label ("Number Island done!") "play again" is
-  // the round icon, as in landscape, so the row fits a 360px phone in English
-  // too (2026-10-16 review L-1: the pill pushed "next" off the right edge).
-  const again = landscape || islandDone ? (
-    <RoundButton label={<Icon name="again" size={26} />} accessibilityLabel={text.again} onPress={onRechallenge} size={compact ? 44 : 48} testID="again" />
-  ) : (
-    <PillButton title={text.again} onPress={onRechallenge} compact={compact} testID="again" />
-  );
   // A COUNT_TO_PASS stop solved for the first time: the way on appears once
   // every block is counted (empty by default, see content/catalog).
-  const countFirst = COUNT_TO_PASS.has(nodeId) && !finishedBefore && solved && !counting.complete;
+  const countFirst = host.countToPass && !finishedBefore && solved && !counting.complete;
+  const again = {
+    pill: <PillButton title={text.again} onPress={onRechallenge} compact={compact} testID="again" />,
+    round: <RoundButton label={<Icon name="again" size={26} />} accessibilityLabel={text.again} onPress={onRechallenge} size={compact ? 44 : 48} testID="again" />,
+  };
+  // The host's buttons, after the second beat (Phase 20 Q2).
+  const parts = countFirst || settling ? null : host.actions({ solved, compact, landscape, breathe, again });
   const actions =
-    (solved || completed) && !countFirst && !settling ? (
+    parts === null ? null : (
       <Animated.View entering={FadeInDown.duration(220)} style={landscape ? styles.actionsColumn : styles.actionsRow} pointerEvents="box-none">
-        {solved ? again : null}
-        <Animated.View style={solved ? breathe : null}>
-          <PillButton title={nextTitle} icon={!solved ? 'map' : islandDone ? 'star' : hasNext ? 'play' : 'map'} tone={solved ? 'accent' : 'plain'} onPress={onNext} compact={compact} testID="next" />
-        </Animated.View>
+        {parts}
       </Animated.View>
-    ) : null;
+    );
   // Counting: the running number while counting, then a clear way to count again.
   const countChip =
     counting.counted === 0 ? null : counting.complete ? (
@@ -740,6 +694,10 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
           demo={demo}
           demoPiece={demoPiece}
           demoTo={demoTo}
+          demoBack={first?.type === 'returnGroup'}
+          // A boss's entrance (Phase 21): the answer's outline until it is solved,
+          // a cell lit for each block on the part of the mat being judged.
+          outline={host.entrance && !solved ? { n: targetNumber, lit: matOf(session).bench.size } : undefined}
           wink={counting.complete ? counts : 0}
         />
       ) : null}
@@ -814,8 +772,8 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
                 <PillButton key="close" title={text.close} icon="play" tone="accent" onPress={() => setMenuOpen(false)} testID="menu-close" />,
                 <PillButton key="help" title={text.help} icon="bulb" onPress={() => { setMenuOpen(false); onAskHelp(); }} testID="menu-help" />,
                 <PillButton key="undo" title={text.undo} icon="undo" onPress={() => { setMenuOpen(false); onUndo(); }} testID="menu-undo" />,
-                completed ? <PillButton key="restart" title={text.restart} icon="again" onPress={() => { setMenuOpen(false); onRechallenge(); }} testID="menu-restart" /> : null,
-                <PillButton key="map" title={text.map} icon="map" onPress={() => { setMenuOpen(false); voice.stop(); router.dismissTo('/'); }} testID="menu-map" />,
+                host.restartable ? <PillButton key="restart" title={text.restart} icon="again" onPress={() => { setMenuOpen(false); onRechallenge(); }} testID="menu-restart" /> : null,
+                <PillButton key="exit" title={host.exit.title} icon={host.exit.icon} onPress={() => { setMenuOpen(false); host.exit.onPress(); }} testID={host.exit.testID} />,
               ]
                 .filter((item) => item !== null)
                 .map((item) => (
@@ -843,6 +801,160 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
       ) : null}
     </View>
   );
+}
+
+// A stop on the map: entered once progress is there (a locked stop bounces
+// back to the map), saved move by move, completed and kept in the album when
+// right; the way on is the next stop, through the map, or the island's page.
+export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { state, dispatch } = useProgress();
+  const nodeId = makeNodeId(rawNodeId) as NodeId;
+  const lang = state?.language ?? 'zh';
+  const text = MENU[lang];
+
+  // Enter the stop once progress is loaded; a locked stop bounces back to the map.
+  const entered = state?.nodes.get(nodeId);
+  useEffect(() => {
+    if (state === null || entered !== undefined) {
+      return;
+    }
+    const r = dispatch({ type: 'enter', nodeId });
+    if (!r.ok) {
+      router.replace('/');
+    }
+  }, [state, entered, dispatch, nodeId, router]);
+
+  // Depends on the ref only: saving work must not re-materialize the stop or reset the session.
+  // A ref this build cannot play shows the recovery view instead of crashing.
+  const ref = entered?.ref;
+  const built = useMemo((): { puzzle: Puzzle | null; failed: boolean } => {
+    if (ref === undefined) {
+      return { puzzle: null, failed: false };
+    }
+    try {
+      return { puzzle: materialize(ref), failed: false };
+    } catch {
+      return { puzzle: null, failed: true };
+    }
+  }, [ref]);
+
+  // A right opening is the stop's album picture too (a no-op when it already
+  // is; an archive from before the album fills it in on the next visit).
+  const onOpen = useCallback(
+    (s: LevelSession) => {
+      if (s.verdict.matched) {
+        dispatch({ type: 'complete', nodeId, verdict: s.verdict, work: s.history.state });
+      }
+    },
+    [dispatch, nodeId],
+  );
+  // One dispatch, so one write, per change to the mat. A right mat (the last
+  // step on a stop in steps: the verdict only matches there) is saved,
+  // completed and kept as the stop's album picture together (2026-10-15 review
+  // Q); any other mat is only saved and leaves the picture alone.
+  const onMat = useCallback(
+    (next: LevelSession) => {
+      const work = next.history.state;
+      dispatch(next.verdict.matched ? { type: 'complete', nodeId, verdict: next.verdict, work } : { type: 'saveWork', nodeId, work });
+    },
+    [dispatch, nodeId],
+  );
+  const onReplay = useCallback(() => dispatch({ type: 'replay', nodeId }).ok, [dispatch, nodeId]);
+  const onMap = useCallback(() => {
+    voice.stop();
+    router.dismissTo('/');
+  }, [router]);
+
+  const onNext = useCallback(
+    (solved: boolean) => {
+      const next = nextNodeOf(nodeId);
+      voice.stop();
+      // A finished stop keeps its way out even when the mat is wrong now (D-038),
+      // but a wrong mat is not carried on to the next stop or the island page: the
+      // button says "back to the map" and goes only there (2026-10-16 review D-038
+      // side effect: the wrong work was saved and the hop played as if right).
+      if (!solved) {
+        router.replace('/');
+        return;
+      }
+      // The last stop of a finished island opens the island's own page (2026-10-15 review I).
+      const island = chapterOf(nodeId);
+      if (state !== null && (next === null || chapterOf(next).id !== island.id) && island.nodes.every((n) => state.completedNodeIds.has(n.id))) {
+        router.replace({ pathname: '/island/[chapterId]', params: { chapterId: island.id } });
+        return;
+      }
+      if (next === null || state === null || statusOf(state, next) === 'locked') {
+        router.replace('/');
+        return;
+      }
+      // The way on goes through the map, where the marker hops to the next stop
+      // and it opens by itself (MapScreen ADVANCE).
+      router.replace({ pathname: '/', params: { from: nodeId, to: next } });
+    },
+    [nodeId, router, state],
+  );
+
+  if (built.failed) {
+    return <LevelRecovery nodeId={nodeId} />;
+  }
+  const puzzle = built.puzzle;
+  if (puzzle === null) {
+    return <View style={[styles.root, { paddingTop: insets.top }]} />;
+  }
+
+  // Only for a stop that was entered: the static export renders this route with a placeholder id.
+  const completed = state?.completedNodeIds.has(nodeId) ?? false;
+  const chapter = chapterOf(nodeId);
+  const hasNext = nextNodeOf(nodeId) !== null;
+  const nextStop = nextNodeOf(nodeId);
+  const islandDone = (nextStop === null || chapterOf(nextStop).id !== chapter.id) && chapter.nodes.every((n) => state?.completedNodeIds.has(n.id) ?? false);
+  const host: PlayHost = {
+    work: entered?.work ?? null,
+    finished: completed,
+    boss: isBossStop(nodeId),
+    entrance: BOSS_ENTRANCE.has(nodeId),
+    firstStop: nodeId === FIRST_STOP,
+    countToPass: COUNT_TO_PASS.has(nodeId),
+    onOpen,
+    onMat,
+    onReplay,
+    restartable: completed,
+    next: () => ({ key: copyKey(hasNext ? 'feedback.next' : 'feedback.done'), params: {} }),
+    // A finished stop always keeps its way on (2026-10-15 review: one more block
+    // after solving took the button away, which felt like a punishment). Right
+    // now: the bright, breathing button beside "play again"; finished before but
+    // changed since: a plain one on its own, while the card says what is on the mat.
+    actions: ({ solved, compact, landscape, breathe, again }) => {
+      if (!solved && !completed) {
+        return null;
+      }
+      // Wrong right now: only back to the map (see onNext).
+      const nextTitle = !solved
+        ? text.done
+        : islandDone
+          ? landscape
+            ? format(copyKey('island.done.short'), lang)
+            : format(copyKey('island.done'), lang, { island: format(chapter.title, lang) })
+          : hasNext
+            ? text.next
+            : text.done;
+      // Beside the island's own long label ("Number Island done!") "play again" is
+      // the round icon, as in landscape, so the row fits a 360px phone in English
+      // too (2026-10-16 review L-1: the pill pushed "next" off the right edge).
+      return (
+        <>
+          {solved ? (landscape || islandDone ? again.round : again.pill) : null}
+          <Animated.View style={solved ? breathe : null}>
+            <PillButton title={nextTitle} icon={!solved ? 'map' : islandDone ? 'star' : hasNext ? 'play' : 'map'} tone={solved ? 'accent' : 'plain'} onPress={() => onNext(solved)} compact={compact} testID="next" />
+          </Animated.View>
+        </>
+      );
+    },
+    exit: { title: text.map, icon: 'map', testID: 'menu-map', onPress: onMap },
+  };
+  return <LevelPlay puzzle={puzzle} lang={lang} host={host} />;
 }
 
 const styles = StyleSheet.create({

@@ -179,7 +179,7 @@ function badge(): string {
 // Every stop up to (not including) `upTo` is finished; the stop itself not yet entered.
 function unlockedTo(upTo: string, seed = 5): ProgressState {
   let s = createInitialState(seed);
-  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n4', 'ch2-n5', 'ch2-n6', 'ch2-n7', 'ch2-n8'];
+  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8'];
   for (const id of order.slice(0, order.indexOf(upTo))) {
     const e = reduce(s, { type: 'enter', nodeId: nodeId(id) });
     const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
@@ -1210,5 +1210,122 @@ describe('album (2026-10-15 review Q)', () => {
     root = createRoot(container);
     await open(storage, 'ch1-n2');
     expect(writes).toHaveLength(1);
+  });
+});
+
+describe('Phase 21: the new Join Island stops', () => {
+  const title = () => container.querySelector('[data-testid="feedback-title"]')?.textContent ?? '';
+  const detailText = () => container.querySelector('[data-testid="feedback-detail"]')?.textContent ?? '';
+  const nextText = () => container.querySelector('[data-testid="next"]')?.textContent ?? '';
+
+  test('ch2-n10 opens with 3 + 4 + 2 on the mat: the task, not "2 too many"; the hand takes the 2 back; asked twice, help names it; sending it back is 3 + 4 = 7, joined', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch2-n10')) });
+    await open(storage, 'ch2-n10');
+    const p = puzzleFor('ch2-n10');
+    const two = p.onMat![2]!;
+    expect(badge()).toBe('7');
+    expect(title()).toBe('动手试试看');
+    expect(detailText()).toBe('工作台上多了，送走多的，拼成 7');
+    expect(mockStage.current!.state.bench.size).toBe(9);
+    expect(mockStage.current!.mood).toBe('calm');
+    expect(has('next')).toBe(false);
+    expect(mockStage.current!.demoPiece).toBe(two);
+    expect(mockStage.current!.demoBack).toBe(true);
+    mockSaid.length = 0;
+    await press('answer-feedback');
+    await press('answer-feedback');
+    expect(mockSaid).toEqual(['工作台上多了，送走多的，拼成 7', '把 2 送回去']);
+    expect(mockStage.current!.spotlight).toEqual([two]);
+    expect(detailText()).toBe('把 2 送回去');
+    mockSaid.length = 0;
+    expect(await command({ type: 'returnGroup', groupId: two })).toBe(true);
+    expect(badge()).toBe('3 + 4 = 7');
+    expect(title()).toBe('拼对啦！');
+    expect(mockSaid).toEqual(['3 加 4，一共 7']);
+    expect(mockStage.current!.merge).toBe(false);
+    await beat();
+    // The 3 and the 4 join into one 7 (Phase 20) on the second beat.
+    expect(mockStage.current!.merge).toBe(true);
+    expect(mockStage.current!.cheer).toBe('spin');
+    expect(nextText()).toBe('下一站');
+    await flushSaves();
+  });
+
+  test('ch2-n9: two 5s stacked into a ten stand up as one 10; ch2-n11: stairs from 1, 2 and 3, the success line names all three', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch2-n12')) });
+    await open(storage, 'ch2-n9');
+    expect(badge()).toBe('10');
+    expect(has('template-preview')).toBe(true);
+    for (const cmd of puzzleFor('ch2-n9').solution) {
+      await command(cmd);
+    }
+    expect(title()).toBe('拼对啦！');
+    await beat();
+    expect(mockStage.current!.cheer).toBe('stand');
+    expect(mockStage.current!.merge).toBe(true);
+    await flushSaves();
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    mockSaid.length = 0;
+    await open(storage, 'ch2-n11');
+    expect(badge()).toBe('6');
+    for (const cmd of puzzleFor('ch2-n11').solution) {
+      await command(cmd);
+    }
+    expect(title()).toBe('拼对啦！');
+    expect(mockSaid[mockSaid.length - 1]).toBe('1、2 和 3，一共 6 块');
+    await beat();
+    // 6 climbs (stack); joined, the stairs are one 6 and climb as one.
+    expect(mockStage.current!.cheer).toBe('stack');
+    expect(mockStage.current!.merge).toBe(true);
+    await flushSaves();
+  });
+
+  test('boss entrance: the two Join Island bosses show the answer\'s outline, a cell lit per block; it goes on the solve; 7 two ways lights again for the second way; other stops have none', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch2-n8')) });
+    await open(storage, 'ch2-n4');
+    expect(mockStage.current!.outline).toEqual({ n: 5, lit: 0 });
+    await command({ type: 'takeGroup', groupId: partnerOf('ch2-n4', 2), origin: { x: 0, y: 1 } });
+    expect(mockStage.current!.outline).toEqual({ n: 5, lit: 2 });
+    await command({ type: 'takeGroup', groupId: partnerOf('ch2-n4', 3), origin: { x: 2, y: 1 } });
+    expect(title()).toBe('拼对啦！');
+    expect(mockStage.current!.outline).toBeUndefined();
+    await flushSaves();
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    await open(storage, 'ch2-n8');
+    expect(mockStage.current!.outline).toEqual({ n: 7, lit: 0 });
+    await command({ type: 'takeGroup', groupId: partnerOf('ch2-n8', 3), origin: { x: 0, y: 0 } });
+    await command({ type: 'takeGroup', groupId: partnerOf('ch2-n8', 4), origin: { x: 3, y: 0 } });
+    // The first way stands aside, judged no more: the outline is dark again for the next.
+    expect(mockStage.current!.outline).toEqual({ n: 7, lit: 0 });
+    await command({ type: 'takeGroup', groupId: partnerOf('ch2-n8', 5), origin: { x: 0, y: 2 } });
+    expect(mockStage.current!.outline).toEqual({ n: 7, lit: 5 });
+    await flushSaves();
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    await open(storage, 'ch2-n5');
+    expect(mockStage.current!.outline).toBeUndefined();
+    await flushSaves();
+  });
+
+  test('ch2-n12: a 10 is already on the mat; the 3 beside it makes 13', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch2-n12')) });
+    await open(storage, 'ch2-n12');
+    const p = puzzleFor('ch2-n12');
+    expect(badge()).toBe('13');
+    expect(title()).toBe('动手试试看');
+    expect(detailText()).toBe('已经有 10 了，再找一个伙伴，拼成 13');
+    expect(mockStage.current!.demoPiece).toBe(partnerOf('ch2-n12', 3));
+    expect(mockStage.current!.demoTo).toEqual({ x: 5, y: 0 });
+    await command(p.solution[0]!);
+    expect(badge()).toBe('10 + 3 = 13');
+    expect(title()).toBe('拼对啦！');
+    await beat();
+    expect(nextText()).toBe('下一站');
+    await flushSaves();
   });
 });

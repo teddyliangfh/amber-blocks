@@ -5,12 +5,14 @@ import Animated, { Easing, Extrapolation, interpolate, useAnimatedStyle, useRedu
 import type { BlockColors } from './palette';
 
 // "Like this": a see-through piece (a block, or a whole partner) and a pointing
-// hand glide from the tray to the middle of the mat, twice, then go. Shown only while the mat is empty and
-// nobody has touched anything for a while; any touch removes it. It never
-// takes a touch itself. With reduced motion the ghost just blinks at the tray.
+// hand glide from the tray to the middle of the mat, twice, then go (or from
+// the mat back to its place in the tray: Phase 21, send the extra away). Shown
+// only while the mat is as the stop opens and nobody has touched anything for
+// a while; any touch removes it. It never takes a touch itself. With reduced
+// motion the ghost just blinks where the piece starts.
 const CYCLE = 1800;
 
-export function DemoHand({ from, to, cell, colors, cells = [{ x: 0, y: 0 }], fromScale = 1 }: {
+export function DemoHand({ from, to, cell, colors, cells = [{ x: 0, y: 0 }], fromScale = 1, toScale = 1 }: {
   // Top-left corners, in stage px, of where the ghost starts and lands.
   readonly from: { readonly x: number; readonly y: number };
   readonly to: { readonly x: number; readonly y: number };
@@ -20,8 +22,10 @@ export function DemoHand({ from, to, cell, colors, cells = [{ x: 0, y: 0 }], fro
   // (2026-10-15 review: the first partner stop showed a single block, so
   // nothing said a partner moves as one).
   readonly cells?: ReadonlyArray<{ readonly x: number; readonly y: number }>;
-  // Its size in the tray, growing to full size on the way to the mat.
+  // Its size where it starts and where it lands: in the tray it is smaller,
+  // on the mat full size (1).
   readonly fromScale?: number;
+  readonly toScale?: number;
 }) {
   const reduced = useReducedMotion();
   const t = useSharedValue(0);
@@ -41,7 +45,7 @@ export function DemoHand({ from, to, cell, colors, cells = [{ x: 0, y: 0 }], fro
     const lift = Math.sin(ease * Math.PI) * cell * 0.5;
     return {
       opacity: fade,
-      transform: [{ translateX: from.x + (to.x - from.x) * ease }, { translateY: from.y + (to.y - from.y) * ease - lift }, { scale: press * (fromScale + (1 - fromScale) * ease) }],
+      transform: [{ translateX: from.x + (to.x - from.x) * ease }, { translateY: from.y + (to.y - from.y) * ease - lift }, { scale: press * (fromScale + (toScale - fromScale) * ease) }],
     };
   });
   const inset = Math.max(2, Math.round(cell * 0.06));

@@ -128,15 +128,29 @@ export function migrate(
   return { state: { ...stored, contentVersion, completedNodeIds, nodes, current: onwardFrom(stored.current, completedNodeIds, chapters) }, setAside };
 }
 
-// After an upgrade, a map resting on a finished stop whose next stop is not
-// finished moves on to that next stop, as "next" would have. This is how a
-// finished Join Island reaches ch2-n8, the boss version 6 added after its old
-// last stop (Phase 19). Anywhere else, `current` stays as it was.
-function onwardFrom(current: NodeId | null, completed: ReadonlySet<NodeId>, chapters: ReadonlyArray<Chapter>): NodeId | null {
+// Where the map rests after an upgrade, when it rested on a finished stop.
+// 'first-open' (Phase 21, the default; Ted's call): the first stop in map
+// order that finishing has opened (the stop before it is finished) and that is
+// not finished itself. Version 7 put new stops between the old ones, so a
+// finished Join Island rests on ch2-n9, the first of them, and a map resting
+// on a finished stop past a new one goes back to it. 'next' (Phase 19, D-070):
+// only the very next stop, when it is not finished; a finished Join Island
+// would stay on ch2-n8 and show none of the new stops. One line to change.
+export const UPGRADE_CURRENT: 'first-open' | 'next' = 'first-open';
+
+// After an upgrade, a map resting on a finished stop moves on (UPGRADE_CURRENT);
+// with nothing to move to, or resting anywhere else, `current` stays as it was.
+// (ch1-n1, open without finishing anything, is never where it moves to: a
+// parent who started play further on keeps that.)
+export function onwardFrom(current: NodeId | null, completed: ReadonlySet<NodeId>, chapters: ReadonlyArray<Chapter>, rule: typeof UPGRADE_CURRENT = UPGRADE_CURRENT): NodeId | null {
   if (current === null || !completed.has(current)) {
     return current;
   }
   const order = mapOrder(chapters);
+  if (rule === 'first-open') {
+    const open = order.find((e, i) => i > 0 && !completed.has(e.nodeId) && completed.has(order[i - 1]!.nodeId));
+    return open?.nodeId ?? current;
+  }
   const next = order[order.findIndex((e) => e.nodeId === current) + 1];
   return next !== undefined && !completed.has(next.nodeId) ? next.nodeId : current;
 }

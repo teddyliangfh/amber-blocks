@@ -85,7 +85,10 @@ describe('fitted mats (2026-10-15 review: "make 1" faced thirty cells, 1 + 1 had
           // Version 2 dealt every stop on 6 × 5 (Number Island) or 8 × 6 (Join Island).
           // A partner that starts on the mat (Phase 19) sits halfway down its own
           // mat, so only which blocks are on the mat is compared, not where.
-          const before = materializeNode(n, c.id === 'ch1' ? { cols: 6, rows: 5 } : { cols: 8, rows: 6 }, ref);
+          // Stops added since that need more room (Phase 21's nine-column rows)
+          // are compared on a mat wide enough for them.
+          const fixed = c.id === 'ch1' ? { cols: 6, rows: 5 } : { cols: 8, rows: 6 };
+          const before = materializeNode(n, { cols: Math.max(fixed.cols, p.initial.bounds.cols), rows: Math.max(fixed.rows, p.initial.bounds.rows) }, ref);
           const placed = (s: typeof p.initial) => ({ ...s, bounds: null, bench: [...s.bench.keys()] });
           expect(placed(p.initial)).toEqual(placed(before.initial));
           expect(p.display).toEqual(before.display);

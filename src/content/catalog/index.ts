@@ -10,7 +10,7 @@ import { CHAPTER_2 } from './chapter-2';
 // refuses mismatches (AC-47). The archive format is versioned separately
 // (`schemaVersion`, progress/codec.ts). fingerprint.test.ts fails when material
 // changes without a bump.
-export const CONTENT_VERSION = 6;
+export const CONTENT_VERSION = 7;
 
 // The stops each version changed, keyed by the version that changed them. Saved
 // unfinished work on a listed stop may no longer fit its material; on every
@@ -36,6 +36,10 @@ export const CONTENT_CHANGES: Readonly<Record<number, ReadonlyArray<NodeId>>> = 
   // (7 made two ways) is not listed: no archive from an earlier version can
   // hold work for a stop it did not have, so there is nothing of it to migrate.
   6: [nodeId('ch2-n5'), nodeId('ch2-n6'), nodeId('ch2-n7')],
+  // 2026-10-18 (Phase 21): Join Island 8 → 12 stops. The new ch2-n9 – n12 sit
+  // between the old ones in map order; no old stop changed, and no archive
+  // from an earlier version can hold work for the new ones, so nothing to list.
+  7: [],
 };
 
 export const CHAPTERS: ReadonlyArray<Chapter> = [CHAPTER_1, CHAPTER_2];
@@ -49,6 +53,14 @@ export const CHAPTERS: ReadonlyArray<Chapter> = [CHAPTER_1, CHAPTER_2];
 // ch1-n8 (8 brick), ch1-n12 (17), ch2-n4 (free sum 5), ch2-n8 (7 made two
 // ways; ch2-n7, the old 3 + 4, is a "who's missing?" stop since Phase 19).
 export const COUNT_TO_PASS: ReadonlySet<NodeId> = new Set<NodeId>();
+
+// Stops where a boss makes an entrance (Phase 21, play review F2): while the
+// stop is not solved, a dashed outline of the answer (one row of n cells)
+// lies across the middle of the mat with a sleeping face, and lights up a cell
+// for each block put on. Scenery only (no touch, no judging, no snapping).
+// A default for Ted: Join Island's two bosses, the free sum 5 and 7 made two
+// ways. Number Island's bosses ask for shapes, which have their own picture.
+export const BOSS_ENTRANCE: ReadonlySet<NodeId> = new Set<NodeId>([nodeId('ch2-n4'), nodeId('ch2-n8')]);
 
 export function findChapter(id: ChapterId): Chapter {
   const chapter = CHAPTERS.find((c) => c.id === id);

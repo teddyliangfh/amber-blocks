@@ -10,7 +10,7 @@ const ok = { matched: true, benchCount: 7, reason: 'matched' } as const;
 
 function richState(): ProgressState {
   let s = createInitialState(9);
-  for (const id of ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n4', 'ch2-n5', 'ch2-n6']) {
+  for (const id of ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11']) {
     const e = reduce(s, { type: 'enter', nodeId: nodeId(id) });
     const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId(id), verdict: ok }) : e;
     if (!c.ok) {
@@ -86,7 +86,7 @@ describe('codec', () => {
       const d = decodeArchive(JSON.stringify(j));
       expect(d?.state.nodes.get(nodeId('ch2-n7'))?.work).toBeNull();
       expect(d?.state.nodes.get(nodeId('ch2-n7'))?.ref.nodeId).toBe('ch2-n7');
-      expect(d?.state.completedNodeIds.size).toBe(18);
+      expect(d?.state.completedNodeIds.size).toBe(21);
       expect(d?.state.language).toBe('en');
     };
     breakWork((w) => w.work.bench.push(['ghost', 0, 0]));
@@ -139,7 +139,7 @@ describe('migrate', () => {
       expect(unplaced.setAside).toEqual(['ch2-n7']);
       expect(unplaced.state.nodes.size).toBe(0);
       expect(unplaced.state.current).toBeNull();
-      expect(unplaced.state.completedNodeIds.size).toBe(18);
+      expect(unplaced.state.completedNodeIds.size).toBe(21);
       expect(unplaced.state.language).toBe('en');
       expect(unplaced.state.seed).toBe(9);
     }

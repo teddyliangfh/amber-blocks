@@ -135,7 +135,7 @@ function partnerOf(id: string, size: number): GroupId {
 
 function unlockedTo(upTo: string, seed = 5): ProgressState {
   let s = createInitialState(seed);
-  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n4', 'ch2-n5', 'ch2-n6', 'ch2-n7', 'ch2-n8'];
+  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8'];
   for (const id of order.slice(0, order.indexOf(upTo))) {
     const e = reduce(s, { type: 'enter', nodeId: nodeId(id) });
     const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
@@ -201,6 +201,26 @@ describe('LevelScreen sounds (D-036: sounds first, speech when asked)', () => {
     expect(mockSaid).toEqual(['再用另外两个伙伴拼出 7']);
     await press('answer-feedback');
     expect(mockSaid).toEqual(['再用另外两个伙伴拼出 7', '把 4 送回去']);
+  });
+
+  test('Phase 21: the opening of "send the extra away" is no mistake: no "hmm"; sending the wrong one back is; the 2 back is the success', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch2-n10')) });
+    await open(storage, 'ch2-n10');
+    const p = puzzleFor('ch2-n10');
+    const [, four, two] = p.onMat!;
+    expect(mockSounds).toEqual(['arrive']);
+    expect(mockSaid).toEqual([]);
+    // Moving the 2 about on the mat is still the opening.
+    await command({ type: 'moveGroup', groupId: two!, delta: { x: 0, y: -1 } });
+    expect(mockSounds).toEqual(['arrive']);
+    await command({ type: 'moveGroup', groupId: two!, delta: { x: 0, y: 1 } });
+    await command({ type: 'returnGroup', groupId: four! });
+    expect(mockSounds).toEqual(['arrive', 'adjust']);
+    await command({ type: 'takeGroup', groupId: four!, origin: { x: 3, y: 1 } });
+    mockSounds.length = 0;
+    await command({ type: 'returnGroup', groupId: two! });
+    expect(mockSounds).toEqual(['success']);
+    expect(mockSaid).toEqual([]);
   });
 
   test('Phase 20 Q4: the shipping policy says no correction on its own, so doing the first step of asked-for help never cuts the help off', async () => {

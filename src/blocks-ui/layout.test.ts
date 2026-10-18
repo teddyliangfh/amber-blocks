@@ -239,9 +239,13 @@ describe('fitted mats (2026-10-15 review: the mat was sized for the hardest stop
   });
 
   test('no stop on any phone got smaller blocks than with the old mats (17 and 3 + 4 included)', () => {
+    // Phase 21's stops never had the old mats (the row of nine to send the
+    // extra back from does not even fit one); their blocks are held to 40px
+    // by the layout budget test below.
+    const added = new Set(['ch2-n9', 'ch2-n10', 'ch2-n11', 'ch2-n12']);
     for (const phone of PHONES) {
       for (const chapter of CHAPTERS) {
-        for (const node of chapter.nodes) {
+        for (const node of chapter.nodes.filter((n) => !added.has(n.id))) {
           expect(`${phone.name} ${node.id} ${at(phone.name, node.id) >= at(phone.name, node.id, old(node.id))}`).toBe(`${phone.name} ${node.id} true`);
         }
       }

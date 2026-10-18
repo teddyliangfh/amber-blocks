@@ -321,10 +321,24 @@ describe('free play page (2026-10-15 review O)', () => {
     expect(mockSaid).toEqual([]);
   });
 
+  test('Phase 21: the die opens a random puzzle on its own page; this page and its mat stay as they are (nothing written)', async () => {
+    const storage = counted();
+    await open(storage);
+    await buildRow();
+    const before = storage.writes();
+    expect(q('sandbox-random')!.getAttribute('aria-label')).toBe('随机题');
+    expect(dimmed('sandbox-random')).toBe(false);
+    await press('sandbox-random');
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/challenge');
+    expect(storage.writes()).toBe(before);
+    expect(mockStage.current!.state.bench.size).toBe(3);
+  });
+
   test('English: the sign and the button names', async () => {
     await open(memoryStorage({ [STORAGE_KEY]: serialize({ ...createInitialState(2), language: 'en' }) }));
     expect(q('sandbox-sign')!.textContent).toBe('Free play');
     expect(container.textContent).toContain('Put all back');
+    expect(q('sandbox-random')!.getAttribute('aria-label')).toBe('Random');
     expect(q('sandbox-map')!.getAttribute('aria-label')).toBe('Map');
   });
 

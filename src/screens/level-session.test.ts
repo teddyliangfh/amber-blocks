@@ -1,6 +1,6 @@
 import { cell, unitIds } from '../core';
 import { CONTENT_VERSION, chapterId, materialize, nodeId } from '../content';
-import { atStart, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, givenPartner, isCounted, matOf, onlyGiven, previewCommand, recount, roomBeside, sameWayAgain, solvedEquation, solvedParts, startSession, undoCommand, wayAside } from './level-session';
+import { atStart, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, givenPartner, isCounted, matOf, onlyGiven, onlyOnMat, previewCommand, recount, roomBeside, sameWayAgain, solvedEquation, solvedParts, startSession, undoCommand, wayAside } from './level-session';
 
 const puzzle = materialize({ contentVersion: CONTENT_VERSION, chapterId: chapterId('ch1'), nodeId: nodeId('ch1-n2'), attemptVariant: 0, seed: 5 });
 const ids = [...puzzle.initial.units.keys()];
@@ -441,5 +441,52 @@ describe('Phase 19: who\'s missing (ch2-n5, the 2 starts on the mat)', () => {
     expect(five.initial.bounds.cols).toBe(6);
     const middle = commit(start, { type: 'moveGroup', groupId: given, delta: cell(2, 0) }).session;
     expect(at(middle)).toEqual({ piece: of(3), origin: { x: 2, y } });
+  });
+});
+
+describe('Phase 21: send the extra away (ch2-n10, 3 + 4 + 2 on the mat, make 7)', () => {
+  const p = materialize({ contentVersion: CONTENT_VERSION, chapterId: chapterId('ch2'), nodeId: nodeId('ch2-n10'), attemptVariant: 0, seed: 5 });
+  const [three, four, two] = p.onMat!;
+  const run = (cmds: ReadonlyArray<Parameters<typeof commitCommand>[1]>) =>
+    cmds.reduce((s, cmd) => {
+      const r = commitCommand(s, cmd);
+      if (!r.ok) {
+        throw new Error(r.reason);
+      }
+      return r.session;
+    }, startSession(p, null));
+
+  test('the opening is the row, wherever its partners are moved; the hand sends the 2 back', () => {
+    const s = startSession(p, null);
+    expect(onlyOnMat(s)).toBe(true);
+    expect(atStart(s)).toBe(true);
+    expect(s.verdict).toEqual({ matched: false, benchCount: 9, reason: 'count-mismatch' });
+    expect(demoMove(s)).toEqual({ type: 'returnGroup', groupId: two });
+    // The 2 moved to the row above: still all three, still the opening.
+    const moved = run([{ type: 'moveGroup', groupId: two!, delta: cell(0, -1) }]);
+    expect(onlyOnMat(moved)).toBe(true);
+    // Other stops have no such opening.
+    expect(onlyOnMat(startSession(puzzle, null))).toBe(false);
+  });
+
+  test('sending the 2 back is the solve: 3 + 4 = 7, celebrated once', () => {
+    const r = commitCommand(startSession(p, null), { type: 'returnGroup', groupId: two! });
+    expect(r.ok && r.solvedNow).toBe(true);
+    const s = r.ok ? r.session : startSession(p, null);
+    expect(s.verdict.matched).toBe(true);
+    expect(solvedEquation(s)).toBe('3 + 4 = 7');
+    expect(onlyOnMat(s)).toBe(false);
+  });
+
+  test('sending another back is no opening; everything back is an empty mat, and the hand brings a partner of the pair', () => {
+    const wrong = run([{ type: 'returnGroup', groupId: four! }]);
+    expect(onlyOnMat(wrong)).toBe(false);
+    expect(atStart(wrong)).toBe(false);
+    expect(wrong.verdict.benchCount).toBe(5);
+    const empty = run([{ type: 'returnGroup', groupId: four! }, { type: 'returnGroup', groupId: three! }, { type: 'returnGroup', groupId: two! }]);
+    expect(atStart(empty)).toBe(true);
+    const hand = demoMove(empty);
+    expect(hand?.type).toBe('takeGroup');
+    expect(hand?.type === 'takeGroup' ? [three, four].includes(hand.groupId) : false).toBe(true);
   });
 });

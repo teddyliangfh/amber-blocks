@@ -75,3 +75,21 @@ describe('Phase 20 F1: joined pieces are one character (display only)', () => {
     expect([...seventeen!.parts].sort((x, y) => x - y)).toEqual([2, 5, 10]);
   });
 });
+
+describe('Phase 21: three partners', () => {
+  test('the stairs from 1, 2 and 3 are one 6, its parts top to bottom (the join sound plays 1, 2, 3, then 6)', () => {
+    const p = materialize({ contentVersion: CONTENT_VERSION, chapterId: chapterId('ch2'), nodeId: nodeId('ch2-n11'), attemptVariant: 0, seed: 5 });
+    const solved = p.solution.reduce((s, cmd) => {
+      const r = apply(s, cmd);
+      if (!r.ok) {
+        throw new Error(r.reason);
+      }
+      return r.value;
+    }, p.initial);
+    const merged = mergedClusters(solved);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.total).toBe(6);
+    expect(merged[0]!.parts).toEqual([1, 2, 3]);
+    expect(merged[0]!.pieces).toHaveLength(3);
+  });
+});

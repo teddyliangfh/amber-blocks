@@ -1,6 +1,7 @@
 import { apply, cell, groupSize, judge, template } from '../core';
-import type { BenchState, Command } from '../core';
+import type { BenchState, Command, GroupId } from '../core';
 import { fitBench } from './bench';
+import { STAIRS_6, TEN_2X5 } from './catalog/shapes';
 import { CONTENT_VERSION } from './catalog';
 import { materialize, materializeNode } from './generate';
 import { partnerMaterial } from './material';
@@ -336,5 +337,182 @@ describe('steps (shared by validate and the level session)', () => {
     expect(stepCount(one)).toBe(1);
     expect(stepCount(four)).toBe(2);
     expect(benchPair(one.initial)).toBeNull();
+  });
+});
+
+describe('Phase 21: send the extra away (partners already on the mat)', () => {
+  const spec = { kind: 'sum_composition', sum: 7, onMat: [3, 4, 2], allowed: [[3, 4]], distractors: [] } as const;
+  const mat = fitBench(spec);
+  const away = (seed = 11, v = 0) => materializeNode(custom(spec), mat, ref('ch2', 'x-n1', v, seed));
+  const cellsOf = (p: ReturnType<typeof away>, id: GroupId) => p.initial.groups.get(id)!.unitIds.map((u) => p.initial.bench.get(u)!);
+
+  test('3, 4 and 2 start joined in one row from the left edge, in the middle of the mat; each keeps a home in the tray', () => {
+    expect(mat).toEqual({ cols: 9, rows: 3 });
+    const p = away();
+    expect(p.onMat).toHaveLength(3);
+    expect(p.onMat!.map((id) => groupSize(p.initial.groups.get(id)!))).toEqual([3, 4, 2]);
+    expect(p.initial.bench.size).toBe(9);
+    // Left to right, touching, on the middle row of three.
+    const xs = p.onMat!.map((id) => cellsOf(p, id).map((c) => c.x));
+    expect(xs).toEqual([[0, 1, 2], [3, 4, 5, 6], [7, 8]]);
+    expect(new Set([...p.initial.bench.values()].map((c) => c.y))).toEqual(new Set([1]));
+    // Their slots are still their home, empty: the tray keeps three outlines.
+    for (const id of p.onMat!) {
+      expect(p.initial.groups.get(id)!.unitIds.map((u) => p.initial.tray[p.initial.home.get(u)!]!.unitId).every((x) => x === null)).toBe(true);
+    }
+    expect(p.display.partnerIds).toEqual(p.onMat);
+    expect(p.question).toEqual({ kind: 'sum_composition', sum: 7, allowed: [[3, 4]] });
+    expect(p.display.target).toBe(7);
+    expect(p.prompt).toBe('prompt.send_away');
+    expect(p.given).toBeUndefined();
+    expect(p.ways).toBeUndefined();
+    expect(away(4242, 2)).toEqual(away(4242, 2));
+  });
+
+  test('the reference answer is one move: the 2 goes back; 3 + 4 stay where they are, joined', () => {
+    const p = away();
+    expect(p.solution).toEqual([{ type: 'returnGroup', groupId: p.onMat![2] }]);
+    const solved = replay(p.initial, p.solution);
+    expect(judge(solved, p.question)).toEqual({ matched: true, benchCount: 7, reason: 'matched' });
+    expect(judge(p.initial, p.question)).toEqual({ matched: false, benchCount: 9, reason: 'count-mismatch' });
+    for (const id of p.onMat!.slice(0, 2)) {
+      for (const u of p.initial.groups.get(id)!.unitIds) {
+        expect(solved.bench.get(u)).toEqual(p.initial.bench.get(u));
+      }
+    }
+    // An extra at the left end goes back the same way, and a tray partner stays.
+    const left = { kind: 'sum_composition', sum: 6, onMat: [1, 2, 4], allowed: [[2, 4]], distractors: [3] } as const;
+    const q = materializeNode(custom(left), fitBench(left), ref('ch2', 'x-n1'));
+    expect(q.solution).toEqual([{ type: 'returnGroup', groupId: q.onMat![0] }]);
+    expect(judge(replay(q.initial, q.solution), q.question).matched).toBe(true);
+    expect(q.display.partnerIds).toHaveLength(4);
+    expect(q.display.partnerIds.slice(1)).toEqual(q.onMat);
+  });
+
+  test('content bugs: not more than the sum, other pairs, a middle extra, two ways to send back, mixing with given or ways', () => {
+    const p = away();
+    expect(() => validate(p, spec)).not.toThrow();
+    expect(() => materializeNode(custom({ ...spec, onMat: [3, 4] }), mat, ref('ch2', 'x-n1'))).toThrow(/not more than 7/);
+    expect(() => materializeNode(custom({ ...spec, allowed: [[3, 4], [4, 3]] }), mat, ref('ch2', 'x-n1'))).toThrow(/one allowed pair/);
+    // A tray partner that makes the sum with one on the mat.
+    expect(() => materializeNode(custom({ kind: 'sum_composition', sum: 6, onMat: [1, 2, 4], allowed: [[2, 4]], distractors: [5] }), mat, ref('ch2', 'x-n1'))).toThrow(/5 \+ 1 also make 6|1 \+ 5 also make 6/);
+    // The 2 in the middle: after sending it back, 3 and 4 would still have to be pushed together.
+    expect(() => materializeNode(custom({ ...spec, onMat: [3, 2, 4] }), mat, ref('ch2', 'x-n1'))).toThrow(/not next to each other/);
+    // Two 4s: which one goes back is a guess.
+    expect(() => materializeNode(custom({ ...spec, onMat: [4, 3, 4] }), { cols: 11, rows: 3 }, ref('ch2', 'x-n1'))).toThrow(/2 pairs on the mat make 7/);
+    // The pair that makes the sum must be the allowed one.
+    expect(() => materializeNode(custom({ ...spec, onMat: [5, 2, 3], allowed: [[2, 3]] }), { cols: 11, rows: 3 }, ref('ch2', 'x-n1'))).toThrow(/5 \+ 2 on the mat is not the allowed 2 \+ 3/);
+    expect(() => materializeNode(custom({ ...spec, onMat: [5, 2, 1] }), mat, ref('ch2', 'x-n1'))).toThrow(/no allowed pair for 7 is on the mat/);
+    // A tray partner that makes 7 with one on the mat: another way to get there.
+    expect(() => materializeNode(custom({ ...spec, distractors: [5] }), mat, ref('ch2', 'x-n1'))).toThrow(/2 \+ 5 also make 7|5 \+ 2 also make 7/);
+    expect(() => materializeNode(custom({ ...spec, distractors: [3] }), mat, ref('ch2', 'x-n1'))).toThrow(/same size as an operand/);
+    expect(() => validate(p, { ...spec, given: 3 })).toThrow(/content:/);
+    expect(() => validate({ ...p, ways: 2 }, { ...spec, ways: 2 })).toThrow(/content:/);
+    // The row on the mat must be the puzzle's, all of it and nothing more.
+    expect(() => validate({ ...p, onMat: p.onMat!.slice(0, 2) }, spec)).toThrow(/all there is on the mat/);
+    const back = apply(p.initial, { type: 'returnGroup', groupId: p.onMat![2]! });
+    expect(back.ok && (() => validate({ ...p, initial: back.value }, spec))).toThrow(/all there is on the mat/);
+    // Partners on the mat the spec does not have.
+    expect(() => validate(p, { kind: 'sum_composition', sum: 7, allowed: [[3, 4]], distractors: [2] })).toThrow(/start in the tray|onMat/);
+    const square = materialize(ref('ch1', 'ch1-n3'));
+    expect(() => validate({ ...square, onMat: p.onMat }, { kind: 'quantity_shape', target: 4, templates: [square.display.template!], extra: 2 })).toThrow(/come from a sum spec/);
+  });
+
+  test('a row that is not joined is refused', () => {
+    const p = away();
+    // The 2 a row up: diagonal to the 4, not touching it.
+    const moved = apply(p.initial, { type: 'moveGroup', groupId: p.onMat![2]!, delta: cell(0, -1) });
+    expect(moved.ok && (() => validate({ ...p, initial: moved.value }, spec))).toThrow(/one joined row/);
+  });
+});
+
+describe('Phase 21: ten as two rows of five, and stairs of 1, 2 and 3', () => {
+  const ten = { kind: 'quantity_shape', target: 10, templates: [TEN_2X5], extra: 1, handles: [5, 5], decoys: [4] } as const;
+  const stairs = { kind: 'quantity_shape', target: 6, templates: [STAIRS_6], extra: 1, handles: [1, 2, 3], decoys: [4] } as const;
+  const build = (s: typeof ten | typeof stairs, seed = 11) => materializeNode(custom(s), fitBench(s), ref('ch1', 'x-n1', 0, seed));
+  // A state with exactly these cells on the mat, as loose blocks.
+  const looseAt = (p: ReturnType<typeof build>, cells: ReadonlyArray<{ x: number; y: number }>): BenchState => {
+    const inGroup = new Set([...p.initial.groups.values()].flatMap((g) => g.unitIds));
+    const units = [...p.initial.units.keys()].filter((u) => !inGroup.has(u));
+    const ids = [...p.initial.groups.values()].flatMap((g) => g.unitIds);
+    const all = [...units, ...ids].slice(0, cells.length);
+    const groups = new Map([...p.initial.groups].filter(([, g]) => !g.unitIds.some((u) => all.includes(u))));
+    return { ...p.initial, groups, bench: new Map(all.map((u, i) => [u, cell(cells[i]!.x, cells[i]!.y)])), tray: p.initial.tray.map((t) => (t.unitId !== null && all.includes(t.unitId) ? { ...t, unitId: null } : t)) };
+  };
+
+  test('the templates: 5 + 5 in two rows, and left-aligned stairs 1 / 2 / 3', () => {
+    expect(TEN_2X5.cells).toHaveLength(10);
+    expect(STAIRS_6.cells).toHaveLength(6);
+    expect(new Set(TEN_2X5.cells.map((c) => c.y))).toEqual(new Set([0, 1]));
+    expect([0, 1, 2].map((y) => STAIRS_6.cells.filter((c) => c.y === y).map((c) => c.x))).toEqual([[0], [0, 1], [0, 1, 2]]);
+  });
+
+  test.each([1, 7, 4242])('the reference answers build both from their partners, leaving the decoy (seed %i)', (seed) => {
+    for (const s of [ten, stairs]) {
+      const p = build(s, seed);
+      expect(p.solution.every((c) => c.type === 'takeGroup')).toBe(true);
+      const solved = replay(p.initial, p.solution);
+      expect(judge(solved, p.question).matched).toBe(true);
+      const four = [...p.initial.groups.values()].find((g) => groupSize(g) === 4)!;
+      expect(four.unitIds.some((u) => solved.bench.has(u))).toBe(false);
+    }
+    // The stairs take one partner a step: the 1 on top, the 2, then the 3.
+    const p = build(stairs, seed);
+    const sizes = p.solution.map((c) => (c.type === 'takeGroup' ? groupSize(p.initial.groups.get(c.groupId)!) : 0));
+    expect(sizes).toEqual([1, 2, 3]);
+  });
+
+  test('turned shapes are right too; one block short, one too many or apart is not', () => {
+    const p = build(stairs);
+    // Right-aligned stairs are the left ones turned a quarter: built from the three partners.
+    const right = replay(p.initial, [1, 2, 3].map((n, i) => {
+      const g = [...p.initial.groups.values()].find((x) => groupSize(x) === n)!;
+      return { type: 'takeGroup', groupId: g.id, origin: cell(3 - n, i) } as Command;
+    }));
+    expect(judge(right, p.question).matched).toBe(true);
+    const upsideDown = looseAt(p, [cell(0, 0), cell(1, 0), cell(2, 0), cell(0, 1), cell(1, 1), cell(0, 2)]);
+    expect(judge(upsideDown, p.question).matched).toBe(true);
+    expect(judge(looseAt(p, [cell(0, 0), cell(0, 1), cell(1, 1), cell(0, 2), cell(1, 2)]), p.question).reason).toBe('count-mismatch');
+    expect(judge(looseAt(p, [cell(0, 0), cell(0, 1), cell(1, 1), cell(0, 2), cell(1, 2), cell(2, 2), cell(3, 2)]), p.question).reason).toBe('count-mismatch');
+    expect(judge(looseAt(p, [cell(0, 0), cell(0, 1), cell(1, 1), cell(0, 3), cell(1, 3), cell(2, 3)]), p.question).reason).toBe('not-one-cluster');
+    // The 1 not over the end of the 2 is no staircase.
+    expect(judge(looseAt(p, [cell(1, 0), cell(0, 1), cell(1, 1), cell(0, 2), cell(1, 2), cell(2, 2)]), p.question).reason).toBe('shape-mismatch');
+
+    const t = build(ten);
+    const tall = looseAt(t, Array.from({ length: 10 }, (_, i) => cell(i % 2, Math.floor(i / 2))));
+    expect(judge(tall, t.question).matched).toBe(true);
+    expect(judge(looseAt(t, Array.from({ length: 9 }, (_, i) => cell(i % 5, Math.floor(i / 5)))), t.question).reason).toBe('count-mismatch');
+    expect(judge(looseAt(t, [...Array.from({ length: 5 }, (_, i) => cell(i, 0)), ...Array.from({ length: 5 }, (_, i) => cell(i, 2))]), t.question).reason).toBe('not-one-cluster');
+    expect(judge(looseAt(t, Array.from({ length: 10 }, (_, i) => cell(i % 5 + (i >= 5 ? 1 : 0), Math.floor(i / 5)))), t.question).reason).toBe('shape-mismatch');
+  });
+
+  test('partners that add up but cannot cover the picture are no answer', () => {
+    // 2 + 4 is 6, but no stairs: the solver goes on to 1 + 2 + 3.
+    const groups = partnerMaterial([4, 2, 3, 1], fitBench(stairs), 's');
+    const solution = buildSolution({ kind: 'quantity_shape', target: 6, template: STAIRS_6 }, groups.state);
+    expect(solution.map((c) => (c.type === 'takeGroup' ? groupSize(groups.state.groups.get(c.groupId)!) : 0))).toEqual([1, 2, 3]);
+    const onlyBars = partnerMaterial([4, 2], fitBench(stairs), 'b');
+    expect(() => buildSolution({ kind: 'quantity_shape', target: 6, template: STAIRS_6 }, onlyBars.state)).toThrow(/cover the picture/);
+  });
+});
+
+describe('Phase 21: teens (10 already on the mat)', () => {
+  const spec = { kind: 'sum_composition', sum: 13, given: 10, allowed: [[10, 3]], distractors: [2, 4] } as const;
+
+  test('the mat holds the 10 as two rows of five with room for the other half on its right; one partner finishes it', () => {
+    expect(fitBench(spec)).toEqual({ cols: 9, rows: 3 });
+    for (const seed of [1, 11, 4242]) {
+      const p = materializeNode(custom(spec), fitBench(spec), ref('ch2', 'x-n1', 0, seed));
+      const ten = p.initial.groups.get(p.given!)!;
+      const cells = ten.unitIds.map((u) => p.initial.bench.get(u)!);
+      expect(Math.min(...cells.map((c) => c.x))).toBe(0);
+      expect(Math.max(...cells.map((c) => c.x))).toBe(4);
+      expect(new Set(cells.map((c) => c.y)).size).toBe(2);
+      expect([...p.initial.groups.values()].filter((g) => g.id !== ten.id && groupSize(g) === 3)).toHaveLength(1);
+      expect(p.solution).toHaveLength(1);
+      const [move] = p.solution;
+      expect(move?.type === 'takeGroup' ? move.origin.x : -1).toBe(5);
+      expect(judge(replay(p.initial, p.solution), p.question)).toEqual({ matched: true, benchCount: 13, reason: 'matched' });
+    }
   });
 });
