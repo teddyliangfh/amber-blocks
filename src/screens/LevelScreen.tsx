@@ -14,6 +14,7 @@ import { chapterOf, nextNodeOf, statusOf } from '../progress';
 import { createCorrectionVoice } from './correction-voice';
 import { asksForHelp, biggestFirst, cardFor, feedbackFor, guidanceFor, helpAt, matchedFeedback, promptParams } from './hints';
 import type { AskedHelp, Line } from './hints';
+import { AmberGuide } from './AmberGuide';
 import { AnswerFeedback } from './AnswerFeedback';
 import { Cloud, SkyCloud } from './Cloud';
 import { Icon } from './icons';
@@ -664,6 +665,11 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
         <Text style={styles.countChipText}>{counting.counted}</Text>
       </View>
     );
+  // Amber, whose words the card's tips are (D-098): she nods at each new tip
+  // and at the card's nudge. The count's corner is hers only while nothing is counted.
+  const tipCue = feedback.tone === 'adjust' ? `${JSON.stringify(feedback.title)}${JSON.stringify(feedback.detail)}#${nudge}` : null;
+  const guideOf = (size: number) => (countChip === null ? <AmberGuide size={size} cue={tipCue} /> : null);
+  const guideAt = compact ? LEVEL_CHROME.guide.compact : LEVEL_CHROME.guide.regular;
   const stage = (
     <View style={styles.stageArea} onLayout={onStageLayout} testID="stage">
       {/* Scenery only: it reaches past the stage (left / right -40) and must never take a tap
@@ -726,7 +732,7 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
       {landscape ? (
         <View style={styles.side} testID="level-side">
           <View style={styles.sideTop}>
-            <View style={styles.sideCount}>{countChip}</View>
+            <View style={styles.sideCount}>{countChip ?? guideOf(LEVEL_CHROME.guide.side)}</View>
             {menuButton}
           </View>
           {/* Side by side: the column has to fit a short landscape screen with the success buttons. */}
@@ -756,6 +762,11 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
         </View>
       )}
 
+      {landscape || countChip !== null ? null : (
+        <View pointerEvents="none" style={[styles.cornerGuide, { top: insets.top + (compact ? LEVEL_CHROME.compact.header : LEVEL_CHROME.regular.header) - guideAt.size + guideAt.over, left: insets.left + 12 }]} testID="guide-corner">
+          {guideOf(guideAt.size)}
+        </View>
+      )}
       {landscape || countChip === null ? null : <View style={[styles.cornerCount, { top: insets.top + 10, left: insets.left + 12 }]}>{countChip}</View>}
       {landscape ? null : <View style={[styles.cornerMenu, { top: insets.top + 10, right: insets.right + 12 }]}>{menuButton}</View>}
 
@@ -987,6 +998,7 @@ const styles = StyleSheet.create({
   templateBox: { position: 'relative', borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.8)', boxShadow: `0 4px 0 ${THEME.skyDeep}` },
   templateCell: { position: 'absolute', borderWidth: 1.5 },
   cornerMenu: { position: 'absolute' },
+  cornerGuide: { position: 'absolute' },
   cornerCount: { position: 'absolute', width: 76, alignItems: 'center' },
   recount: { alignItems: 'center', gap: 2 },
   recountLabel: { fontSize: 12, fontFamily: FONT.body, fontWeight: '800', color: THEME.inkSoft, textAlign: 'center' },

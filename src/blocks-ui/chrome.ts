@@ -12,6 +12,12 @@ export const LEVEL_CHROME = {
   // Short phones give 26px more to the stage (2026-10-16 review #7: 17 on a
   // 375 × 553 phone had 34px blocks): a one-line card and a smaller button row.
   compact: { header: 80, feedback: 56, feedbackGap: 4, footer: 52 },
+  // Amber, the hint girl (D-098), drawn over the chrome and adding none to it:
+  // in portrait at the header's bottom left, her chin `over` px down onto the
+  // feedback card's top edge and clear of its symbol disc; in landscape in the
+  // side column's count slot (minHeight 48). The count takes that corner while
+  // it runs, so she steps out then.
+  guide: { regular: { size: 48, over: 10 }, compact: { size: 40, over: 8 }, side: 44 },
 } as const;
 
 // Height a portrait level screen spends on everything but the stage.

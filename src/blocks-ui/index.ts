@@ -8,7 +8,7 @@ export { trayObjects } from './tray';
 export type { TrayObject } from './tray';
 export { FONT, STAGE_COLORS, THEME, colorsFor } from './palette';
 export type { BlockColors } from './palette';
-export { useBob, useBreathe, usePop, usePulse } from './juice';
+export { useBob, useBreathe, useNod, usePop, usePulse } from './juice';
 export type { CheerMove } from './cheer';
 export { cheerFor } from './cheer';
 export { Confetti } from './Confetti';

@@ -157,6 +157,29 @@ export function usePop(tick: number) {
   return useAnimatedStyle(() => ({ transform: [{ scale: s.get() }, { rotate: `${r.get()}deg` }] }));
 }
 
+// A nod, as if saying "here's a tip": a dip forward and back, once each time
+// `cue` changes to a new non-null value. The value on mount only sets what has
+// been seen (rotating the phone remounts with the same tip). With reduced
+// motion nothing moves.
+export function useNod(cue: string | null) {
+  const reduced = useReducedMotion();
+  const r = useSharedValue(0);
+  const y = useSharedValue(0);
+  const seen = useRef(cue);
+  useEffect(() => {
+    if (cue === seen.current) {
+      return;
+    }
+    seen.current = cue;
+    if (cue === null || reduced) {
+      return;
+    }
+    r.set(withSequence(withTiming(-9, { duration: 110, easing: EASE_OUT }), withTiming(5, { duration: 150 }), withTiming(-5, { duration: 140 }), withSpring(0, SETTLE)));
+    y.set(withSequence(withTiming(3, { duration: 110, easing: EASE_OUT }), withTiming(0, { duration: 150 }), withTiming(2, { duration: 140 }), withSpring(0, SETTLE)));
+  }, [cue, reduced, r, y]);
+  return useAnimatedStyle(() => ({ transform: [{ translateY: y.get() }, { rotate: `${r.get()}deg` }] }));
+}
+
 // An ambient bob for the map marker, the one piece of motion the player did not cause.
 export function useBob(enabled: boolean, amplitude = 6, period = 1300) {
   const reduced = useReducedMotion();

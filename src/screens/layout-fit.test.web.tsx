@@ -151,6 +151,9 @@ describe.each(PHONES.map((d) => [d.name, d] as const))('%s', (_, d) => {
         // The side column's short label, never the island's long name.
         expect(q('level-side')!.contains(next)).toBe(true);
         expect(next.textContent).toBe(format(copyKey('island.done.short'), lang));
+        // Amber (D-098) sits in the count's slot of the top row, no taller than the menu.
+        expect(q('level-side')!.contains(q('amber-guide'))).toBe(true);
+        expect(height(q('amber-guide')!)).toBeLessThanOrEqual(48);
       } else {
         const footer = q('level-footer')!;
         expect(footer.contains(next)).toBe(true);
@@ -165,6 +168,15 @@ describe.each(PHONES.map((d) => [d.name, d] as const))('%s', (_, d) => {
         expect(stageSizeOf(d).height).toBeGreaterThan(200);
         // The button (and the row it sits in) fits the footer.
         expect(pillHeight(next)).toBeLessThanOrEqual(height(footer));
+        // Amber (D-098) is drawn over the chrome, never in it: out of the flow, her
+        // chin on the card's top edge and above its symbol disc.
+        const guide = q('guide-corner')!;
+        expect(style(guide).position).toBe('absolute');
+        // Measured from the screen's own top inset (the root's padding), as she is placed.
+        const top = px(style(q('level-header')!.parentElement!).paddingTop);
+        const chin = px(style(guide).top) + height(q('amber-guide')!) - top - c.header;
+        expect(chin).toBeGreaterThan(0);
+        expect(chin).toBeLessThan((height(card) - height(q('feedback-symbol')!)) / 2);
       }
       // Scenery never takes a touch.
       const ground = q('ground');

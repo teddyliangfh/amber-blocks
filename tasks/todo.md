@@ -1635,3 +1635,14 @@ brief 第 4 节列出、本轮按要求没做的：三个伙伴合体、凑到 1
 
 - 孩子看到虚线从中间一行跳到最下一行，会不会把它当成"要把第一种挪下去"。
 - 贴在一起的两个 7 合体后看得出是两个（相邻两排同色，中间只有一道缝）。
+
+## 图标与提示伙伴 Amber（2026-10-18，D-098）
+
+- [x] Ted 给的 `Glossy Amber Chibi Girl Icon.png`（1254 × 1254，琥珀积木里的 Q 版女孩，天空 + 沙丘底，白边圆角）复制为源图 `assets/brand/app-icon.png`；旧矢量 `public/favicon.svg`、`assets/brand/app-icon.svg` 删除，`+html.tsx` 去掉 svg 那条 icon 链接。
+- [x] 抠图：HSV 饱和度 > 0.35 的是积木描边，从图边泛洪去掉天空、沙丘、阴影和白边，剩下的就是积木（含脸和头发）；边缘 1.2px 羽化。透明底 `assets/images/amber-girl.png`（168px，最大显示 56px 的 3 倍）。
+- [x] 标签页：`public/favicon.ico`（16 / 32 / 48，各自从全尺寸缩，16px 略锐化）与 `assets/images/favicon.png`（48）用抠出的积木满格；主屏幕 `public/icon-180.png` / `icon-512.png` 与原生 `assets/images/icon.png`（1024）用整张图满版，白边与圆角按同行最近的底色补齐。
+- [x] 关卡页 `screens/AmberGuide.tsx`（`LevelPlay` 里，地图站与随机题都有）：竖屏绝对定位在 header 左下角（坐在左边小云前），下巴压在卡片左上沿 10px（紧凑 8px），在符号圆片之上；横屏在侧栏顶行的点数格（44px，不高于菜单行 48）；点数 / 再数一遍时她让出这个角。尺寸在 `LEVEL_CHROME.guide`，不进 header / 卡片高度预算。
+- [x] 动作：`useBob(1.5px, 2.6s)` 轻浮动；`juice.ts useNod(cue)` 每条新提示（卡片 adjust 的标题 + 内容 + nudge 次数变了）点一下头，挂载时的值只记下不播（转屏不重播）；减少动效时都不动。`pointerEvents="none"`、读屏隐藏。
+- [x] 测试：`layout-fit.test.web.tsx` 每个竖屏设备查她是绝对定位、下巴落在卡片上沿与圆片之间，横屏查她在侧栏里且不高于 48；`LevelScreen.test.web.tsx` 3 + 4 那条查点数时她不在、再数一遍后回来。941 测试全过，lint、typecheck、`build:web` 通过（`dist/` 只有 ico + apple-touch 两条 icon 链接，图都是新图）。
+- [x] 内建浏览器（dev）：375 × 812、360 × 640、667 × 331 下量了矩形，她与云朵数字、菜单键、卡片符号和标题、工作台都不相交，页面无横竖滚动；脚本拖两块到第一站出"多了 1 块"时测到点头（转到约 −9° 再回正）。控制台 0 error。
+- 没做 / 待定：Android 自适应图标、iOS `assets/expo.icon`、启动图仍是 Expo 模板；没在真机上看主屏幕图标；减少动效分支只按代码与既有 hook 同样的写法确认，浏览器里没法模拟；点她暂时没有反应（可以做成和点卡片一样重播提示，等试玩看孩子会不会去点她）。抠图 / 出图脚本在会话草稿目录，不在仓库里。

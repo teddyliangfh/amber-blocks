@@ -16,7 +16,7 @@
 ## 已知缺口与待验证
 
 - 未在真机 Safari / Android 上试玩：首次语音播放、地址栏伸缩、横竖屏切换、拖拽中断、添加到主屏幕后的恢复都只在桌面内建浏览器的手机视口里检查过。
-- 已部署在 Vercel（https://amber-blocks.vercel.app/ ，私有仓库 push 到 `main` 自动部署，构建命令 `pnpm build:web`）。html 等 `no-cache`、`/_expo/static/` 长缓存的头还没用 `curl -I` 核对过。测试期间不让搜索引擎收录：`+html.tsx` 的 `robots` meta 与 `vercel.json` 的 `X-Robots-Tag: noindex`，公开时两处一起删。网页标题 "Amber Blocks"、`html lang` 随语言；manifest 不锁方向。网页图标是游戏里的琥珀色积木角色 Amber：标签页 `public/favicon.ico`（16 / 32 / 48，各自从 `public/favicon.svg` 按尺寸画出）+ `favicon.svg`，主屏幕 `public/icon-180.png` / `icon-512.png`（源文件 `assets/brand/app-icon.svg`：Amber 在沙丘上跳起）；原生 App 图标（`assets/images/icon.png`、Android 自适应图标、iOS `expo.icon`）还是 Expo 模板占位图。
+- 已部署在 Vercel（https://amber-blocks.vercel.app/ ，私有仓库 push 到 `main` 自动部署，构建命令 `pnpm build:web`）。html 等 `no-cache`、`/_expo/static/` 长缓存的头还没用 `curl -I` 核对过。测试期间不让搜索引擎收录：`+html.tsx` 的 `robots` meta 与 `vercel.json` 的 `X-Robots-Tag: noindex`，公开时两处一起删。网页标题 "Amber Blocks"、`html lang` 随语言；manifest 不锁方向。图标是 Ted 给的"琥珀积木里的 Q 版女孩"（源图 `assets/brand/app-icon.png`，D-098）：标签页 `public/favicon.ico`（16 / 32 / 48，抠出的积木，透明底），主屏幕 `public/icon-180.png` / `icon-512.png` 与原生 `assets/images/icon.png`（1024）是整张图满版（圆角处用相邻底色补齐）；关卡页左上角的提示伙伴是同一个形象（`assets/images/amber-girl.png`）。Android 自适应图标、iOS `expo.icon`、启动图还是 Expo 模板占位图。
 - 没有儿童试玩结果；题量、难度与美术都是待试玩后再定的样例。
 - 原生端语音、账号、云同步、能力评分、大规模扩题、正式美术不在当前范围。
 

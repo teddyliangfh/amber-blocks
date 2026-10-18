@@ -237,10 +237,13 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
     expect(mockStage.current!.celebrateTick).toBe(0);
 
     // Count all seven blocks through the partners; an eighth tap is ignored.
+    // Amber (D-098) gives the count her corner while it is on screen.
     mockSaid.length = 0;
+    expect(has('amber-guide')).toBe(true);
     const bench = [...deserialize((await storage.getItem(STORAGE_KEY))!)!.nodes.get(nodeId('ch2-n7'))!.work!.bench.keys()];
     for (const u of bench) {
       await act(async () => mockStage.current!.onTapUnit(u));
+      expect(has('amber-guide')).toBe(false);
     }
     await act(async () => mockStage.current!.onTapUnit(bench[0]!));
     expect(mockSaid).toEqual(['一', '二', '三', '四', '五', '六', '七', '一共 7 块']);
@@ -249,6 +252,7 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
     await press('recount');
     expect(mockStage.current!.countOrder.size).toBe(0);
     expect(has('recount')).toBe(false);
+    expect(has('amber-guide')).toBe(true);
   });
 
   test('breaking a right answer turns the badge back and hides play again; next stays (2026-10-15); history still unlocks the map', async () => {
