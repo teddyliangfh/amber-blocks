@@ -11,6 +11,7 @@ import type { Chapter, CopyKey, NodeId, NodeSpec } from '../content';
 import type { BenchState } from '../core';
 import { Cloud, SkyCloud } from './Cloud';
 import { Icon } from './icons';
+import { workWaysApart } from './level-session';
 import { labelOf } from './MapScreen';
 import { useProgress } from './progress-store';
 import { play } from './sound';
@@ -78,7 +79,7 @@ function Card({ entry, width, onOpen }: { readonly entry: AlbumEntry; readonly w
       onPress={onOpen}
       onPressIn={() => play('tap')}
       style={({ pressed }) => [styles.card, { width, transform: [{ translateY: pressed ? 3 : 0 }], boxShadow: `0 ${pressed ? 1 : 4}px 0 ${THEME.skyDeep}` }]}>
-      <WorkPicture state={entry.work} width={inner} height={Math.round(inner * 0.62)} testID="album-picture" />
+      <WorkPicture state={entry.work} width={inner} height={Math.round(inner * 0.62)} apart={workWaysApart(entry.node, entry.work)} testID="album-picture" />
       <View style={[styles.tag, { backgroundColor: colors.fill, borderColor: colors.edge }]}>
         <Text style={[styles.tagText, { fontSize: label.length > 2 ? 17 : 21 }]}>{label}</Text>
       </View>
@@ -139,6 +140,7 @@ function Zoom({ entry, onClose, lang }: { readonly entry: AlbumEntry; readonly o
               celebrateTick={tick}
               cheer={cheerOf(entry.node, entry.work)}
               merge
+              apart={workWaysApart(entry.node, entry.work)}
               onCommand={() => false}
               onPreview={() => false}
               onTapUnit={() => undefined}

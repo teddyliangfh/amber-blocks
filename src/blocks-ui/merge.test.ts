@@ -93,3 +93,21 @@ describe('Phase 21: three partners', () => {
     expect(merged[0]!.pieces).toHaveLength(3);
   });
 });
+
+describe('D-097: sets kept apart join only among themselves', () => {
+  test('two ways to make 7 stacked, touching: one 14 as a cluster; two 7s with each way kept apart', () => {
+    const p = puzzle('ch2-n8');
+    const units = (n: number) => p.initial.groups.get(of(p, n))!.unitIds;
+    const mat = play(p.initial, [
+      { type: 'takeGroup', groupId: of(p, 3), origin: { x: 0, y: 1 } },
+      { type: 'takeGroup', groupId: of(p, 4), origin: { x: 3, y: 1 } },
+      { type: 'takeGroup', groupId: of(p, 5), origin: { x: 0, y: 0 } },
+      { type: 'takeGroup', groupId: of(p, 2), origin: { x: 5, y: 0 } },
+    ]);
+    expect(mergedClusters(mat).map((c) => c.total)).toEqual([14]);
+    const two = mergedClusters(mat, [[...units(3), ...units(4)]]);
+    expect(two.map((c) => [c.total, c.parts])).toEqual([[7, [3, 4]], [7, [5, 2]]]);
+    // Nothing kept apart is the old answer.
+    expect(mergedClusters(mat, []).map((c) => c.total)).toEqual([14]);
+  });
+});

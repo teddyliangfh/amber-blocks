@@ -6,11 +6,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Buddy, Confetti, FONT, Stage, THEME, colorsFor, showcaseGeometry } from '../blocks-ui';
 import { CHAPTERS, CONTENT_VERSION, copyKey, format, hueFor, materialize } from '../content';
-import type { Chapter, CopyKey, Lang, Puzzle } from '../content';
+import type { Chapter, CopyKey, Lang, NodeSpec, Puzzle } from '../content';
 import { apply, judge } from '../core';
 import type { BenchState } from '../core';
 import type { ProgressState } from '../progress';
 import { SkyCloud } from './Cloud';
+import { workWaysApart } from './level-session';
 import { labelOf } from './MapScreen';
 import { useProgress } from './progress-store';
 import { play } from './sound';
@@ -53,8 +54,12 @@ function Cheer({ index, size, colors, label }: { readonly index: number; readonl
 // right, 2026-10-15 review Q); else the child's own work when it is still
 // right; else the stop's reference answer (work is cleared by "play again",
 // for one). Drawn on its own mat size.
+function bossOf(chapter: Chapter): NodeSpec | undefined {
+  return [...chapter.nodes].reverse().find((n) => n.role === 'boss') ?? chapter.nodes[chapter.nodes.length - 1];
+}
+
 function bossWork(chapter: Chapter, state: ProgressState): BenchState | null {
-  const boss = [...chapter.nodes].reverse().find((n) => n.role === 'boss') ?? chapter.nodes[chapter.nodes.length - 1];
+  const boss = bossOf(chapter);
   if (boss === undefined) {
     return null;
   }
@@ -104,6 +109,11 @@ export function IslandDoneScreen({ chapterId }: { readonly chapterId: string }) 
     }
   }, [done]);
   const shown = useMemo(() => (chapter === null || state === null ? null : bossWork(chapter, state)), [chapter, state]);
+  // Two ways to make 7 that touch: two 7s, not one 14 (D-097).
+  const apart = useMemo(() => {
+    const boss = chapter === null ? undefined : bossOf(chapter);
+    return boss === undefined || shown === null ? [] : workWaysApart(boss, shown);
+  }, [chapter, shown]);
   // When the page opened (set after the first paint; until then nothing goes on).
   const openedAt = useRef(Number.POSITIVE_INFINITY);
   useEffect(() => {
@@ -171,6 +181,7 @@ export function IslandDoneScreen({ chapterId }: { readonly chapterId: string }) 
                 mood="happy"
                 celebrateTick={1}
                 merge
+                apart={apart}
                 onCommand={() => false}
                 onPreview={() => false}
                 onTapUnit={() => undefined}

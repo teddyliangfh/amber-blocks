@@ -76,12 +76,16 @@ export interface StageProps {
   // Joined pieces show as one number character (merge.ts): the screen says
   // when (MERGE_ON). A finger pulling a piece away splits its character at once.
   readonly merge?: boolean;
+  // Sets of units that join only among themselves (merge.ts; D-097: each way
+  // made of a sum asked several ways is its own character).
+  readonly apart?: ReadonlyArray<ReadonlyArray<UnitId>>;
   // A character is joining: the parts it is made of and its total, for the join sound.
   readonly onJoin?: (parts: ReadonlyArray<number>, total: number) => void;
   // A boss's entrance (Phase 21): a dashed outline of the answer, `n` cells in
   // a row across the middle of the mat, its first `lit` cells lit. Scenery
   // under the pieces: no touch, no judging, no snapping (BossOutline).
-  readonly outline?: { readonly n: number; readonly lit: number };
+  // `made`: the cells of ways already made that stand aside (D-097).
+  readonly outline?: { readonly n: number; readonly lit: number; readonly made?: ReadonlyArray<Cell> };
   // Numbers that pop up above a block for a moment (free play: a group of blocks
   // just changed size). `tick` makes each one new.
   readonly bubbles?: ReadonlyArray<{ readonly at: Cell; readonly n: number; readonly tick: number }>;
@@ -174,7 +178,7 @@ function headOf(cells: ReadonlyArray<Cell>): Cell {
   return cells.reduce((best, c) => (c.y < best.y || (c.y === best.y && c.x < best.x) ? c : best));
 }
 
-export function Stage({ state, geometry, trayObjects, enabled, countOrder, matched, mood: moodOf, celebrateTick, onCommand, onPreview, onTapUnit, onTapTray, onDragActive, onFeel, spotlight = [], demo = 0, demoPiece, demoTo: demoCell, demoBack = false, wink = 0, trayHidden = false, cheer = 'hop', merge = false, onJoin, bubbles = [], outline }: StageProps) {
+export function Stage({ state, geometry, trayObjects, enabled, countOrder, matched, mood: moodOf, celebrateTick, onCommand, onPreview, onTapUnit, onTapTray, onDragActive, onFeel, spotlight = [], demo = 0, demoPiece, demoTo: demoCell, demoBack = false, wink = 0, trayHidden = false, cheer = 'hop', merge = false, apart, onJoin, bubbles = [], outline }: StageProps) {
   const [preview, setPreview] = useState<Preview | null>(null);
   // The last thing tapped in the tray, and its hop. Ticks count down from -1
   // so they never match a solve's (useCheer plays each tick once).
@@ -211,7 +215,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
   // holds the same, ahead of the drawing, so the timers never act twice.
   const reduced = useReducedMotion();
   const [lifted, setLifted] = useState<string | null>(null);
-  const merged = useMemo(() => (merge ? mergedClusters(state) : []), [merge, state]);
+  const merged = useMemo(() => (merge ? mergedClusters(state, apart) : []), [merge, state, apart]);
   const wanted = useMemo(() => merged.filter((c) => lifted === null || !c.pieces.some((p) => p.id === lifted)), [merged, lifted]);
   const [view, setView] = useState<{ readonly joined: ReadonlySet<string>; readonly intro: Intro | null }>(() => ({ joined: new Set(wanted.map((c) => c.key)), intro: null }));
   const truth = useRef(view);
@@ -750,7 +754,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
           return <View key={`e${spot.id}-${c.x},${c.y}`} style={[styles.emptySlot, { left: spot.x + c.x * unit + 4, top: spot.y + c.y * unit + 4, width: unit - 8, height: unit - 8, borderRadius: slotRadius(unit - 8) }]} />;
         }),
       )}
-      {outline !== undefined ? <BossOutline geometry={geometry} n={outline.n} lit={outline.lit} colors={colorsFor(hueFor(outline.n))} /> : null}
+      {outline !== undefined ? <BossOutline geometry={geometry} n={outline.n} lit={outline.lit} made={outline.made} colors={colorsFor(hueFor(outline.n))} /> : null}
       {preview?.cells.map((c) => {
         const p = cellToPx(geometry, c);
         return <View key={`p${c.x},${c.y}`} style={[styles.preview, { left: p.x + 3, top: p.y + 3, width: cell - 6, height: cell - 6, borderRadius: slotRadius(cell - 6) }]} />;

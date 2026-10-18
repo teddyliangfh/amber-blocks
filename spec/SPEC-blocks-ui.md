@@ -23,8 +23,8 @@ src/blocks-ui/
   PartnerView.tsx  整组伙伴（托盘或工作台），数字标签贴在身上
   Stage.tsx        工作台网格 + 托盘 + 所有可拖对象；接收 BenchState 与回调 onCommand / onTapUnit / onTapTray / onJoin；合体状态机、接缝光、数字气泡
   DemoHand.tsx     示范手：虚影 + 手指从托盘到工作台（或反过来，Phase 21）
-  BossOutline.tsx  Boss 登场：答案大小的虚线轮廓 + 睡脸 + 亮格（Phase 21）；纯函数 `bossOutlineCells`
-  merge.ts         纯函数：`mergedClusters`（含伙伴、≥ 2 个部分的簇：总数、部分、头块、接缝）；`MERGE_ON` 与合体时长常量
+  BossOutline.tsx  Boss 登场：答案大小的虚线轮廓 + 睡脸 + 亮格（Phase 21）；纯函数 `bossOutlineCells`（第二步躲开已拼的，D-097）
+  merge.ts         纯函数：`mergedClusters`（含伙伴、≥ 2 个部分的簇：总数、部分、头块、接缝；`apart` 组内各自合体，D-097）；`MERGE_ON` 与合体时长常量
   picture.ts       纯函数：作品册缩略图怎么上色（合体后的样子）
 ```
 
@@ -48,7 +48,8 @@ src/blocks-ui/
 - 托盘点按（D-084）：托盘里的单块 / 伙伴被点（Tap，与 Pan 互斥）时跳一下（`useCheer` hop，用负数 tick，不会与过关的 tick 撞号），并回调 `onTapTray(n)`（单块 1）。
 - 数字气泡（D-088）：`bubbles` 属性里的每一项在那一格上方冒一个伙伴徽章样式的数字，`BUBBLE_MS`（800ms）内淡入、停留、淡出；减少动效时不上浮。
 - 示范手反向（Phase 21，D-089）：`demoBack` 为真且 `demoPiece` 是工作台上的伙伴时，虚影从它在工作台上的位置（原大）飞回它在托盘里的轮廓（托盘比例，`DemoHand toScale`）；否则照旧从托盘飞到工作台（`demoTo` 或中间）。减少动效时虚影只在起点闪。
-- Boss 轮廓（Phase 21，D-094）：`outline = { n, lit }` 时，`bossOutlineCells` 把 n 格排成工作台中间的一行（太长才折行），画在所有积木之下：每格虚线框（`hueFor(n)` 的 edge 色），前 `lit` 格填 pale 色，第一格一张 `sleepy` 脸；整体 `useBreathe` 呼吸（减少动效时不呼吸）。`pointerEvents="none"`，不参与落点、吸附与判题。
+- Boss 轮廓（Phase 21，D-094）：`outline = { n, lit }` 时，`bossOutlineCells` 把 n 格排成工作台中间的一行（太长才折行），画在所有积木之下：每格虚线框（`hueFor(n)` 的 edge 色），前 `lit` 格填 pale 色，第一格一张 `sleepy` 脸；整体 `useBreathe` 呼吸（减少动效时不呼吸）。`pointerEvents="none"`，不参与落点、吸附与判题。D-097：`outline.made`（已拼好、留在工作台上的那一种的格子）非空时，轮廓换到它没占的行：先找不贴着它的行，没有就找不压着它的行，离中间同样远时先下后上（第一种在 8 × 3 的中间一行 → 最下一行；在顶行 → 底行；在底行 → 顶行）。
+- 合体分开（D-097）：`apart`（几组单位）给了时，每组只在组内合体，其余照常（`mergedClusters(state, apart)`、`pictureOf(state, apart)`、`Stage apart`、`WorkPicture apart`）。两种拼法贴着摆时，关卡页、作品册、岛收尾页都传各自已拼的几种，显示两个 7，不是一个 14。
 - 单块 / 整组语义不混：伙伴整体是一个可拖对象，不能拖伙伴的单块（第二章及第一章 10 / 12 / 17 的握把）；其余第一章站只有单块。
 
 ## 验证
@@ -56,5 +57,6 @@ src/blocks-ui/
 - `layout.test.ts`：几何、落点钳位、托盘宽高约束、伙伴内点中格子；常见手机竖 / 横屏 × 全题库边界检查；2026-10-16：每个视口 × 19 站工作台格与托盘块 ≥ 40px（不到 40 的四处列成清单：17 站在 375 × 553 与 360 × 568 是 34px，受托盘宽度限制；12 / 17 站在 640 × 304 横屏 38px），390 × 844 的 1 站与 3 + 4 站托盘空沙 ≤ 40% / 45%，360 × 640 的 4 变身站托盘高 ≥ 托盘块 + 16，托盘下方沙地放下即放回，8 列工作台用满宽度。
 - `merge.test.ts`（Phase 20）：3 + 4 一个簇（总数、部分、头块、接缝、key 稳定）；分开、单个伙伴、只有散块都不合；3 + 两块单块是 5；8 砖、17。`picture.test.ts`：合体后的颜色与一张脸。`Stage.test.web.tsx`：打开即合好、新解的接缝 → 眨眼 + `onJoin` → 合体、同一解再合不闪、数字气泡。`layout.test.ts`：`nearbyOrigins` / `settleOrigin`。
 - Phase 21：`Stage.test.web.tsx` 送走站的示范手带着 2 从工作台回托盘（不给 `demoBack` 时工作台上的伙伴不被搬）、Boss 轮廓 5 格亮 2 格 + 睡脸、`bossOutlineCells` 居中与折行；`merge.test.ts` 楼梯一个 6、部分 [1, 2, 3]；`layout.test.ts` 新站不进"比旧工作台小"的比较（它们没有旧工作台），全部视口 ≥ 40px 的清单不变。
+- D-097：`Stage.test.web.tsx` `bossOutlineCells` 带 `made` 时的行（中间一行 → 下一行、顶行 → 底行、底行 → 顶行、跨两行 → 剩下那行）；`merge.test.ts` 两种贴着：不分开是一个 14，`apart` 后是 7（3 + 4）与 7（5 + 2）；`picture.test.ts` 同一工作台不分开是一个 n10 色、一张脸，分开是 n7 色、两张脸。
 - `tray.test.ts`：10 / 12 / 17 与第二章每站：任一伙伴搬出 → 只多一个轮廓，其余对象位置比例不变；放回 → 与开题一致；参考解完成后对象数不变。
 - 浏览器（iPhone 竖屏 390×844、横屏 844×390）：整组搬出 / 放回 / 移动、点数、横屏侧边托盘。验证方法见 `tasks/todo.md` 的 Phase 11。

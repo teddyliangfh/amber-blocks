@@ -568,8 +568,8 @@ describe('asked-for help points at the blocks (review: hints must point at objec
         };
         const cells = () => spin(Array.from({ length: cols * rows }, (_, i) => ({ x: i % cols, y: Math.floor(i / cols) })));
         const deltas = () => spin(Array.from({ length: (2 * cols - 1) * (2 * rows - 1) }, (_, i) => ({ x: (i % (2 * cols - 1)) - cols + 1, y: Math.floor(i / (2 * cols - 1)) - rows + 1 })));
-        // The first allowed move of `g` that, when `touching`, leaves it touching another partner on the mat.
-        const place = (s: LevelSession, g: Group, cmds: ReadonlyArray<Command>, touching: boolean): LevelSession | null => {
+        // The first allowed move of `g` that, when `touching`, leaves it touching another partner on the mat (`to`, if given).
+        const place = (s: LevelSession, g: Group, cmds: ReadonlyArray<Command>, touching: boolean, to?: Group): LevelSession | null => {
           for (const cmd of cmds) {
             const out = commitCommand(s, cmd);
             if (!out.ok) {
@@ -577,7 +577,7 @@ describe('asked-for help points at the blocks (review: hints must point at objec
             }
             const state = out.session.history.state;
             const moved = state.groups.get(g.id)!;
-            if (!touching || onBench(out.session).some((o) => o.id !== g.id && areTouching(state, moved, o))) {
+            if (!touching || onBench(out.session).some((o) => o.id !== g.id && (to === undefined || o.id === to.id) && areTouching(state, moved, o))) {
               return out.session;
             }
           }
@@ -585,10 +585,11 @@ describe('asked-for help points at the blocks (review: hints must point at objec
         };
         const takes = (g: Group): Command[] => cells().map((origin) => ({ type: 'takeGroup', groupId: g.id, origin }));
         const bring = (s: LevelSession, g: Group) => (onBench(s).length > 0 ? place(s, g, takes(g), true) : null) ?? place(s, g, takes(g), false);
-        const push = (s: LevelSession) => {
-          const [a, b] = onBench(s);
+        // The two lit (beside a way made, the two of the next way), else the two on the mat.
+        const push = (s: LevelSession, lit: ReadonlyArray<string>) => {
+          const [a, b] = lit.length === 2 ? lit.map((o) => s.history.state.groups.get(o as never)!) : onBench(s);
           const moves = (g: Group): Command[] => deltas().map((delta) => ({ type: 'moveGroup', groupId: g.id, delta }));
-          return a === undefined || b === undefined ? null : (place(s, b, moves(b), true) ?? place(s, a, moves(a), true));
+          return a === undefined || b === undefined ? null : (place(s, b, moves(b), true, a) ?? place(s, a, moves(a), true, b));
         };
         // A muddle: a few partners brought or sent back at random.
         let s = startSession(p, null);
@@ -615,7 +616,7 @@ describe('asked-for help points at the blocks (review: hints must point at objec
           trail.push(`${s.step}:${onBench(s).map(groupSize).join('+') || 0}:${key}${lit.length > 0 ? '*' : ''}`);
           let next: LevelSession | null = null;
           if (key === 'hint.not-merged') {
-            next = push(s);
+            next = push(s, lit);
             moves += 1;
           } else if (lit.length > 0) {
             next = s;
@@ -812,11 +813,42 @@ describe('Phase 19: 7 made two ways (ch2-n8): the second way', () => {
     expect(help.focus.objects).toEqual([of(5), of(2)]);
     expect(text(cardFor(s, 2, true).detail)).toBe('在旁边再拼一个 7');
     expect(text(cardFor(s, 0, true).detail)).toBe('再用另外两个伙伴拼出 7');
-    // Across the middle row there is no room beside it: send it back, as before.
+    // Across the middle row (on the boss outline) too: the next way may touch it (D-097), so never "send it back".
     const middle = play(p, first.map((c) => (c.type === 'takeGroup' ? { ...c, origin: { x: c.origin.x, y: 1 } } : c)));
     expect(feedbackFor(middle).tone).toBe('building');
-    expect(text(guidanceFor(middle, 2).line)).toBe('3 加 4 也是 7！再找 5 和 2');
-    expect(guidanceFor(middle, 2).focus.objects).toEqual([of(3), of(4), of(5), of(2)]);
+    expect(text(guidanceFor(middle, 2).line)).toBe('在旁边再拼一个 7');
+    expect(guidanceFor(middle, 2).focus.objects).toEqual([of(5), of(2)]);
+    expect(text(helpAt(middle, 2).line)).toBe('在旁边再拼一个 7');
+  });
+
+  // D-097 (round-6 review L1, r6-07): the first way on the outline's middle row,
+  // the next one built on the row above it, touching. Nothing said or lit ever
+  // takes the first way apart.
+  test('D-097: the next way touching the first: building, not too many; a stray partner is the one named', () => {
+    const middle = first.map((c) => (c.type === 'takeGroup' ? { ...c, origin: { x: c.origin.x, y: 1 } } : c));
+    const five = play(p, [...middle, { type: 'takeGroup', groupId: of(5), origin: { x: 0, y: 0 } }]);
+    const f = feedbackFor(five);
+    expect(f.tone).toBe('building');
+    expect(text(f.title)).toBe('还不到 7');
+    expect(asksForHelp(five)).toBe(false);
+    for (const asks of [1, 2, 3]) {
+      expect(helpAt(five, asks).focus.objects).not.toContain(of(3));
+      expect(helpAt(five, asks).focus.objects).not.toContain(of(4));
+    }
+    // The 1 brought too: swap the 1 for the 2, the first way left alone.
+    const stray = play(p, [...middle, { type: 'takeGroup', groupId: of(5), origin: { x: 0, y: 0 } }, { type: 'takeGroup', groupId: of(1), origin: { x: 5, y: 0 } }]);
+    expect(text(guidanceFor(stray, 2).line)).toBe('把 1 送回去，换 2 过来');
+    expect(guidanceFor(stray, 2).focus.objects).toEqual([of(1), of(2)]);
+    expect(text(helpAt(stray, 2).line)).toBe('把 1 送回去');
+    // One too many: the 2 and the 1 beside the 5. The 1 goes back, not the 4.
+    const more = play(p, [...middle, { type: 'takeGroup', groupId: of(5), origin: { x: 0, y: 0 } }, { type: 'takeGroup', groupId: of(2), origin: { x: 5, y: 0 } }, { type: 'takeGroup', groupId: of(1), origin: { x: 7, y: 0 } }]);
+    expect(text(feedbackFor(more).title)).toBe('多了 1 块');
+    expect(text(guidanceFor(more, 2).line)).toBe('把 1 送回去');
+    expect(guidanceFor(more, 2).focus.objects).toEqual([of(1)]);
+    // The 2 beside the 5: right, both ways on the cloud.
+    const done = play(p, [...middle, { type: 'takeGroup', groupId: of(5), origin: { x: 0, y: 0 } }, { type: 'takeGroup', groupId: of(2), origin: { x: 5, y: 0 } }]);
+    expect(done.verdict.matched).toBe(true);
+    expect(say(done)).toBe('5 加 2，一共 7');
   });
 
   test('half of the first way sent back is still "another way"; help names the one left to send back', () => {

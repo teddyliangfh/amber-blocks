@@ -1070,6 +1070,43 @@ describe('Phase 20: two beats, two ways side by side, the 17 boss on an empty ma
     expect(badge()).toBe('3 + 4 = 7\n5 + 2 = 7');
   });
 
+  test('D-097 (round-6 review L1): 7 two ways, the first on the outline row, the second stacked on it: building, then the solve; help never takes the first way apart', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch2-n8')) });
+    await open(storage, 'ch2-n8');
+    const of = (n: number) => partnerOf('ch2-n8', n);
+    await command({ type: 'takeGroup', groupId: of(3), origin: { x: 0, y: 1 } });
+    await command({ type: 'takeGroup', groupId: of(4), origin: { x: 3, y: 1 } });
+    expect(title()).toBe('换一种拼法！');
+    // Asked twice: make another 7 beside it (touching is fine), the 5 and the 2 lit.
+    await press('answer-feedback');
+    await press('answer-feedback');
+    expect(detailText()).toBe('在旁边再拼一个 7');
+    expect(mockStage.current!.spotlight).toEqual([of(5), of(2)]);
+    await command({ type: 'takeGroup', groupId: of(5), origin: { x: 0, y: 0 } });
+    expect(title()).toBe('还不到 7');
+    await press('answer-feedback');
+    await press('answer-feedback');
+    expect(mockStage.current!.spotlight).not.toContain(of(3));
+    expect(mockStage.current!.spotlight).not.toContain(of(4));
+    await command({ type: 'takeGroup', groupId: of(2), origin: { x: 5, y: 0 } });
+    expect(title()).toBe('拼对啦！');
+    expect(badge()).toBe('3 + 4 = 7\n5 + 2 = 7');
+    // One cluster of 14 on the mat, joined as two 7s: each way kept apart.
+    expect(mockStage.current!.apart!.map((u) => u.length)).toEqual([7, 7]);
+    await beat();
+    expect(container.querySelector('[data-testid="next"]')?.textContent).toBe('合体岛完成了');
+    const saved = deserialize((await storage.getItem(STORAGE_KEY))!)!;
+    expect(saved.completedNodeIds.has(nodeId('ch2-n8'))).toBe(true);
+    expect(saved.album.get(nodeId('ch2-n8'))!.bench.size).toBe(14);
+    // Reopened: still right, still both.
+    act(() => root.unmount());
+    root = createRoot(container);
+    await open(storage, 'ch2-n8');
+    expect(title()).toBe('拼对啦！');
+    expect(badge()).toBe('3 + 4 = 7\n5 + 2 = 7');
+    expect(mockStage.current!.apart!.map((u) => u.length)).toEqual([7, 7]);
+  });
+
   test('Q8: "play again" on a right mat can be undone: the mat comes back, right, without a second celebration; Q15: the menu is "菜单"', async () => {
     const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n3')) });
     await open(storage, 'ch1-n1');
@@ -1285,9 +1322,9 @@ describe('Phase 21: the new Join Island stops', () => {
   test('boss entrance: the two Join Island bosses show the answer\'s outline, a cell lit per block; it goes on the solve; 7 two ways lights again for the second way; other stops have none', async () => {
     const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch2-n8')) });
     await open(storage, 'ch2-n4');
-    expect(mockStage.current!.outline).toEqual({ n: 5, lit: 0 });
+    expect(mockStage.current!.outline).toEqual({ n: 5, lit: 0, made: [] });
     await command({ type: 'takeGroup', groupId: partnerOf('ch2-n4', 2), origin: { x: 0, y: 1 } });
-    expect(mockStage.current!.outline).toEqual({ n: 5, lit: 2 });
+    expect(mockStage.current!.outline).toEqual({ n: 5, lit: 2, made: [] });
     await command({ type: 'takeGroup', groupId: partnerOf('ch2-n4', 3), origin: { x: 2, y: 1 } });
     expect(title()).toBe('拼对啦！');
     expect(mockStage.current!.outline).toBeUndefined();
@@ -1296,13 +1333,18 @@ describe('Phase 21: the new Join Island stops', () => {
     act(() => root.unmount());
     root = createRoot(container);
     await open(storage, 'ch2-n8');
-    expect(mockStage.current!.outline).toEqual({ n: 7, lit: 0 });
+    expect(mockStage.current!.outline).toEqual({ n: 7, lit: 0, made: [] });
     await command({ type: 'takeGroup', groupId: partnerOf('ch2-n8', 3), origin: { x: 0, y: 0 } });
     await command({ type: 'takeGroup', groupId: partnerOf('ch2-n8', 4), origin: { x: 3, y: 0 } });
-    // The first way stands aside, judged no more: the outline is dark again for the next.
-    expect(mockStage.current!.outline).toEqual({ n: 7, lit: 0 });
+    // The first way stands aside, judged no more: the outline is dark again for
+    // the next, and is told the cells of the way made, to lie off them (D-097).
+    const madeRows = () => [...new Set((mockStage.current!.outline?.made ?? []).map((c) => c.y))];
+    expect(mockStage.current!.outline).toMatchObject({ n: 7, lit: 0 });
+    expect(mockStage.current!.outline!.made).toHaveLength(7);
+    expect(madeRows()).toEqual([0]);
     await command({ type: 'takeGroup', groupId: partnerOf('ch2-n8', 5), origin: { x: 0, y: 2 } });
-    expect(mockStage.current!.outline).toEqual({ n: 7, lit: 5 });
+    expect(mockStage.current!.outline).toMatchObject({ n: 7, lit: 5 });
+    expect(madeRows()).toEqual([0]);
     await flushSaves();
 
     act(() => root.unmount());

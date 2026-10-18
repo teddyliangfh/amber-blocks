@@ -101,6 +101,22 @@ describe('Stage (2026-10-15 review D: the first partner stop showed one block)',
     expect(bossOutlineCells({ cols: 3, rows: 4 }, 5)).toEqual([{ x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 0, y: 2 }, { x: 1, y: 2 }]);
   });
 
+  test('D-097: past a first way, the outline lies off the way made: a free row not touching it, else the free row below, else above', () => {
+    const row = (y: number) => [0, 1, 2, 3, 4, 5, 6].map((x) => ({ x, y }));
+    const bounds = { cols: 8, rows: 3 };
+    // Made on the middle row (the outline): both other rows touch it; the one below.
+    expect(bossOutlineCells(bounds, 7, row(1))).toEqual(row(2));
+    // Made on the top row: the bottom row does not touch it.
+    expect(bossOutlineCells(bounds, 7, row(0))).toEqual(row(2));
+    // Made on the bottom row: the top row.
+    expect(bossOutlineCells(bounds, 7, row(2))).toEqual(row(0));
+    // A 3 on the top row and a 4 under its end: only the bottom row is free.
+    expect(bossOutlineCells(bounds, 7, [...row(0).slice(0, 3), ...[2, 3, 4, 5].map((x) => ({ x, y: 1 }))])).toEqual(row(2));
+    render('ch2-n8', { outline: { n: 7, lit: 0, made: row(1) } });
+    expect(all('boss-outline')).toHaveLength(1);
+    expect(all('boss-cell')).toHaveLength(7);
+  });
+
   test('a loose stop still shows one block; no demo number, no hand', () => {
     const puzzle = render('ch1-n2', { demo: 1 });
     expect(all('demo-ghost')).toHaveLength(1);

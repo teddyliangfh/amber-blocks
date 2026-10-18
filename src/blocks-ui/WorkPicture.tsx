@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import type { BenchState } from '../core';
+import type { BenchState, UnitId } from '../core';
 import { BlockBody } from './Block';
 import { THEME, colorsFor } from './palette';
 import { pictureOf } from './picture';
@@ -16,9 +16,9 @@ const MAX_CELL = 40;
 // little felt mat in a wooden frame cut to fit them. No gestures, no tray, no
 // counting. Measured at 360 × 640 with the CPU slowed 4×: nineteen stages as
 // cards (a gesture handler per piece) opened with long tasks of up to 180 ms;
-// nineteen of these with none.
-export function WorkPicture({ state, width, height, testID }: { readonly state: BenchState; readonly width: number; readonly height: number; readonly testID?: string }) {
-  const picture = useMemo(() => pictureOf(state), [state]);
+// nineteen of these with none. `apart`: as pictureOf.
+export function WorkPicture({ state, width, height, apart, testID }: { readonly state: BenchState; readonly width: number; readonly height: number; readonly apart?: ReadonlyArray<ReadonlyArray<UnitId>>; readonly testID?: string }) {
+  const picture = useMemo(() => pictureOf(state, apart), [state, apart]);
   const span = { w: picture.cols + 2 * MARGIN, h: picture.rows + 2 * MARGIN };
   const cell = Math.max(4, Math.min(MAX_CELL, Math.floor((width - 2 * FRAME) / span.w), Math.floor((height - 2 * FRAME) / span.h)));
   const mat = { width: cell * span.w, height: cell * span.h };

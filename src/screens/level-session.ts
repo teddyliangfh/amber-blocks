@@ -1,7 +1,7 @@
 import { apply, areTouching, benchCount, clusters, commit, countUnit, createHistory, groupSize, judge, reconcile, startRound, undo } from '../core';
-import type { BenchState, Command, CountRound, Group, GroupId, History, RejectReason, UnitId, Verdict } from '../core';
+import type { BenchState, Cell, Command, CountRound, Group, GroupId, History, RejectReason, UnitId, Verdict } from '../core';
 import { benchPair, questionAt, samePair, stepCount } from '../content';
-import type { Pair, Puzzle } from '../content';
+import type { NodeSpec, Pair, Puzzle } from '../content';
 
 // Everything a level screen needs to know between gestures, kept pure so the
 // rules can be tested without rendering: committed history, the current verdict
@@ -44,10 +44,9 @@ function advance(whole: Puzzle, state: BenchState, step: number, used: ReadonlyA
   return { step: step + 1, used: pair === null ? used : [...used, pair] };
 }
 
-// A way made on a sum asked several ways that stands on its own on the mat:
-// one cluster that is exactly two partners, joined, making one of `pairs`
-// (each pair once). Its sizes left (then top) first.
-interface StandingWay {
+// A way made on a sum asked several ways: two partners on the mat, joined,
+// making one of the pairs. Its sizes left (then top) first.
+interface MadeWay {
   readonly parts: Pair;
   readonly units: ReadonlySet<UnitId>;
   readonly groups: ReadonlySet<GroupId>;
@@ -58,11 +57,22 @@ function corner(state: BenchState, unitIds: ReadonlyArray<UnitId>): { readonly x
   return { x: Math.min(...cells.map((c) => c.x)), y: Math.min(...cells.map((c) => c.y)) };
 }
 
-// In mat order: the top one first, then the left one.
-function standingWays(state: BenchState, pairs: ReadonlyArray<Pair>): ReadonlyArray<StandingWay> {
+function wayOf(state: BenchState, a: Group, b: Group): MadeWay {
+  const [x, y] = [a, b].sort((p, q) => corner(state, p.unitIds).x - corner(state, q.unitIds).x || corner(state, p.unitIds).y - corner(state, q.unitIds).y);
+  return { parts: [groupSize(x!), groupSize(y!)], units: new Set([...a.unitIds, ...b.unitIds]), groups: new Set([a.id, b.id]) };
+}
+
+function benchPartners(state: BenchState): ReadonlyArray<Group> {
+  return [...state.groups.values()].filter((g) => g.unitIds.every((u) => state.bench.has(u)));
+}
+
+// Ways in `pairs` that stand on their own on the mat: a cluster that is
+// exactly two partners (each pair once). In mat order: the top one first,
+// then the left one.
+function standingWays(state: BenchState, pairs: ReadonlyArray<Pair>): ReadonlyArray<MadeWay> {
   const left = [...pairs];
-  const partners = [...state.groups.values()].filter((g) => g.unitIds.every((u) => state.bench.has(u)));
-  const out: StandingWay[] = [];
+  const partners = benchPartners(state);
+  const out: MadeWay[] = [];
   const parts = clusters(state)
     .map((c) => ({ units: new Set(c.unitIds), at: corner(state, c.unitIds) }))
     .sort((a, b) => a.at.y - b.at.y || a.at.x - b.at.x);
@@ -72,20 +82,54 @@ function standingWays(state: BenchState, pairs: ReadonlyArray<Pair>): ReadonlyAr
     if (inside.length !== 2 || groupSize(a!) + groupSize(b!) !== c.units.size) {
       continue;
     }
-    const [x, y] = [a!, b!].sort((p, q) => corner(state, p.unitIds).x - corner(state, q.unitIds).x || corner(state, p.unitIds).y - corner(state, q.unitIds).y);
-    const sizes: Pair = [groupSize(x!), groupSize(y!)];
-    const i = left.findIndex((p) => samePair(p, sizes));
+    const way = wayOf(state, a!, b!);
+    const i = left.findIndex((p) => samePair(p, way.parts));
     if (i === -1) {
       continue;
     }
     left.splice(i, 1);
-    out.push({ parts: sizes, units: c.units, groups: new Set([a!.id, b!.id]) });
+    out.push(way);
   }
   return out;
 }
 
+// Ways in `pairs` made on the mat, known by their partners (D-097): for each
+// pair, in order, two partners of its sizes, whole on the mat and joined to
+// each other, whatever else touches them (the next way built on the row above
+// or below, the only rows left on a 3-row mat). Each partner in one way; with
+// a choice, the top (then left) one.
+function madeWays(state: BenchState, pairs: ReadonlyArray<Pair>): ReadonlyArray<MadeWay> {
+  const partners = [...benchPartners(state)].sort((p, q) => corner(state, p.unitIds).y - corner(state, q.unitIds).y || corner(state, p.unitIds).x - corner(state, q.unitIds).x);
+  const taken = new Set<GroupId>();
+  const out: MadeWay[] = [];
+  for (const [n, m] of pairs) {
+    const free = partners.filter((g) => !taken.has(g.id));
+    const match = free.flatMap((a) => free.filter((b) => b !== a && groupSize(a) === n && groupSize(b) === m && areTouching(state, a, b)).map((b) => [a, b] as const))[0];
+    if (match === undefined) {
+      continue;
+    }
+    taken.add(match[0].id);
+    taken.add(match[1].id);
+    out.push(wayOf(state, match[0], match[1]));
+  }
+  return out;
+}
+
+// Only whole partners on the mat, one or two, their sizes all in one of
+// `pairs` (each size once): a pair, or a pair on its way.
+function partOfPair(state: BenchState, pairs: ReadonlyArray<Pair>): boolean {
+  const sizes = benchPartners(state).map(groupSize);
+  if (sizes.length === 0 || sizes.length > 2 || state.bench.size !== sizes.reduce((a, b) => a + b, 0)) {
+    return false;
+  }
+  return pairs.some((pair) => {
+    const left: number[] = [...pair];
+    return sizes.every((n) => left.includes(n) && left.splice(left.indexOf(n), 1).length === 1);
+  });
+}
+
 // The mat less the ways in `ways`: what is left to judge.
-function without(state: BenchState, ways: ReadonlyArray<StandingWay>): BenchState {
+function without(state: BenchState, ways: ReadonlyArray<MadeWay>): BenchState {
   if (ways.length === 0) {
     return state;
   }
@@ -100,12 +144,13 @@ function without(state: BenchState, ways: ReadonlyArray<StandingWay>): BenchStat
 
 // The part of the mat a step judges (Phase 20, play review Q1). Past the first
 // way of a sum asked several ways, a way already made may stay on the mat
-// beside the next one: each used way that stands on its own (its two partners
-// joined, nothing else touching them) is left out and the rest is judged.
-// Sending the first way back still works: then nothing is left out. The core
-// judge is unchanged; this only chooses what it is shown.
+// beside the next one: each used way still made (its two partners joined) is
+// left out and the rest is judged, touching it or not (D-097: on the boss's
+// 3-row mat a way across the middle row leaves no row clear of it). Sending
+// the first way back still works: then nothing is left out. The core judge is
+// unchanged; this only chooses what it is shown.
 export function judgedMat(state: BenchState, used: ReadonlyArray<Pair>): BenchState {
-  return used.length === 0 ? state : without(state, standingWays(state, used));
+  return used.length === 0 ? state : without(state, madeWays(state, used));
 }
 
 // The session's own judged part of the mat (see judgedMat).
@@ -118,12 +163,32 @@ export function wayAside(session: LevelSession): boolean {
   return matOf(session) !== session.history.state;
 }
 
+type At = { readonly step: number; readonly used: ReadonlyArray<Pair> };
+
+// A way step `at` accepts, made beside more blocks: one that stands on its own
+// (made first, the next way beside it, as a reload in the middle of the second
+// way finds it), or one joined to what is left, when what is left is the next
+// way or a way on its way to it (D-097: the next way built touching the first,
+// reloaded halfway or finished; both made at once). Its sizes.
+function madeBeside(whole: Puzzle, state: BenchState, at: At, allowed: ReadonlyArray<Pair>): Pair | undefined {
+  const view = judgedMat(state, at.used);
+  const standing = standingWays(view, allowed)[0];
+  if (standing !== undefined && standing.units.size !== view.bench.size) {
+    return standing.parts;
+  }
+  return allowed.find((pair) => {
+    const used = [...at.used, pair];
+    const rest = judgedMat(state, used);
+    const next = questionAt(whole, at.step + 1, used);
+    return rest.bench.size < view.bench.size && next.kind === 'sum_composition' && partOfPair(rest, next.allowed);
+  });
+}
+
 // The steps this mat has done, from `at` on. A step is done when what is left
 // to judge answers it; on a sum asked several ways also when a way it accepts
-// stands on its own beside more blocks (made first, the next way beside it, as
-// a reload in the middle of the second way finds it). `byJudge` false: only
-// the second kind (a finished stop is not asked again).
-function walk(whole: Puzzle, state: BenchState, from: { readonly step: number; readonly used: ReadonlyArray<Pair> }, byJudge: boolean): { readonly step: number; readonly used: ReadonlyArray<Pair> } {
+// is made beside more blocks (madeBeside). `byJudge` false: only the second
+// kind (a finished stop is not asked again).
+function walk(whole: Puzzle, state: BenchState, from: At, byJudge: boolean): At {
   let at = from;
   while (at.step < lastStep(whole)) {
     const view = judgedMat(state, at.used);
@@ -132,11 +197,11 @@ function walk(whole: Puzzle, state: BenchState, from: { readonly step: number; r
       at = advance(whole, view, at.step, at.used);
       continue;
     }
-    const beside = whole.ways !== undefined && q.kind === 'sum_composition' ? standingWays(view, q.allowed)[0] : undefined;
-    if (beside === undefined || beside.units.size === view.bench.size) {
+    const beside = whole.ways !== undefined && q.kind === 'sum_composition' ? madeBeside(whole, state, at, q.allowed) : undefined;
+    if (beside === undefined) {
       break;
     }
-    at = { step: at.step + 1, used: [...at.used, beside.parts] };
+    at = { step: at.step + 1, used: [...at.used, beside] };
   }
   return at;
 }
@@ -332,35 +397,42 @@ export function sameWayAgain(session: LevelSession): boolean {
   if (state.bench.size === 0) {
     return state !== session.history.state;
   }
-  const sizes = [...state.groups.values()].filter((g) => g.unitIds.every((u) => state.bench.has(u))).map(groupSize);
-  if (sizes.length === 0 || sizes.length > 2 || state.bench.size !== sizes.reduce((a, b) => a + b, 0)) {
-    return false;
-  }
-  return session.used.some((pair) => {
-    const left: number[] = [...pair];
-    return sizes.every((n) => left.includes(n) && left.splice(left.indexOf(n), 1).length === 1);
-  });
+  return partOfPair(state, session.used);
 }
 
-// Is there room to make the next way beside the ways made, without touching
-// them: a pair the step still accepts, from the tray, put down joined and clear
-// of every way standing aside? The help says "make another 7 beside it" only
-// then; a way made across the middle of a 3-row mat leaves no such room.
+// The ways made on a mat of a sum asked several ways, each as its units: the
+// join shows each as its own character, so two ways that touch are two 7s,
+// not one 14 (D-097). Empty for any other stop.
+export function waysApart(session: LevelSession): ReadonlyArray<ReadonlyArray<UnitId>> {
+  const q = session.whole.question;
+  return session.whole.ways === undefined || q.kind !== 'sum_composition' ? [] : madeWays(session.history.state, q.allowed).map((w) => [...w.units]);
+}
+
+// The same for a stop's finished work, from its catalog entry (the album, the island page).
+export function workWaysApart(node: NodeSpec, work: BenchState): ReadonlyArray<ReadonlyArray<UnitId>> {
+  return node.spec.kind !== 'sum_composition' || node.spec.ways === undefined ? [] : madeWays(work, node.spec.allowed).map((w) => [...w.units]);
+}
+
+// The cells of the ways made that stand on the mat, left out of the judging
+// (none before the first way is made).
+export function asideCells(session: LevelSession): ReadonlyArray<Cell> {
+  const mat = matOf(session).bench;
+  return [...session.history.state.bench].filter(([u]) => !mat.has(u)).map(([, c]) => c);
+}
+
+// Is there room to make the next way beside the ways made: a pair the step
+// still accepts, from the tray, put down joined in the cells they leave free?
+// Touching them is fine (D-097). The help says "make another 7 beside it" only
+// then, never "send back" a way already made while there is room.
 export function roomBeside(session: LevelSession): boolean {
   const state = session.history.state;
-  const aside = new Set([...state.bench.keys()].filter((u) => !matOf(session).bench.has(u)));
   const q = session.puzzle.question;
-  if (aside.size === 0 || q.kind !== 'sum_composition') {
+  if (asideCells(session).length === 0 || q.kind !== 'sum_composition') {
     return false;
   }
   const { cols, rows } = state.bounds;
   const origins = Array.from({ length: cols * rows }, (_, i) => ({ x: i % cols, y: Math.floor(i / cols) }));
   const inTray = [...state.groups.values()].filter((g) => g.unitIds.every((u) => !state.bench.has(u)));
-  const clear = (s: BenchState, g: Group) => !g.unitIds.some((u) => [...aside].some((a) => {
-    const c = s.bench.get(u)!;
-    const d = s.bench.get(a)!;
-    return Math.abs(c.x - d.x) + Math.abs(c.y - d.y) === 1;
-  }));
   return q.allowed.some(([a, b]) => {
     const first = inTray.find((g) => groupSize(g) === a);
     const second = inTray.find((g) => g !== first && groupSize(g) === b);
@@ -369,12 +441,12 @@ export function roomBeside(session: LevelSession): boolean {
     }
     return origins.some((o) => {
       const one = apply(state, { type: 'takeGroup', groupId: first.id, origin: o });
-      if (!one.ok || !clear(one.value, first)) {
+      if (!one.ok) {
         return false;
       }
       return origins.some((p) => {
         const two = apply(one.value, { type: 'takeGroup', groupId: second.id, origin: p });
-        return two.ok && clear(two.value, second) && areTouching(two.value, two.value.groups.get(first.id)!, two.value.groups.get(second.id)!);
+        return two.ok && areTouching(two.value, two.value.groups.get(first.id)!, two.value.groups.get(second.id)!);
       });
     });
   });
@@ -425,7 +497,7 @@ export function solvedEquation(session: LevelSession): string | null {
     return null;
   }
   const line = ([a, b]: readonly [number, number]) => `${a} + ${b} = ${a + b}`;
-  const made = standingWays(session.history.state, session.used);
-  const order = (w: StandingWay) => session.used.findIndex((p) => samePair(p, w.parts));
+  const made = madeWays(session.history.state, session.used);
+  const order = (w: MadeWay) => session.used.findIndex((p) => samePair(p, w.parts));
   return [...[...made].sort((a, b) => order(a) - order(b)).map((w) => line(w.parts)), line(parts)].join('\n');
 }

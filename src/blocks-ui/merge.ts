@@ -50,7 +50,14 @@ function corner(cells: ReadonlyArray<Cell>): Cell {
 }
 
 // Every cluster on the mat holding a partner and made of two parts or more.
-export function mergedClusters(state: BenchState): ReadonlyArray<MergedCluster> {
+// `apart`: sets of units that join only among themselves, the rest joining as
+// usual (D-097: two ways to make 7 that touch are two 7s, not one 14).
+export function mergedClusters(state: BenchState, apart: ReadonlyArray<ReadonlyArray<UnitId>> = []): ReadonlyArray<MergedCluster> {
+  if (apart.length > 0) {
+    const taken = new Set(apart.flat());
+    const only = (units: ReadonlyArray<UnitId>): BenchState => ({ ...state, bench: new Map(units.map((u) => [u, state.bench.get(u)!] as const)) });
+    return [...apart, [...state.bench.keys()].filter((u) => !taken.has(u))].flatMap((units) => mergedClusters(only(units)));
+  }
   const groupOf = new Map<UnitId, string>();
   for (const g of state.groups.values()) {
     if (g.unitIds.every((u) => state.bench.has(u))) {

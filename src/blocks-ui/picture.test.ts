@@ -65,3 +65,23 @@ describe('pictureOf', () => {
     expect(pictureOf(p.initial)).toEqual({ blocks: [], origin: { x: 0, y: 0 }, cols: 0, rows: 0 });
   });
 });
+
+describe('D-097: pictureOf keeps the ways of a sum asked several ways apart', () => {
+  test('two ways to make 7 stacked: two pink 7s with a face each, not one 14', () => {
+    const p = puzzle('ch2-n8');
+    const of = (n: number) => [...p.initial.groups.values()].find((g) => g.unitIds.length === n)!;
+    const mat = play(p.initial, [
+      { type: 'takeGroup', groupId: of(3).id, origin: { x: 0, y: 1 } },
+      { type: 'takeGroup', groupId: of(4).id, origin: { x: 3, y: 1 } },
+      { type: 'takeGroup', groupId: of(5).id, origin: { x: 0, y: 0 } },
+      { type: 'takeGroup', groupId: of(2).id, origin: { x: 5, y: 0 } },
+    ]);
+    const one = pictureOf(mat);
+    expect(new Set(one.blocks.map((b) => b.hue))).toEqual(new Set(['n10']));
+    expect(one.blocks.filter((b) => b.face)).toHaveLength(1);
+    const two = pictureOf(mat, [[...of(3).unitIds, ...of(4).unitIds], [...of(5).unitIds, ...of(2).unitIds]]);
+    expect(new Set(two.blocks.map((b) => b.hue))).toEqual(new Set(['n7']));
+    expect(two.blocks.filter((b) => b.face).map((b) => b.cell)).toEqual(expect.arrayContaining([{ x: 0, y: 0 }, { x: 0, y: 1 }]));
+    expect(two.blocks.filter((b) => b.face)).toHaveLength(2);
+  });
+});

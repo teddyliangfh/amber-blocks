@@ -27,9 +27,10 @@ function isHead(cell: Cell, cells: ReadonlyArray<Cell>): boolean {
 // partner in its own number's colour, loose blocks in the colour of the
 // cluster they make (AC-37), one face per partner or cluster on its top-left
 // block; pieces joined into one number are that number's one character, as on
-// a right mat (Phase 20 F1: the 8 brick is one cyan 8). Pure, so the album can
-// draw a mat without the stage's gestures.
-export function pictureOf(state: BenchState): Picture {
+// a right mat (Phase 20 F1: the 8 brick is one cyan 8), each set in `apart`
+// on its own (merge.ts). Pure, so the album can draw a mat without the
+// stage's gestures.
+export function pictureOf(state: BenchState, apart: ReadonlyArray<ReadonlyArray<UnitId>> = []): Picture {
   const grouped = new Map<UnitId, { readonly hue: Hue; readonly cells: ReadonlyArray<Cell> }>();
   for (const g of state.groups.values()) {
     if (g.unitIds.every((u) => state.bench.has(u))) {
@@ -43,7 +44,7 @@ export function pictureOf(state: BenchState): Picture {
     const entry = { hue: hueFor(units.length), cells: units.map((u) => state.bench.get(u) as Cell) };
     units.forEach((u) => loose.set(u, entry));
   }
-  for (const c of mergedClusters(state)) {
+  for (const c of mergedClusters(state, apart)) {
     const entry = { hue: hueFor(c.total), cells: c.cells };
     c.units.forEach((u) => {
       grouped.set(u, entry);

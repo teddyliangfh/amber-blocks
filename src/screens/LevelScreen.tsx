@@ -18,7 +18,7 @@ import { AnswerFeedback } from './AnswerFeedback';
 import { Cloud, SkyCloud } from './Cloud';
 import { Icon } from './icons';
 import type { IconName } from './icons';
-import { atStart, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, matOf, previewCommand, recount, solvedEquation, startSession, undoCommand } from './level-session';
+import { asideCells, atStart, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, matOf, previewCommand, recount, solvedEquation, startSession, undoCommand, waysApart } from './level-session';
 import type { LevelSession } from './level-session';
 import { LevelRecovery } from './LevelRecovery';
 import { useProgress } from './progress-store';
@@ -569,6 +569,7 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
   }, [stageSize, puzzle, objects]);
 
   const order = useMemo(() => (session === null ? new Map<UnitId, number>() : countOrder(session)), [session]);
+  const apart = useMemo(() => (session === null ? [] : waysApart(session)), [session]);
   const guide = useMemo((): AskedHelp | null => (session === null ? null : asks > 0 ? helpAt(session, asks) : pointed ? { ...guidanceFor(session, 1), countUp: false } : null), [session, asks, pointed]);
   const biggest = useMemo(() => (session === null || asks === 0 || !boss ? null : biggestFirst(session)), [session, asks, boss]);
   const spotlight = useMemo(
@@ -688,6 +689,7 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
           onDragActive={onDragActive}
           // Right (after the second beat), the joined pieces become one number (merge.ts MERGE_ON).
           merge={MERGE_ON === 'touch' || (solved && !settling)}
+          apart={apart}
           onJoin={onJoin}
           onFeel={play}
           spotlight={spotlight}
@@ -696,8 +698,9 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
           demoTo={demoTo}
           demoBack={first?.type === 'returnGroup'}
           // A boss's entrance (Phase 21): the answer's outline until it is solved,
-          // a cell lit for each block on the part of the mat being judged.
-          outline={host.entrance && !solved ? { n: targetNumber, lit: matOf(session).bench.size } : undefined}
+          // a cell lit for each block on the part of the mat being judged; past
+          // a first way, off the way made (D-097).
+          outline={host.entrance && !solved ? { n: targetNumber, lit: matOf(session).bench.size, made: asideCells(session) } : undefined}
           wink={counting.complete ? counts : 0}
         />
       ) : null}
