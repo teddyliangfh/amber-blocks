@@ -1,9 +1,10 @@
-import { groupSize } from '../core';
+import { clusters, groupSize } from '../core';
 import type { BenchState, Question } from '../core';
 import type { Puzzle } from './schema';
 
 // A stop asked more than once on the same material: the pictures of a
-// sequence, or a sum asked several ways ("two ways to make 7", Phase 19).
+// sequence, a sum asked several ways ("two ways to make 7", Phase 19), a
+// split asked several ways or a countdown's counts (Phase 22).
 // Shared by validate() and the level session so both read the steps the same way.
 
 export type Pair = readonly [number, number];
@@ -19,18 +20,33 @@ export function stepCount(puzzle: Puzzle): number {
 }
 
 // The question at `step`: a sequence's own picture; a sum asked several ways
-// accepts only the allowed pairs earlier steps did not use (`used`).
+// accepts only the allowed pairs earlier steps did not use (`used`); a split
+// asked several ways refuses the splits earlier steps made.
 export function questionAt(puzzle: Puzzle, step: number, used: ReadonlyArray<Pair>): Question {
   const q = puzzle.steps?.[step] ?? puzzle.question;
-  if (q.kind !== 'sum_composition' || used.length === 0) {
+  if (used.length === 0) {
     return q;
   }
-  return { ...q, allowed: q.allowed.filter((p) => !used.some((u) => samePair(u, p))) };
+  if (q.kind === 'sum_composition') {
+    return { ...q, allowed: q.allowed.filter((p) => !used.some((u) => samePair(u, p))) };
+  }
+  if (q.kind === 'split') {
+    return { ...q, except: [...(q.except ?? []), ...used] };
+  }
+  return q;
 }
 
-// The sizes of the two partners on the bench, when exactly two are there: on a
-// right sum they are the way it was made.
+// The two parts of a way on the bench: the sizes of the two partners there
+// (on a right sum, the way it was made), or, with no partner on the bench, of
+// the two piles of single blocks (a split, Phase 22); null otherwise.
 export function benchPair(state: BenchState): Pair | null {
   const sizes = [...state.groups.values()].filter((g) => g.unitIds.every((u) => state.bench.has(u))).map(groupSize);
-  return sizes.length === 2 ? [sizes[0]!, sizes[1]!] : null;
+  if (sizes.length === 2) {
+    return [sizes[0]!, sizes[1]!];
+  }
+  if (sizes.length === 0) {
+    const piles = clusters(state);
+    return piles.length === 2 ? [piles[0]!.unitIds.length, piles[1]!.unitIds.length] : null;
+  }
+  return null;
 }

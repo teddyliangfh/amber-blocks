@@ -141,24 +141,123 @@ function assertOnMat(spec: Extract<QuestionSpec, { kind: 'sum_composition' }>, p
   if (ids.length !== row.length || initial.bench.size !== total || placed.some((g, k) => g === undefined || groupSize(g) !== row[k] || !g.unitIds.every((u) => initial.bench.has(u)))) {
     throw new Error(`content: ${row.join(', ')} must be all there is on the mat at the start`);
   }
+  assertJoinedRow(initial, placed as ReadonlyArray<Group>);
+}
+
+// The partners on the mat start in one joined row, left to right.
+function assertJoinedRow(initial: BenchState, parts: ReadonlyArray<Group>): void {
   const left = (g: Group) => Math.min(...g.unitIds.map((u) => initial.bench.get(u)!.x));
-  const parts = placed as ReadonlyArray<Group>;
   if (clusters(initial).length !== 1 || parts.some((g, k) => k > 0 && (!areTouching(initial, parts[k - 1]!, g) || left(parts[k - 1]!) >= left(g)))) {
     throw new Error('content: the partners on the mat must start in one joined row, left to right');
+  }
+}
+
+// Pull apart (Phase 22): exactly the blocks to split, all on the mat in one
+// row, nothing else; two parts this round; no more ways than there are
+// different splits (1 + 4 and 4 + 1 are one).
+function assertSplit(spec: Extract<QuestionSpec, { kind: 'split' }>, puzzle: Puzzle): void {
+  const { question, initial } = puzzle;
+  if (question.kind !== 'split' || question.total !== spec.total || question.parts !== spec.parts || question.except !== undefined) {
+    throw new Error('content: a split question does not match its spec');
+  }
+  if (!Number.isInteger(spec.total) || spec.total < 2) {
+    throw new Error(`content: a split needs at least 2 blocks, got ${spec.total}`);
+  }
+  if (spec.parts !== 2) {
+    throw new Error(`content: a split is into two parts this round (design §1.1), not ${spec.parts}`);
+  }
+  const ways = spec.ways ?? 1;
+  if (!Number.isInteger(ways) || ways < 1 || (puzzle.ways ?? 1) !== ways) {
+    throw new Error(`content: ways must be a positive integer the puzzle carries, got ${spec.ways}`);
+  }
+  if (ways > Math.floor(spec.total / 2)) {
+    throw new Error(`content: ${spec.total} splits in two only ${Math.floor(spec.total / 2)} way(s), not ${ways}`);
+  }
+  if (initial.units.size !== spec.total || initial.bench.size !== spec.total) {
+    throw new Error(`content: a split of ${spec.total} starts with exactly ${spec.total} blocks, all on the mat`);
+  }
+  if (initial.groups.size > 0) {
+    throw new Error('content: a split is of single blocks');
+  }
+  if (clusters(initial).length !== 1) {
+    throw new Error('content: a split starts as one row');
+  }
+}
+
+// Take away (Phase 22): exactly the blocks it starts with, all on the mat,
+// and at least one left when the taking is done (never down to nothing,
+// design §1.1). From partners: they make the start, start in one joined row,
+// and exactly one set of them (by sizes) adds up to what goes, so there is one
+// right thing to send home. A countdown is of single blocks.
+function assertTakeAway(spec: Extract<QuestionSpec, { kind: 'take_away' }>, puzzle: Puzzle): void {
+  const { question, initial } = puzzle;
+  if (!Number.isInteger(spec.start) || !Number.isInteger(spec.take) || spec.take < 1 || spec.start - spec.take < 1) {
+    throw new Error(`content: taking ${spec.take} from ${spec.start} leaves nothing to count`);
+  }
+  if (puzzle.takeAway === undefined || puzzle.takeAway.start !== spec.start || puzzle.takeAway.take !== spec.take) {
+    throw new Error('content: a take-away puzzle carries its start and take');
+  }
+  const first = spec.steps?.[0] ?? spec.take;
+  if (question.kind !== 'quantity' || question.target !== spec.start - first) {
+    throw new Error(`content: a take-away is judged as the count left, ${spec.start - first}`);
+  }
+  if (initial.units.size !== spec.start || initial.bench.size !== spec.start) {
+    throw new Error(`content: taking away from ${spec.start} starts with exactly ${spec.start} blocks, all on the mat`);
+  }
+  const row = spec.onMat;
+  if (row === undefined) {
+    if (initial.groups.size > 0 || puzzle.onMat !== undefined) {
+      throw new Error('content: a take-away without `onMat` is of single blocks');
+    }
+    return;
+  }
+  if (spec.steps !== undefined) {
+    throw new Error('content: a countdown is of single blocks');
+  }
+  if (row.reduce((a, b) => a + b, 0) !== spec.start) {
+    throw new Error(`content: ${row.join(' + ')} on the mat is not ${spec.start}`);
+  }
+  const ids = puzzle.onMat ?? [];
+  const placed = ids.map((id) => initial.groups.get(id));
+  if (ids.length !== row.length || initial.groups.size !== row.length || placed.some((g, k) => g === undefined || groupSize(g) !== row[k] || !g.unitIds.every((u) => initial.bench.has(u)))) {
+    throw new Error(`content: ${row.join(', ')} must be all there is on the mat at the start`);
+  }
+  assertJoinedRow(initial, placed as ReadonlyArray<Group>);
+  const sets = new Set(
+    row
+      .reduce<ReadonlyArray<ReadonlyArray<number>>>((all, n) => [...all, ...all.map((set) => [...set, n])], [[]])
+      .filter((set) => set.reduce((a, b) => a + b, 0) === spec.take)
+      .map((set) => [...set].sort((a, b) => a - b).join('+')),
+  );
+  if (sets.size !== 1) {
+    throw new Error(`content: ${sets.size} ways to take ${spec.take} from ${row.join(' + ')}`);
   }
 }
 
 export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
   const { question, initial, solution } = puzzle;
   assertInvariants(initial);
-  // Only a given partner, or partners to send back, start on the mat (checked with the sum below).
-  if (initial.bench.size !== 0 && !(spec.kind === 'sum_composition' && (spec.given !== undefined || spec.onMat !== undefined))) {
+  // Only a given partner, partners to send back, or a take-away / split stop's
+  // blocks start on the mat (each checked with its spec below).
+  const preset = spec.kind === 'split' || spec.kind === 'take_away';
+  if (initial.bench.size !== 0 && !preset && !(spec.kind === 'sum_composition' && (spec.given !== undefined || spec.onMat !== undefined))) {
     throw new Error('content: material must start in the tray');
   }
 
   switch (question.kind) {
+    case 'split': {
+      if (spec.kind !== 'split') {
+        throw new Error(`content: question ${question.kind} does not match spec ${spec.kind}`);
+      }
+      assertSplit(spec, puzzle);
+      break;
+    }
     case 'quantity':
     case 'quantity_shape': {
+      if (spec.kind === 'take_away') {
+        assertTakeAway(spec, puzzle);
+        break;
+      }
       if (spec.kind !== 'quantity' && spec.kind !== 'quantity_shape') {
         throw new Error(`content: question ${question.kind} does not match spec ${spec.kind}`);
       }
@@ -225,11 +324,14 @@ export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
   if (puzzle.given !== undefined && !(spec.kind === 'sum_composition' && spec.given !== undefined)) {
     throw new Error('content: a given partner comes from a sum spec with `given`');
   }
-  if (puzzle.ways !== undefined && spec.kind !== 'sum_composition') {
-    throw new Error('content: ways come from a sum spec');
+  if (puzzle.ways !== undefined && spec.kind !== 'sum_composition' && spec.kind !== 'split') {
+    throw new Error('content: ways come from a sum or split spec');
   }
-  if (puzzle.onMat !== undefined && spec.kind !== 'sum_composition') {
-    throw new Error('content: partners on the mat come from a sum spec');
+  if (puzzle.onMat !== undefined && spec.kind !== 'sum_composition' && spec.kind !== 'take_away') {
+    throw new Error('content: partners on the mat come from a sum or take-away spec');
+  }
+  if ((puzzle.takeAway !== undefined) !== (spec.kind === 'take_away')) {
+    throw new Error('content: a take-away puzzle comes from a take-away spec');
   }
 
   // Putting everything out is how a child finds "too many": it must never bounce.
@@ -249,8 +351,23 @@ export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
         throw new Error('content: every step of a sequence is a shape of the same count');
       }
     }
+  } else if (spec.kind === 'take_away' && spec.steps !== undefined) {
+    // A countdown: the counts left after each amount, at least two, adding up to the take.
+    if (steps.length !== spec.steps.length || steps.length < 2) {
+      throw new Error('content: a countdown takes away in at least two steps');
+    }
+    if (spec.steps.some((k) => !Number.isInteger(k) || k < 1) || spec.steps.reduce((a, b) => a + b, 0) !== spec.take) {
+      throw new Error(`content: steps ${spec.steps.join(' + ')} do not add up to ${spec.take}`);
+    }
+    let left = spec.start;
+    steps.forEach((step, i) => {
+      left -= spec.steps![i]!;
+      if (step.kind !== 'quantity' || step.target !== left) {
+        throw new Error('content: every step of a countdown is the count left');
+      }
+    });
   } else if (puzzle.steps !== undefined) {
-    throw new Error('content: steps come from a sequence spec');
+    throw new Error('content: steps come from a sequence or countdown spec');
   }
 
   // A sum asked several ways: each way passes once, with a pair the earlier

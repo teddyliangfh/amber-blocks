@@ -29,7 +29,9 @@ export type SfxName =
   // Pieces joining into one number (Phase 20 F1, and free play's groups
   // changing size): each part's counting note, then the total's with a
   // shimmer on top. `step` is the total, `parts` the parts.
-  | 'join';
+  | 'join'
+  // The countdown's last block launches (Phase 22): a run of notes going up.
+  | 'launch';
 
 export interface Sfx {
   readonly play: (name: SfxName, step?: number, parts?: ReadonlyArray<number>) => void;
@@ -79,6 +81,12 @@ export function notesFor(name: SfxName, step = 1, parts: ReadonlyArray<number> =
         { f: total * 2, at: end + 0.02, dur: 0.26, type: 'sine', gain: 0.18 },
       ];
     }
+    case 'launch':
+      // Do re mi fa so la ti do, fast and rising, then a long high note as it flies.
+      return [
+        ...[1, 2, 3, 4, 5, 6, 7, 8].map((n, i) => ({ f: countPitch(n), at: i * 0.07, dur: 0.09, type: 'triangle' as const, gain: 0.4 })),
+        { f: countPitch(8), to: countPitch(15), at: 0.56, dur: 0.5, type: 'sine', gain: 0.3 },
+      ];
     case 'pickup':
       return [{ f: 420, to: 760, at: 0, dur: 0.09, type: 'sine', gain: 0.5 }];
     case 'drop':

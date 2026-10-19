@@ -20,14 +20,17 @@ function completeAll(state: ProgressState, ids: ReadonlyArray<string>): Progress
 describe('unlock', () => {
   test('map order flattens chapters in order', () => {
     expect(mapOrder().map((e) => e.nodeId).slice(0, 5)).toEqual(['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5']);
-    expect(mapOrder()).toHaveLength(24);
+    expect(mapOrder()).toHaveLength(32);
     expect(nextNodeOf(nodeId('ch1-n12'))).toBe('ch2-n1');
     // Phase 21: the new stops sit between the old ones.
     expect(nextNodeOf(nodeId('ch2-n3'))).toBe('ch2-n9');
     expect(nextNodeOf(nodeId('ch2-n7'))).toBe('ch2-n12');
     expect(nextNodeOf(nodeId('ch2-n12'))).toBe('ch2-n8');
-    expect(nextNodeOf(nodeId('ch2-n8'))).toBeNull();
+    // Phase 22: Take-away Island follows Join Island.
+    expect(nextNodeOf(nodeId('ch2-n8'))).toBe('ch3-n1');
+    expect(nextNodeOf(nodeId('ch3-n8'))).toBeNull();
     expect(chapterOf(nodeId('ch2-n1')).id).toBe('ch2');
+    expect(chapterOf(nodeId('ch3-n5')).id).toBe('ch3');
     expect(() => nextNodeOf(nodeId('nope'))).toThrow(/unknown node/);
     expect(() => chapterOf(nodeId('nope'))).toThrow(/unknown node/);
   });
@@ -54,8 +57,14 @@ describe('unlock', () => {
     expect(statusOf(island, nodeId('ch2-n1'))).toBe('available');
     expect(chapterCompletion(island, chapterId('ch1'))).toEqual({ done: 12, total: 12 });
     expect(defaultCurrent({ ...island, current: null })).toBe('ch2-n1');
-    const all = completeAll(island, ['ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8']);
-    expect(defaultCurrent({ ...all, current: null })).toBe('ch2-n8');
+    const joined = completeAll(island, ['ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8']);
+    // Phase 22: Join Island's boss opens Take-away Island.
+    expect(statusOf(joined, nodeId('ch3-n1'))).toBe('available');
+    expect(statusOf(joined, nodeId('ch3-n2'))).toBe('locked');
+    expect(defaultCurrent({ ...joined, current: null })).toBe('ch3-n1');
+    const all = completeAll(joined, ['ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8']);
+    expect(chapterCompletion(all, chapterId('ch3'))).toEqual({ done: 8, total: 8 });
+    expect(defaultCurrent({ ...all, current: null })).toBe('ch3-n8');
   });
 
   test('AC-46: saved work without completion opens nothing; entering marks in-progress', () => {
@@ -67,7 +76,7 @@ describe('unlock', () => {
     expect(statusOf(entered.value, nodeId('ch1-n2'))).toBe('locked');
     expect(defaultCurrent({ ...entered.value, current: null })).toBe('ch1-n1');
     expect(defaultCurrent(entered.value)).toBe('ch1-n1');
-    expect(CHAPTERS).toHaveLength(2);
+    expect(CHAPTERS).toHaveLength(3);
   });
 
   test('2026-10-15 review M: a parent starts play at a stop: only current moves, nothing is finished, the map still opens in order', () => {

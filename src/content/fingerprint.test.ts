@@ -22,7 +22,9 @@ import type { Puzzle } from './schema';
 // Number Island and Join Island 1–4 included, is byte-identical to version 5.
 // Version 7 (2026-10-18, Phase 21) added Join Island n9 – n12 between the old
 // stops; all twenty stops before are byte-identical to version 6.
-const FINGERPRINT_VERSION = 7;
+// Version 8 (2026-10-19, Phase 22) added Take-away Island (ch3-n1 – n8) after
+// Join Island; all twenty-four stops before are byte-identical to version 7.
+const FINGERPRINT_VERSION = 8;
 const FINGERPRINTS: Readonly<Record<string, string>> = {
   'ch1-n1': 'df3b63c2',
   'ch1-n2': '795c9b41',
@@ -48,6 +50,14 @@ const FINGERPRINTS: Readonly<Record<string, string>> = {
   'ch2-n10': '3ec25ced',
   'ch2-n11': '808c3608',
   'ch2-n12': '53dc5454',
+  'ch3-n1': '81eccc44',
+  'ch3-n2': '8d97d408',
+  'ch3-n3': '46e7ebb8',
+  'ch3-n4': 'b6b0991c',
+  'ch3-n5': 'fc7dae1d',
+  'ch3-n6': '2e58cc53',
+  'ch3-n7': '93f43e80',
+  'ch3-n8': 'f87bbf98',
 };
 
 const REFS = [1, 7, 4242].flatMap((seed) => [0, 1, 2].map((attemptVariant) => ({ seed, attemptVariant })));
@@ -71,6 +81,9 @@ function describePuzzle(p: Puzzle): string {
     ...(p.given === undefined ? [] : [p.given, [...s.bench.entries()]]),
     // And partners on the mat to send back (Phase 21).
     ...(p.onMat === undefined ? [] : [p.onMat, [...s.bench.entries()]]),
+    // And a take-away's start and take, and a split's / take-away's blocks on the mat (Phase 22).
+    ...(p.takeAway === undefined ? [] : [p.takeAway]),
+    ...(p.onMat === undefined && s.bench.size > 0 && p.given === undefined ? [[...s.bench.entries()]] : []),
   ]);
 }
 

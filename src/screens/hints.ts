@@ -1,9 +1,21 @@
-import { copyKey } from '../content';
-import type { CopyKey, Puzzle } from '../content';
+import { CHAPTERS, copyKey, nodeId } from '../content';
+import type { CopyKey, NodeId, Puzzle } from '../content';
 import { DEFAULT_SYMMETRY, areTouching, clusters, variants } from '../core';
 import type { BenchState, Cell, Group, Question, UnitId } from '../core';
-import { matOf, onlyGiven, onlyOnMat, roomBeside, sameWayAgain, solvedParts } from './level-session';
+import { demoMove, matOf, onlyGiven, onlyOnMat, onlyPreset, roomBeside, sameWayAgain, solvedParts, takeAwayAt } from './level-session';
 import type { LevelSession } from './level-session';
+
+// On a take-away of single blocks, the card says how many more to send home
+// ("1 more to go home") up to and including this stop in map order; after it
+// (and on every take-away from partners) only "not 2 gone yet", as the free
+// sums do not say the gap (D-078). Phase 22, design §9 #8; a default for Ted.
+export const GAP_TOLD_UNTIL: NodeId = nodeId('ch3-n5');
+
+function gapTold(session: LevelSession): boolean {
+  const order = CHAPTERS.flatMap((c) => c.nodes.map((n) => n.id as string));
+  const at = order.indexOf(session.whole.ref.nodeId);
+  return at === -1 || at <= order.indexOf(GAP_TOLD_UNTIL);
+}
 
 // What the help button says, chosen from the current verdict and from what is
 // actually on the bench and in the tray, so a hint never asks for a move the
@@ -21,17 +33,141 @@ export interface AnswerFeedback {
 }
 
 // The numbers the stop's task line needs: the two to put together, the
-// partner already on the mat and the sum (Phase 19), or the number to make.
+// partner already on the mat and the sum (Phase 19), the start and how many go
+// home (a take-away, Phase 22: its first step), a split's whole, or the number to make.
 export function promptParams(puzzle: Puzzle): Record<string, number> {
   const q = puzzle.question;
   if (q.kind === 'addition_exact') {
     return { a: q.operands[0], b: q.operands[1] };
   }
+  const away = puzzle.takeAway;
+  if (away !== undefined) {
+    const first = puzzle.steps?.[0];
+    return { n: away.start, k: first?.kind === 'quantity' ? away.start - first.target : away.take };
+  }
   const given = puzzle.given === undefined ? undefined : puzzle.initial.groups.get(puzzle.given);
   if (q.kind === 'sum_composition' && given !== undefined) {
     return { a: given.unitIds.length, n: q.sum };
   }
-  return { n: q.kind === 'sum_composition' ? q.sum : q.target };
+  return { n: q.kind === 'sum_composition' ? q.sum : q.kind === 'split' ? q.total : q.target };
+}
+
+// The task as the cloud says it now: on a countdown, this step's start and
+// take ("4 here. Send 1 home"); elsewhere the stop's own line.
+export function promptLine(session: LevelSession): Line {
+  const { whole } = session;
+  const away = takeAwayAt(session);
+  return { key: whole.prompt, params: away === null ? promptParams(whole) : { n: away.start, k: away.take } };
+}
+
+// The answer set of a take-away from partners (Phase 22): the sizes that go
+// home (validate() makes sure one set of sizes is the take), matched against
+// the partners now in the tray. `wrong`: partners sent home that are not of
+// those sizes; `due`: sizes still to send, with a partner of each on the mat.
+function partnerTakeAway(session: LevelSession): { readonly wrong: ReadonlyArray<Group>; readonly due: ReadonlyArray<Group> } | null {
+  const { whole } = session;
+  const away = whole.takeAway;
+  if (away === undefined || whole.onMat === undefined) {
+    return null;
+  }
+  const state = session.history.state;
+  const dealt = whole.onMat.map((id) => state.groups.get(id)!);
+  const sizes = dealt.map(size);
+  const sets = sizes.reduce<ReadonlyArray<ReadonlyArray<number>>>((all, n) => [...all, ...all.map((set) => [...set, n])], [[]]);
+  const answer = [...(sets.find((set) => set.reduce((a, b) => a + b, 0) === away.take) ?? [])];
+  const wrong: Group[] = [];
+  for (const g of dealt.filter((x) => !x.unitIds.every((u) => state.bench.has(u)))) {
+    const i = answer.indexOf(size(g));
+    if (i === -1) {
+      wrong.push(g);
+    } else {
+      answer.splice(i, 1);
+    }
+  }
+  const onMat = dealt.filter((x) => x.unitIds.every((u) => state.bench.has(u)));
+  const taken = new Set<string>();
+  const due = answer.flatMap((n) => {
+    const g = onMat.find((x) => size(x) === n && !taken.has(x.id));
+    if (g === undefined) {
+      return [];
+    }
+    taken.add(g.id);
+    return [g];
+  });
+  return { wrong, due };
+}
+
+// The full help on a take-away from partners: bring the wrong one back and
+// send the right one; or just the one of those that is left to do.
+function partnerTakeAwayLine(session: LevelSession): Guidance | null {
+  const plan = partnerTakeAway(session);
+  if (plan === null) {
+    return null;
+  }
+  const [wrong] = plan.wrong;
+  const [due] = plan.due;
+  if (wrong !== undefined && due !== undefined) {
+    return { line: { key: copyKey('hint.call.back'), params: { a: size(wrong), b: size(due) } }, focus: { objects: [wrong.id, due.id], template: false } };
+  }
+  if (wrong !== undefined) {
+    return { line: { key: copyKey('hint.call.back.one'), params: { a: size(wrong) } }, focus: { objects: [wrong.id], template: false } };
+  }
+  if (due !== undefined) {
+    return { line: { key: copyKey('hint.send'), params: { a: size(due) } }, focus: { objects: [due.id], template: false } };
+  }
+  return null;
+}
+
+// The cards of a split (Phase 22, design §5.1): the task while the row is
+// whole; "split it another way" past a split made; blocks in the tray are a
+// correction (keep them all here); more than two piles is building.
+function splitFeedback(session: LevelSession, line: (name: string, params?: Readonly<Record<string, number>>) => Line): AnswerFeedback {
+  const { verdict } = session;
+  const q = session.puzzle.question;
+  const total = q.kind === 'split' ? q.total : 0;
+  const again = { tone: 'building' as const, title: line('prompt.split.again'), detail: line('hint.split.another') };
+  if (onlyPreset(session)) {
+    return session.used.length > 0 ? again : { tone: 'start', title: line('feedback.start'), detail: line('prompt.split', { n: total }) };
+  }
+  if (verdict.reason === 'split-used') {
+    return again;
+  }
+  if (verdict.reason === 'count-mismatch') {
+    return { tone: 'adjust', title: line('feedback.split.keep'), detail: line('hint.bring.back', { k: total - verdict.benchCount }) };
+  }
+  return { tone: 'building', title: line('feedback.split.three', { k: clusters(session.history.state).length }), detail: line('hint.split.two') };
+}
+
+// The cards of a take-away (Phase 22, design §5.2): the task while nothing has
+// gone; a countdown's next step; more to send (the gap told on the first
+// stops, GAP_TOLD_UNTIL; from partners never); too many sent (bring some
+// back), or the wrong partner sent (bring it back, send the right one).
+function takeAwayFeedback(session: LevelSession, line: (name: string, params?: Readonly<Record<string, number>>) => Line): AnswerFeedback {
+  const { verdict } = session;
+  const away = takeAwayAt(session)!;
+  const left = away.start - away.take;
+  const count = verdict.benchCount;
+  const partners = session.whole.onMat !== undefined;
+  const task = promptLine(session);
+  if (onlyPreset(session) || onlyOnMat(session)) {
+    return { tone: 'start', title: line('feedback.start'), detail: task };
+  }
+  if (session.step > 0 && count === away.start) {
+    return { tone: 'building', title: line('prompt.countdown'), detail: task };
+  }
+  if (count > left) {
+    if (partners) {
+      return { tone: 'building', title: line('feedback.send.notyet', { k: away.take }), detail: partnerTakeAwayLine(session)?.line ?? task };
+    }
+    const gap = count - left;
+    return gapTold(session)
+      ? { tone: 'building', title: line('feedback.send.more', { k: gap }), detail: line('hint.send.home', { k: gap }) }
+      : { tone: 'building', title: line('feedback.send.notyet', { k: away.take }), detail: task };
+  }
+  if (partners) {
+    return { tone: 'adjust', title: line('feedback.send.wrong', { x: away.start - count, k: away.take }), detail: partnerTakeAwayLine(session)?.line ?? task };
+  }
+  return { tone: 'adjust', title: line('feedback.send.toomany', { k: left - count }), detail: line('hint.bring.back', { k: left - count }) };
 }
 
 // Feedback describes a committed answer, not an in-flight drag. An incomplete
@@ -40,10 +176,17 @@ export function promptParams(puzzle: Puzzle): Record<string, number> {
 export function feedbackFor(session: LevelSession): AnswerFeedback {
   const { puzzle, verdict } = session;
   const q = puzzle.question;
-  const target = q.kind === 'addition_exact' ? q.operands[0] + q.operands[1] : q.kind === 'sum_composition' ? q.sum : q.target;
+  const target = q.kind === 'addition_exact' ? q.operands[0] + q.operands[1] : q.kind === 'sum_composition' ? q.sum : q.kind === 'split' ? q.total : q.target;
   const line = (name: string, params: Readonly<Record<string, number>> = {}): Line => ({ key: copyKey(name), params });
   if (verdict.matched) {
     return { tone: 'success', title: line('feedback.success'), detail: matchedFeedback(session) };
+  }
+  // Take-away Island (Phase 22) has its own cards.
+  if (q.kind === 'split') {
+    return splitFeedback(session, line);
+  }
+  if (session.whole.takeAway !== undefined) {
+    return takeAwayFeedback(session, line);
   }
   // One way made on a stop asked two ways, still on the mat (alone, or left
   // standing while the next way is built beside it): build another (like "now
@@ -175,6 +318,15 @@ function grouped(state: BenchState): ReadonlySet<UnitId> {
 // matching the badge (2 + 3 = 5), not just the total.
 export function matchedFeedback(session: LevelSession): Line {
   const q = session.puzzle.question;
+  // A take-away reads as it happened (Phase 22): "5 take away 2 leaves 3"; a split names its piles.
+  const away = takeAwayAt(session);
+  if (away !== null) {
+    return { key: copyKey('feedback.matched.take_away'), params: { n: away.start, k: away.take, r: away.start - away.take } };
+  }
+  if (q.kind === 'split') {
+    const parts = solvedParts(session);
+    return parts === null ? { key: copyKey('feedback.matched.quantity'), params: { n: q.total } } : { key: copyKey('feedback.matched.split'), params: { n: q.total, a: parts[0], b: parts[1] } };
+  }
   if (q.kind === 'quantity' || q.kind === 'quantity_shape') {
     // The last picture of a stop in steps: the same blocks, a new shape (Phase 20, F5).
     if (session.step > 0 && session.whole.steps !== undefined) {
@@ -285,6 +437,10 @@ export function hintFor(session: LevelSession): Line {
   if (verdict.matched) {
     return matchedFeedback(session);
   }
+  // Take-away Island's cards carry their own line (Phase 22).
+  if (q.kind === 'split' || session.whole.takeAway !== undefined) {
+    return feedbackFor(session).detail;
+  }
   switch (q.kind) {
     case 'quantity':
     case 'quantity_shape':
@@ -367,6 +523,25 @@ function lookHere(session: LevelSession): AnswerFocus {
     return NO_FOCUS;
   }
   const template = puzzle.question.kind === 'quantity_shape' && (verdict.benchCount === 0 || (verdict.reason === 'shape-mismatch' && shapeInReach(session)));
+  // A split (Phase 22): the whole row while it is whole; the smallest pile when
+  // there are too many; the blocks in the tray when some went home. A take-away
+  // from partners: the partners on the mat (and their badges).
+  if (puzzle.question.kind === 'split') {
+    if (onlyPreset(session)) {
+      return { objects: [...state.bench.keys()], template: false };
+    }
+    if (verdict.reason === 'parts-mismatch') {
+      const smallest = clusters(state).reduce((a, b) => (b.unitIds.length < a.unitIds.length ? b : a));
+      return { objects: [...smallest.unitIds], template: false };
+    }
+    if (verdict.reason === 'count-mismatch') {
+      return { objects: state.tray.flatMap((t) => (t.unitId === null ? [] : [t.unitId])), template: false };
+    }
+    return NO_FOCUS;
+  }
+  if (session.whole.takeAway !== undefined && session.whole.onMat !== undefined) {
+    return { objects: benchPartners(state).map((g) => g.id), template: false };
+  }
   if (verdict.reason === 'not-one-cluster') {
     // Everything outside the biggest group of touching blocks.
     const parts = clusters(state).map((c) => c.unitIds);
@@ -536,7 +711,7 @@ function sameSum(session: LevelSession): Guidance | null {
   const q = session.puzzle.question;
   const state = matOf(session);
   const bench = benchPartners(state);
-  if (q.kind === 'quantity' || q.kind === 'quantity_shape' || bench.length !== 2 || !areTouching(state, bench[0]!, bench[1]!)) {
+  if (q.kind === 'quantity' || q.kind === 'quantity_shape' || q.kind === 'split' || bench.length !== 2 || !areTouching(state, bench[0]!, bench[1]!)) {
     return null;
   }
   const plan = pairPlan(state, q.kind === 'addition_exact' ? [q.operands] : q.allowed);
@@ -550,12 +725,71 @@ function sameSum(session: LevelSession): Guidance | null {
 // partners that make the total too (Phase 20).
 // The opening of a "send the extra away" stop asks too (Phase 21): it is too
 // many, and the help climbs to which one to send back.
+// A split's and a take-away's openings and building states ask too (Phase
+// 22): the help climbs from the task to the move (pull the last block away;
+// send 2 home, 3 stay; bring the 4 back, send the 2).
 export function asksForHelp(session: LevelSession, f: AnswerFeedback = feedbackFor(session)): boolean {
+  const takeAwayIsland = session.puzzle.question.kind === 'split' || session.whole.takeAway !== undefined;
   return (
     f.tone === 'adjust' ||
     onlyOnMat(session) ||
-    (f.tone === 'building' && (sameWayAgain(session) || session.whole.given !== undefined || session.whole.onMat !== undefined || f.title.key === copyKey('feedback.same-sum')))
+    onlyPreset(session) ||
+    (f.tone === 'building' && (takeAwayIsland || sameWayAgain(session) || session.whole.given !== undefined || session.whole.onMat !== undefined || f.title.key === copyKey('feedback.same-sum')))
   );
+}
+
+// The whole help on a split (Phase 22): the last block to pull away; past a
+// split made, the block whose move makes a new one; a pile too many: push the
+// smallest back; blocks in the tray: how many to bring back.
+function splitPlan(session: LevelSession): Guidance | null {
+  const q = session.puzzle.question;
+  const { verdict } = session;
+  const state = session.history.state;
+  if (q.kind !== 'split') {
+    return null;
+  }
+  const move = demoMove(session);
+  const mover = move?.type === 'move' ? [move.unitId as string] : [];
+  if (onlyPreset(session)) {
+    return session.used.length > 0
+      ? { line: { key: copyKey('hint.split.another'), params: {} }, focus: { objects: mover, template: false } }
+      : { line: { key: copyKey('hint.pull.right'), params: {} }, focus: { objects: mover, template: false } };
+  }
+  if (verdict.reason === 'split-used') {
+    return { line: { key: copyKey('hint.split.another'), params: {} }, focus: { objects: [], template: false } };
+  }
+  if (verdict.reason === 'count-mismatch') {
+    return { line: { key: copyKey('hint.bring.back'), params: { k: q.total - verdict.benchCount } }, focus: { objects: state.tray.flatMap((t) => (t.unitId === null ? [] : [t.unitId])), template: false } };
+  }
+  const smallest = clusters(state).reduce((a, b) => (b.unitIds.length < a.unitIds.length ? b : a));
+  return { line: { key: copyKey('hint.split.two'), params: {} }, focus: { objects: [...smallest.unitIds], template: false } };
+}
+
+// The whole help on a take-away (Phase 22): of single blocks, how many to send
+// and how many stay (lighting the blocks to send, from the right), or how many
+// to bring back (lighting them in the tray); from partners, partnerTakeAwayLine.
+function takeAwayPlan(session: LevelSession): Guidance | null {
+  const away = takeAwayAt(session);
+  if (away === null) {
+    return null;
+  }
+  if (session.whole.onMat !== undefined) {
+    return partnerTakeAwayLine(session);
+  }
+  const state = session.history.state;
+  const left = away.start - away.take;
+  const count = state.bench.size;
+  if (count > left) {
+    const k = count - left;
+    const fromRight = [...state.bench.entries()].sort(([, a], [, b]) => b.x - a.x || b.y - a.y).map(([u]) => u as string);
+    return { line: { key: copyKey('hint.send.home.left'), params: { k, r: left } }, focus: { objects: fromRight.slice(0, k), template: false } };
+  }
+  if (count < left) {
+    const k = left - count;
+    const inTray = state.tray.flatMap((t) => (t.unitId === null ? [] : [t.unitId as string]));
+    return { line: { key: copyKey('hint.bring.back'), params: { k } }, focus: { objects: inTray.slice(-k), template: false } };
+  }
+  return null;
 }
 
 // The way made stands on its own and nothing else is on the mat: make the
@@ -597,7 +831,11 @@ export function guidanceFor(session: LevelSession, level: 1 | 2): Guidance {
   // A shape from partners plans towards partners that can make the picture.
   const accepts = q.kind === 'quantity_shape' ? (shapes: ReadonlyArray<ReadonlyArray<Cell>>, loose: number) => covers(shapes, loose, q) : undefined;
   const plan =
-    q.kind === 'quantity' || q.kind === 'quantity_shape'
+    q.kind === 'split'
+      ? splitPlan(session)
+      : session.whole.takeAway !== undefined
+        ? takeAwayPlan(session)
+        : q.kind === 'quantity' || q.kind === 'quantity_shape'
       ? verdict.reason === 'count-mismatch' || (verdict.reason === 'shape-mismatch' && !shapeInReach(session))
         ? quantityPlan(state, q.target, accepts)
         : null
@@ -643,6 +881,18 @@ function sendOnly(full: Guidance): Guidance | null {
   if (key === copyKey('hint.stuck.named')) {
     return { line: { key: copyKey('hint.stuck.block'), params: {} }, focus: { objects: full.focus.objects.slice(0, -1), template: full.focus.template } };
   }
+  // Take-away Island (Phase 22, design §5.5): "send 2 home" before "send 2
+  // home, 3 stay"; "bring the 4 back" before "bring the 4 back, send the 2";
+  // "pull one block away" before "pull the last block away".
+  if (key === copyKey('hint.send.home.left')) {
+    return { line: { key: copyKey('hint.send.home'), params: { k: params.k! } }, focus: full.focus };
+  }
+  if (key === copyKey('hint.call.back') && first !== undefined) {
+    return { line: { key: copyKey('hint.call.back.one'), params: { a: params.a! } }, focus: { objects: [first], template: full.focus.template } };
+  }
+  if (key === copyKey('hint.pull.right')) {
+    return { line: { key: copyKey('hint.pull'), params: {} }, focus: full.focus };
+  }
   return null;
 }
 
@@ -664,7 +914,9 @@ export function helpAt(session: LevelSession, asks: number, steps: number = HELP
   // stands apart, the two to join, else the partners on the mat.
   const look = guidanceFor(session, 1);
   // (Past a way made that stands aside, the count is not what is off.)
-  const count = session.verdict.reason === 'count-mismatch' && !sameWayAgain(session);
+  // (Past a way made that stands aside, the count is not what is off; on a
+  // take-away from partners the partners light up instead, Phase 22.)
+  const count = session.verdict.reason === 'count-mismatch' && !sameWayAgain(session) && !(session.whole.takeAway !== undefined && session.whole.onMat !== undefined);
   const objects = look.focus.objects.length > 0 || count ? look.focus.objects : benchPartners(session.history.state).map((g) => g.id);
   return { line: look.line, focus: { objects, template: look.focus.template }, countUp: count && session.history.state.bench.size > 0 };
 }

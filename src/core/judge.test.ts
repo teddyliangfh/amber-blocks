@@ -189,3 +189,47 @@ describe('addition (AC-44, AC-45, AC-39)', () => {
     expect(judge(withGroups([['a', three]]), q)).toEqual({ matched: false, benchCount: 3, reason: 'count-mismatch' });
   });
 });
+
+describe('split (Phase 22, Take-away Island)', () => {
+  const q = { kind: 'split', total: 3, parts: 2 } as const;
+  const row3: ReadonlyArray<readonly [number, number]> = [[0, 0], [1, 0], [2, 0]];
+
+  test('three in a row is one part; one pulled away makes two, whatever their sizes; three apart is three', () => {
+    expect(judge(build(row3), q)).toEqual({ matched: false, benchCount: 3, reason: 'parts-mismatch' });
+    expect(judge(build([[0, 0], [1, 0], [3, 0]]), q)).toEqual({ matched: true, benchCount: 3, reason: 'matched' });
+    expect(judge(build([[0, 0], [2, 0], [3, 0]]), q)).toEqual({ matched: true, benchCount: 3, reason: 'matched' });
+    // Pulled down a row and over: touching only by a corner is apart.
+    expect(judge(build([[0, 0], [1, 0], [2, 1]]), q).matched).toBe(true);
+    expect(judge(build([[0, 0], [2, 0], [4, 0]]), q)).toEqual({ matched: false, benchCount: 3, reason: 'parts-mismatch' });
+  });
+
+  test('the count comes first: one sent back to the tray, or one too many, is count-mismatch, not a split', () => {
+    expect(judge(build([[0, 0], [2, 0]]), q)).toEqual({ matched: false, benchCount: 2, reason: 'count-mismatch' });
+    expect(judge(build([[0, 0], [1, 0], [3, 0], [4, 0]]), q)).toEqual({ matched: false, benchCount: 4, reason: 'count-mismatch' });
+    expect(judge(build([]), q)).toEqual({ matched: false, benchCount: 0, reason: 'count-mismatch' });
+  });
+
+  test('colour and arrangement within a part are irrelevant; parts can be any number', () => {
+    const mixed = build([[0, 0], [1, 0], [3, 0]], ['red', 'blue', 'green']);
+    expect(judge(mixed, q).matched).toBe(true);
+    const stacked = build([[0, 0], [0, 1], [3, 3]]);
+    expect(judge(stacked, q).matched).toBe(true);
+    expect(judge(build([[0, 0], [2, 0], [4, 0]]), { kind: 'split', total: 3, parts: 3 }).matched).toBe(true);
+    expect(judge(build(row3), { kind: 'split', total: 3, parts: 1 }).matched).toBe(true);
+  });
+
+  test('a split already made (except) is right but not again, in either order; another split still counts', () => {
+    const five = { kind: 'split', total: 5, parts: 2, except: [[1, 4]] } as const;
+    const oneFour = build([[0, 0], [1, 0], [2, 0], [3, 0], [0, 2]]);
+    expect(judge(oneFour, five)).toEqual({ matched: false, benchCount: 5, reason: 'split-used' });
+    const fourOne = build([[4, 0], [0, 2], [1, 2], [2, 2], [3, 2]]);
+    expect(judge(fourOne, five).reason).toBe('split-used');
+    const twoThree = build([[0, 0], [1, 0], [3, 0], [4, 0], [4, 1]]);
+    expect(judge(twoThree, five)).toEqual({ matched: true, benchCount: 5, reason: 'matched' });
+    expect(judge(twoThree, { ...five, except: [[1, 4], [3, 2]] }).reason).toBe('split-used');
+    // Without `except` the same split is simply right.
+    expect(judge(oneFour, { kind: 'split', total: 5, parts: 2 }).matched).toBe(true);
+    // Three parts with one used: parts come first.
+    expect(judge(build([[0, 0], [2, 0], [4, 0], [0, 2], [2, 2]]), five).reason).toBe('parts-mismatch');
+  });
+});

@@ -1646,3 +1646,104 @@ brief 第 4 节列出、本轮按要求没做的：三个伙伴合体、凑到 1
 - [x] 测试：`layout-fit.test.web.tsx` 每个竖屏设备查她是绝对定位、下巴落在卡片上沿与圆片之间，横屏查她在侧栏里且不高于 48；`LevelScreen.test.web.tsx` 3 + 4 那条查点数时她不在、再数一遍后回来。941 测试全过，lint、typecheck、`build:web` 通过（`dist/` 只有 ico + apple-touch 两条 icon 链接，图都是新图）。
 - [x] 内建浏览器（dev）：375 × 812、360 × 640、667 × 331 下量了矩形，她与云朵数字、菜单键、卡片符号和标题、工作台都不相交，页面无横竖滚动；脚本拖两块到第一站出"多了 1 块"时测到点头（转到约 −9° 再回正）。控制台 0 error。
 - 没做 / 待定：Android 自适应图标、iOS `assets/expo.icon`、启动图仍是 Expo 模板；没在真机上看主屏幕图标；减少动效分支只按代码与既有 hook 同样的写法确认，浏览器里没法模拟；点她暂时没有反应（可以做成和点卡片一样重播提示，等试玩看孩子会不会去点她）。抠图 / 出图脚本在会话草稿目录，不在仓库里。
+
+# Phase 22：拿走岛（2026-10-19，D-099 – D-104，内容版本 8）
+
+按 [docs/take-away-and-compare-design.md](../docs/take-away-and-compare-design.md) §7 的 22-1 → 22-5 做完，只做拿走岛（比一比岛 / Phase 23 没做）。没有执行任何 git 命令；没有新增依赖、没改 `package.json`；`schemaVersion` 不变、没加存档字段；没加任何自动语音（新句子都在点按时说）；新动画（火箭发射）有减少动效分支（和其他过关动作一样不动）。`pnpm lint:purity` 每节都是零命中。
+
+顺序说明：先用当前 v7 代码生成三份种子存档（临时 jest 测试写文件、用完删除），冻结在 `src/progress/__fixtures__/archive-v7-phase21-{all-finished,ch2-half,ch1-half}.json`（种子 4242；全通的地图停在 ch2-n8、自由玩里摆着三块；合体岛做到 6 站、5 站把 4 贴在 2 旁边；数字岛做到 6 站、7 站拿出三块），之后才改 core 与题库。
+
+## 22-1 core：`split` 判定（D-100）
+
+- [x] `judge.ts`：`Question` 加 `split { total, parts, except? }`；`VerdictReason` 加 `parts-mismatch`（数对了、簇数不对）与 `split-used`（落在 `except` 里的、已经拆过的分法）。**偏离设计稿**：稿子只写了 `parts-mismatch`；为了让"两种拆法"和"两种拼法"同一条路（`questionAt` 第二步把用过的拆法放进 `except`，core 判、界面只看 reason），多加了 `except` 与 `split-used`，没有在界面层偷改判定。拿走不加判定（`quantity`）。`judge.test.ts` +4。
+- 门禁（22-1 结束）：core 测试全过；typecheck 要等 content / screens 接上新 kind 才能过（switch 穷尽），所以在 22-2 / 22-4 后补跑。
+
+## 22-2 content（D-099、D-101）
+
+- [x] `schema.ts`：`QuestionSpec` 加 `split { total, parts, ways? }`、`take_away { start, take, onMat?, steps? }`；`Puzzle.takeAway`。`material.ts presetMaterial`（单块一排在工作台上、托盘只有床位）；拿走伙伴复用 `onMatMaterial(onMat, [])`。`generate.ts`（倒数 → `quantity` 序列、`prompt.split` / `prompt.take_away` / `prompt.take_away.partner`）；`solution.ts`（`pullApart` 第 k 种 = 从右数第 k 块右移一格；`sendHome` 单块从右往左 / 伙伴那一组）；`validate.ts`（`assertSplit`、`assertTakeAway`、倒数 steps、`assertJoinedRow` 抽出与送走站共用）；`steps.ts`（`questionAt` 的 `except`、`benchPair` 没有伙伴时取两堆）；`bench.ts`（那一排加 1 格余量）；`challenge.ts numberOf` 接新 kind（随机题不出新题型）。
+- [x] `catalog/chapter-3.ts` 8 站（设计稿 §3.1 默认表）；`CONTENT_VERSION = 8`、`CONTENT_CHANGES[8] = []`；`ISLAND_SHOWCASE = { ch3: ch3-n4 }`；`fingerprint.test.ts` 版本 8（原 24 站指纹不变；新站 n1 `81eccc44`、n2 `8d97d408`、n3 `46e7ebb8`、n4 `b6b0991c`、n5 `fc7dae1d`、n6 `2e58cc53`、n7 `93f43e80`、n8 `f87bbf98`；描述里追加 `takeAway` 与开局在工作台上的块）。`copy.ts` 加拿走岛的 23 个 key（设计稿 §6 里拿走岛用到的，加 `hint.pull.right` / `hint.split.another` / `hint.split.two` / `hint.bring.back` / `hint.send.home.left` / `hint.call.back.one`；比一比的 key 没加）。
+- 门禁（22-2 结束）：content / core 测试全过，purity 零命中。
+
+## 22-3 progress（D-099）
+
+- [x] 种子存档（见上）；`upgrade.test.ts` 新 describe v7 → v8（三份存档什么都不丢、全通 → ch3-n1 且其余锁着、打完 8 站全通且每站作品按自己的问题判对、合体岛 / 数字岛做到一半不动、经 `loadArchive` 不报升级不备份、`UPGRADE_CURRENT` 两条规则都落到 ch3-n1）；`migrate.ts` 没改。
+- 门禁（22-3 结束）：core / content / progress 302 测试全过。
+
+## 22-4 screens（D-102 – D-104）
+
+- [x] `level-session.ts`：`onlyPreset`（并入 `atStart`）、`takeAwayAt`、`splitDemo` / `demoMove` 的拆开与送回家分支、`solvedParts` / `solvedEquation` 的拆开与拿走（`SPLIT_EQUATION`、`MINUS`）、`cloudTitle`、`targetNumberOf`、`walk` 对倒数"数少于某一步就算过了"。
+- [x] `hints.ts`：`GAP_TOLD_UNTIL`、`promptParams` / `promptLine`、`splitFeedback` / `takeAwayFeedback`、`partnerTakeAway(Line)`、`splitPlan` / `takeAwayPlan`、`lookHere` / `asksForHelp` / `sendOnly` / `helpAt` 的新分支；`hintFor` 对新站直接取卡片正文。
+- [x] `LevelScreen.tsx`：云朵 `cloudTitle`；示范手 `move` / `return`（`demoTo` / `demoBack`）；倒数每步响 count 音而不是 success；第二拍 `launch` 音；点云朵念当前步。`Stage.tsx`：工作台上的单块可作示范起点（回床位 / 到 `demoTo`）。`cheer.ts` + `juice.ts` `launch`；`sfx.ts` `launch`；`MapScreen labelOf`；`IslandDoneScreen` 用 `ISLAND_SHOWCASE`。
+- [x] 测试：`level-session.test.ts` +5、`hints.test.ts` +6、`LevelScreen.test.web.tsx` +5、`LevelScreen.sound.test.web.tsx` +2、`MapScreen.test.web.tsx` +2、`IslandDoneScreen.test.web.tsx` +1、`Stage.test.web.tsx` +1、`cheer.test.ts` +1、`sfx.test.ts` +1。
+- 门禁（22-4 结束）：lint 0、typecheck 通过、purity 零命中、`pnpm test:gate` 58 suite / 1099 测试、`pnpm build:web` 通过。
+
+## 22-5 文档
+
+- [x] D-099 – D-104；`SPEC-content.md`（规格、材料、校验、目录表到版本 8、工作台、`ISLAND_SHOWCASE`）、`SPEC-screens.md`（拆开站、拿走站 / 倒数、地图与岛收尾、测试清单）、`SPEC-progress.md`（v7 → v8）、`SPEC-blocks-ui.md`（示范手搬单块、`launch`）、README「当前实现」、`docs/level-progression.md` §5b、设计稿状态行。
+
+### 改了期望的旧测试（逐条）
+
+- `content/demo.test.ts`：twenty-four → thirty-two stops，Boss 5 → 7。
+- `content/catalog/catalog.test.ts`："two islands" → three（ch3 8 站、两个 ★）；工作台表加 ch3 八站。
+- `content/fingerprint.test.ts`：版本 8；描述追加 `takeAway` 与"开局在工作台上的块"（只影响新站）；8 个新指纹。
+- `content/generate.test.ts`：两条错误信息正则（"ways come from a sum spec" → "ways come from a sum"；"come from a sum spec" → "come from a sum or take-away spec"）。
+- `progress/unlock.test.ts`：地图 24 → 32；`CHAPTERS` 3；ch2-n8 的下一站是 ch3-n1；完成整条链到 ch3-n8。
+- `progress/upgrade.test.ts`：v5 的地图去掉 ch3（`V5_CHAPTERS`）；"全通"断言改为"拿走岛以外全通"（`beforeTakeAway`）；v6 → v7 组里写死的 `CONTENT_VERSION` 7 改为常量；`'next'` 规则从 ch2-n8 现在落到 ch3-n1（原 ch2-n8，另断言只有两岛时仍是 ch2-n8）。
+- `screens/IslandDoneScreen.test.web.tsx`："the last island"（ch2）改为"合体岛完成了，去拿走岛"（按钮进 ch3-n1 的地图跳跃）；新加拿走岛收尾页测试。
+- `screens/MapScreen.test.web.tsx`：奖杯要 ch3-n8 完成，奖杯进 `/island/ch3`。
+- `LevelScreen` / `LevelScreen.sound` / `MapScreen` / `IslandDoneScreen` 测试里写死的地图顺序追加 ch3 八站。
+- `audio-i18n/sfx.test.ts`：`NAMES` 加 `launch`。
+
+### 新测试（+167，932 → 1099；其中指纹 `test.each` +8、真实手机 × 新站等展开若干）
+
+见 22-1 – 22-4 各条；另 `generate.test.ts` 加了一组只为分支覆盖的"构建器拒绝"测试（`presetMaterial`、`sendHome`、`pullApart` 与 `validate` 的新分支）。
+
+## 浏览器走查（Checkpoint 22）
+
+内建浏览器（`preview_start expo-web`，dev 模式），视口 375 × 812 为主，抽查 360 × 640（英文）与 667 × 331（英文）；拖放用面板的 `left_click_drag`（块的位置先用 JS 读 `getBoundingClientRect`，刚进站时积木还在弹入、要等一下再读）；页面里包了 `AudioParam.setValueAtTime` 与 `speechSynthesis.speak` 记录音高与语音，MutationObserver 记录示范手 / 彩纸 / 接缝 / 下一站。浏览器里本来就有一份 v7 全通存档（Ted 之前走查留下的），打开即迁移到 v8、地图停在 ch3-n1（没写回，第一次改动后才是 v8）。没有听声音。截图 23 张 `docs/review-assets/p22-01` … `p22-22`。面板截图常常晚一帧（卡片还是上一句），每一步都另用 JS 读了卡片与云朵的文字确认。
+
+- [x] 地图：合体岛下面多了"拿走岛 0/8"，第 1 站醒着、其余睡着，标签 3 / 4 / 4−1 / ★5 / 5−2 / 6−2 / 7−3 / ★5（`p22-01`）。
+- [x] ch3-n1：云朵 3、卡片 ✦"把 3 分成两个伙伴"、三块贴成一排（一张脸）、托盘三个空床位（`p22-02`）；进站 5 秒示范手出现；把最右一块拖到隔一格 → 云朵 `3 = 2 + 1`、"拼对啦！"、两堆各自变色各一张脸、success 音、0.6 秒后彩纸 + 下一站（`p22-03`）。
+- [x] ch3-n2：第二块挪到第一块上面 → `4 = 2 + 2`、两个橙色的 2（`p22-04`）。
+- [x] ch3-n3：云朵 `4 − 1`、"4 个伙伴，送 1 个回家"（`p22-05`）；最右一块拖进托盘 → `4 − 1 = 3`、回去的那块在自己的床位打瞌睡、return 音 + success 音（`p22-06`）。
+- [x] ch3-n4 ★：拉开最右一块 → success 音、"换一种分法！/ 再分成另外两个数"（`p22-07b`）；再把第四块挪过去 → `5 = 4 + 1` / `5 = 3 + 2` 两行、fanfare、彩纸（`p22-07`）。
+- [x] ch3-n5：云朵 `5 − 2`；送一块 → 蓝色"还要再送 1 个 / 送 1 块回家"（`p22-08a`）；送两块 → `5 − 2 = 3`（`p22-08`）。
+- [x] ch3-n6：开局 4 + 2 一排、"6 里送走 2，还剩几个？"、托盘两个轮廓（`p22-09`）；把 4 送回 → 琥珀"拿走的是 4，不是 2 / 把 4 叫回来，送走 2"、adjust 音、困惑脸；点卡片两下 → 念"把 四 叫回来，送走 二"、"把 四 叫回来"，光圈套住托盘里的 4（`p22-10`）；把 4 拖回、把 2 送回 → `6 − 2 = 4`、4 的 wiggle（`p22-11`）。
+- [x] ch3-n7：3 + 2 + 2 一排、8 列工作台用满屏宽、托盘三个轮廓两行（`p22-12`）；送走 3 → `7 − 3 = 4`，第二拍两个 2 合体成一个绿色的 4（接缝、join 音 2、2、4）（`p22-13`）。
+- [x] ch3-n8 ★：云朵 `5 − 1` 带星（`p22-14`）；每送一块：云朵 `4 − 1` → `3 − 1` → `2 − 1`、卡片"再送一个回家！/ n 个伙伴，送 1 个回家"、响剩下那个数的 count 音（349 / 329 / 293 Hz，往下走）（`p22-15`、`p22-16`）；最后一块 → `2 − 1 = 1`、fanfare、彩纸、发射音（do 到高 do），红色的 1 冲出画面再落回，底栏"★ 拿走岛完成了"+ 圆形再玩一次（`p22-17`）。
+- [x] 岛收尾页 `/island/ch3`："★ 拿走岛 ★ / 所有的岛都完成了！"，八个角色欢呼（标签同地图），展示的是第 4 站的 3 + 2 两堆（`ISLAND_SHOWCASE`），按钮"回地图"（`p22-18`）；回地图：拿走岛 8 站全勾、彩旗 + 奖杯（`p22-19`）；存档 v8、32 站完成、`current` ch3-n8。
+- [x] 360 × 640 英文：ch3-n6 开局 "Give it a try / Send the 2 home from 6" 一行、底栏 "Play again / Next stop" 在屏内（按钮下沿 632 / 640）（`p22-20`）；送错 4 后 "That was the 4, not the 2" / "Bring the 4 back, send the 2" 都是一行（JS 量得 220px，截图晚一帧没拍到琥珀卡）。
+- [x] 667 × 331 英文：ch3-n5 已完成态侧栏 `5 − 2 = 3` + 圆形再玩一次 + "Next stop"（`p22-21`）；再玩一次后侧栏 `5 − 2`、"Give it a try / 5 here. Send 2 home"，5 块一排、托盘 5 个床位（`p22-22`）。
+- [x] 控制台：0 error。
+
+## Checkpoint 22（最终）
+
+- [x] 门禁（文档写完后最后一次）：`pnpm lint` 0 问题；`pnpm typecheck` 通过；`pnpm lint:purity` 零命中；`pnpm test:gate` 58 suite / 1099 测试全过（基线 932），覆盖率全部 97.57 / 93.62（语句 / 分支），content 98.32 / 95.61（门禁 95）、core 100 / 99.13、progress 99.04 / 97.67、blocks-ui 98.09 / 92.15、screens 96.08 / 91.02；`pnpm build:web` 9 个静态路由。
+- [x] 没有删测试；改了期望的旧测试逐条见上。
+
+### 需要 Ted 决定（都留了一处可改的常量或一行）
+
+1. 拿走岛的数字与顺序、岛名"拿走岛 / Take-away Island"、Boss 是倒数火箭（`catalog/chapter-3.ts`、`copy.ts chapter.ch3.title`；设计稿 §9 第 2、3、10 问）。
+2. `ISLAND_SHOWCASE`（`content/catalog/index.ts`）：岛收尾页展示第 4 站而不是倒数剩下的 1（§9 第 14 问）。
+3. `SPLIT_EQUATION`（`screens/level-session.ts`）：云朵 `3 = 1 + 2`；设成 `'none'` 只留 `3`（§9 第 4 问）。
+4. `GAP_TOLD_UNTIL`（`screens/hints.ts`）：拿走单块站到 ch3-n5 为止说"还要再送 k 个"，之后只说"还没拿走 k 块"（§9 第 8 问）。
+5. core 多了 `split-used`（第二个新 reason）与 `except`，没有只加 `parts-mismatch`（D-100）。
+6. 校验口径：拆开只认两份；`ways ≤ floor(total / 2)`；拿走伙伴"唯一送法"按大小的多重集算（[2, 2] 送 2 算一种）；倒数只用单块；工作台按那一排加 1 格余量（送走站是原样放下）。
+7. 倒数每步没有"先 pop 成 `5 − 1 = 4`、0.6 秒后再换 `4 − 1`"的停顿（答对立刻换到下一步，算式只在最后一步留下）；减少动效时火箭和其他过关动作一样不动（设计稿说"只闪一下"）。
+8. 伙伴站送错的卡片正文一开始就是完整句"把 4 叫回来，送走 2"（设计稿 §5.2 这么写；阶梯只影响念什么、点亮什么）。中文里"叫 k 个回来"（标题）与"把 k 块叫回来"（正文）的量词按设计稿 §6（伙伴说个、单块说块）。
+9. 倒数最后一步的成功句是"2 拿走 1，还剩 1"（设计稿没写最后念什么）。
+
+### 已知遗留 / 没做
+
+- 比一比岛（Phase 23）、随机题的新题型（`take_away` / `split`）、设计稿 §6 里比一比的文案 key：都没做（本阶段范围外）。
+- "送多了"时设计稿说示范手从托盘搬回来：没做（示范手只在开题出现，和别的站一致）。
+- 作品册里拿走岛那一组、家长区"从哪里开始"的拿走岛芯片：按 `CHAPTERS` 自动出现（有 jsdom 测试覆盖地图 / 岛收尾页），浏览器里没有逐一走。
+- 面板截图晚一帧：`p22-02` 示范手、`p22-07b` 卡片、`p22-20` 之后的琥珀卡没拍到，文字都用 JS 读过确认。
+- 走查时顺手观察到的旧现象（没改）：横屏 667 × 331 托盘在工作台下方而不是右侧（`arrangement` 按空间决定，Phase 21 之前就是这样）。
+
+### 只能真机确认
+
+- 火箭发射的手感（900px 冲出画面、1.7 秒落回）在高屏手机上够不够"冲出去"；减少动效下只是不动。
+- 倒数的下行 count 音与发射音在手机扬声器上听不听得出"往下走 / 往上冲"。
+- 4 × 3 工作台上 84px 的块"拉开一格"手指会不会碰到旁边的块；拆开站第二种拆法要把一块放到另一块下面（示范手演的那一步）。
+- iOS Safari 的音频解锁与语音（同前几个 Phase）。

@@ -71,6 +71,13 @@ export function labelOf(node: NodeSpec): { label: string; number: number } {
     }
     case 'sum_composition':
       return { label: String(s.sum), number: s.sum };
+    // Take-away Island (Phase 22, design §4.2): a split is its whole; a take-away
+    // reads `4−1` and wears the colour of what is left (the character the child
+    // ends with); the countdown boss is its start.
+    case 'split':
+      return { label: String(s.total), number: s.total };
+    case 'take_away':
+      return s.steps !== undefined ? { label: String(s.start), number: s.start } : { label: `${s.start}−${s.take}`, number: s.start - s.take };
   }
 }
 

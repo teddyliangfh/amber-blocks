@@ -5,7 +5,7 @@ import { copyKey } from './copy';
 import { assertDistractors, partnerSizesFor } from './distractors';
 import { pickPair, pickTarget, pickTemplate } from './envelope';
 import type { CopyKey } from './ids';
-import { givenMaterial, handleMaterial, looseMaterial, onMatMaterial, partnerMaterial, partnerOrder } from './material';
+import { givenMaterial, handleMaterial, looseMaterial, onMatMaterial, partnerMaterial, partnerOrder, presetMaterial } from './material';
 import { seeded } from './rng';
 import type { NodeSpec, Puzzle, PuzzleRef, QuestionSpec } from './schema';
 import { buildSolution } from './solution';
@@ -17,6 +17,10 @@ function promptFor(question: Question, spec: QuestionSpec): CopyKey {
   }
   if (spec.kind === 'sum_composition' && spec.onMat !== undefined) {
     return copyKey('prompt.send_away');
+  }
+  // Take away (Phase 22) is judged as a quantity; its own task line says what to send home.
+  if (spec.kind === 'take_away') {
+    return copyKey(spec.onMat === undefined ? 'prompt.take_away' : 'prompt.take_away.partner');
   }
   return copyKey(`prompt.${question.kind}`);
 }
@@ -33,6 +37,7 @@ export function materializeNode(node: NodeSpec, bounds: Bounds, ref: PuzzleRef, 
   let steps: ReadonlyArray<Question> | undefined;
   let given: GroupId | undefined;
   let onMat: ReadonlyArray<GroupId> | undefined;
+  let takeAway: Puzzle['takeAway'];
 
   switch (spec.kind) {
     case 'quantity': {
@@ -108,8 +113,38 @@ export function materializeNode(node: NodeSpec, bounds: Bounds, ref: PuzzleRef, 
       partnerIds = material.partnerIds;
       break;
     }
+    case 'split': {
+      // The blocks start joined on the mat; the tray holds only their beds.
+      question = { kind: 'split', total: spec.total, parts: spec.parts };
+      initial = presetMaterial(spec.total, bounds, prefix);
+      break;
+    }
+    case 'take_away': {
+      // Judged as the count left. A countdown asks each count left in turn.
+      if (spec.steps !== undefined && spec.steps.length > 0) {
+        let left = spec.start;
+        steps = spec.steps.map((k): Question => {
+          left -= k;
+          return { kind: 'quantity', target: left };
+        });
+        question = steps[0]!;
+      } else {
+        question = { kind: 'quantity', target: spec.start - spec.take };
+      }
+      if (spec.onMat !== undefined) {
+        // The partners start on the mat in a row (validate checks they make the start).
+        const material = onMatMaterial(spec.onMat, [], bounds, prefix);
+        initial = material.state;
+        partnerIds = material.partnerIds;
+        onMat = material.onMat;
+      } else {
+        initial = presetMaterial(spec.start, bounds, prefix);
+      }
+      takeAway = { start: spec.start, take: spec.take };
+      break;
+    }
   }
-  const ways = spec.kind === 'sum_composition' ? spec.ways : undefined;
+  const ways = spec.kind === 'sum_composition' || spec.kind === 'split' ? spec.ways : undefined;
 
   const puzzle: Puzzle = {
     ref,
@@ -118,9 +153,10 @@ export function materializeNode(node: NodeSpec, bounds: Bounds, ref: PuzzleRef, 
     ...(ways === undefined ? {} : { ways }),
     ...(given === undefined ? {} : { given }),
     ...(onMat === undefined ? {} : { onMat }),
+    ...(takeAway === undefined ? {} : { takeAway }),
     initial,
     display: {
-      target: question.kind === 'quantity' || question.kind === 'quantity_shape' ? question.target : question.kind === 'sum_composition' ? question.sum : null,
+      target: question.kind === 'quantity' || question.kind === 'quantity_shape' ? question.target : question.kind === 'sum_composition' ? question.sum : question.kind === 'split' ? question.total : null,
       operands: question.kind === 'addition_exact' ? question.operands : null,
       template: question.kind === 'quantity_shape' ? question.template : null,
       partnerIds,

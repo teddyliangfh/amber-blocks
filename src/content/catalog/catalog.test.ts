@@ -16,8 +16,10 @@ const ref = (chapter: string, node: string, contentVersion = CONTENT_VERSION): P
 });
 
 describe('catalog', () => {
-  test('map: two islands, three legs of four with a boss each, then twelve join stops', () => {
-    expect(CHAPTERS.map((c) => c.id)).toEqual(['ch1', 'ch2']);
+  test('map: three islands, three legs of four with a boss each, twelve join stops, then eight take-away stops', () => {
+    expect(CHAPTERS.map((c) => c.id)).toEqual(['ch1', 'ch2', 'ch3']);
+    expect(CHAPTERS[2]?.nodes).toHaveLength(8);
+    expect(CHAPTERS[2]?.nodes.filter((n) => n.role === 'boss').map((n) => n.id)).toEqual(['ch3-n4', 'ch3-n8']);
     expect(CHAPTERS[0]?.nodes).toHaveLength(12);
     expect(CHAPTERS[0]?.nodes.filter((n) => n.role === 'boss').map((n) => n.id)).toEqual(['ch1-n4', 'ch1-n8', 'ch1-n12']);
     expect(CHAPTERS[1]?.nodes).toHaveLength(12);
@@ -35,6 +37,7 @@ describe('catalog', () => {
     // No island fixes a mat: each stop's is fitted to its material (2026-10-15).
     expect(findChapter(chapterId('ch1')).bounds).toBeUndefined();
     expect(findChapter(chapterId('ch2')).bounds).toBeUndefined();
+    expect(findChapter(chapterId('ch3')).bounds).toBeUndefined();
     const mats = Object.fromEntries(CHAPTERS.flatMap((c) => c.nodes.map((n) => [n.id, `${benchFor(c, n).cols}x${benchFor(c, n).rows}`])));
     expect(mats).toEqual({
       'ch1-n1': '3x3', 'ch1-n2': '3x3', 'ch1-n3': '5x3', 'ch1-n4': '4x3', 'ch1-n5': '6x3', 'ch1-n6': '5x5',
@@ -43,6 +46,9 @@ describe('catalog', () => {
       // Phase 21: the ten is judged lying down only, so its mat is not tall;
       // the row to send back from and the 10 with its other half fill nine columns.
       'ch2-n9': '6x3', 'ch2-n10': '9x3', 'ch2-n11': '6x4', 'ch2-n12': '9x3',
+      // Phase 22: the row the stop opens with, one column to pull a block
+      // away into or to leave empty (design §3.1).
+      'ch3-n1': '4x3', 'ch3-n2': '5x3', 'ch3-n3': '5x3', 'ch3-n4': '6x3', 'ch3-n5': '6x3', 'ch3-n6': '7x3', 'ch3-n7': '8x3', 'ch3-n8': '6x3',
     });
   });
 
@@ -121,6 +127,65 @@ describe('catalog', () => {
       s.kind === 'quantity_shape' ? 'shape' : s.kind === 'addition_exact' ? 'join' : s.kind !== 'sum_composition' ? 'quantity' : s.onMat !== undefined ? 'send' : s.given !== undefined ? 'missing' : s.ways !== undefined ? 'ways' : 'free';
     const moves = CHAPTERS[1]!.nodes.map((n) => move(n.spec));
     expect(moves).toEqual(['join', 'join', 'join', 'shape', 'free', 'send', 'missing', 'missing', 'shape', 'missing', 'missing', 'ways']);
+  });
+
+  test('Phase 22: Take-away Island is eight stops: pull apart, send home, choose who goes, count down', () => {
+    const specs = CHAPTERS[2]!.nodes.map((n) => [n.id, n.role, n.spec]);
+    expect(specs).toEqual([
+      ['ch3-n1', 'normal', { kind: 'split', total: 3, parts: 2 }],
+      ['ch3-n2', 'normal', { kind: 'split', total: 4, parts: 2 }],
+      ['ch3-n3', 'normal', { kind: 'take_away', start: 4, take: 1 }],
+      ['ch3-n4', 'boss', { kind: 'split', total: 5, parts: 2, ways: 2 }],
+      ['ch3-n5', 'normal', { kind: 'take_away', start: 5, take: 2 }],
+      ['ch3-n6', 'normal', { kind: 'take_away', start: 6, take: 2, onMat: [4, 2] }],
+      ['ch3-n7', 'normal', { kind: 'take_away', start: 7, take: 3, onMat: [3, 2, 2] }],
+      ['ch3-n8', 'boss', { kind: 'take_away', start: 5, take: 4, steps: [1, 1, 1, 1] }],
+    ]);
+    // Numbers never pass 7, and nothing is taken down to nothing (design §1.1).
+    for (const node of CHAPTERS[2]!.nodes) {
+      const s = node.spec;
+      const whole = s.kind === 'split' ? s.total : s.kind === 'take_away' ? s.start : 0;
+      expect(`${node.id} ${whole <= 7}`).toBe(`${node.id} true`);
+      if (s.kind === 'take_away') {
+        expect(s.start - s.take).toBeGreaterThanOrEqual(1);
+        // From partners: exactly one set of them (by sizes) is the take, so
+        // there is one right thing to send home. 7 − 3 from 3 + 2 + 2: only the 3
+        // (the two 2s are 4 blocks, not 3).
+        if (s.onMat !== undefined) {
+          const sets = subsets(s.onMat).filter((set) => set.reduce((a, b) => a + b, 0) === s.take).map((set) => [...set].sort().join('+'));
+          expect(`${node.id} ${[...new Set(sets)].join(' ')}`).toBe(`${node.id} ${s.take}`);
+          expect(s.onMat.reduce((a, b) => a + b, 0)).toBe(s.start);
+        }
+      }
+      // Two ways to split 5: 1 + 4 and 2 + 3 are different, and there are no more.
+      if (s.kind === 'split' && s.ways !== undefined) {
+        expect(s.ways).toBeLessThanOrEqual(Math.floor(s.total / 2));
+      }
+    }
+    // What each stop opens with and how it is solved.
+    const three = materializeFor('ch3-n1');
+    expect(three.initial.bench.size).toBe(3);
+    expect(three.solution).toEqual([{ type: 'move', unitId: expect.any(String), to: { x: 3, y: 1 } }]);
+    expect(three.prompt).toBe('prompt.split');
+    const four = materializeFor('ch3-n3');
+    expect(four.question).toEqual({ kind: 'quantity', target: 3 });
+    expect(four.takeAway).toEqual({ start: 4, take: 1 });
+    expect(four.solution.map((c) => c.type)).toEqual(['return']);
+    expect(four.prompt).toBe('prompt.take_away');
+    expect(materializeFor('ch3-n4').ways).toBe(2);
+    const six = materializeFor('ch3-n6');
+    expect(six.onMat!.map((id) => groupSizeOf(six, id))).toEqual([4, 2]);
+    expect(six.solution).toEqual([{ type: 'returnGroup', groupId: six.onMat![1] }]);
+    expect(six.prompt).toBe('prompt.take_away.partner');
+    const seven = materializeFor('ch3-n7');
+    expect(seven.solution).toEqual([{ type: 'returnGroup', groupId: seven.onMat![0] }]);
+    const rocket = materializeFor('ch3-n8');
+    expect(rocket.steps!.map((q) => (q.kind === 'quantity' ? q.target : 0))).toEqual([4, 3, 2, 1]);
+    expect(rocket.solution.map((c) => c.type)).toEqual(['return', 'return', 'return', 'return']);
+    expect(rocket.takeAway).toEqual({ start: 5, take: 4 });
+    // Every stop is at most six single-block drags (the countdown is four).
+    const moves = CHAPTERS[2]!.nodes.map((n) => [n.id, materializeFor(n.id).solution.length] as const);
+    expect(moves).toEqual([['ch3-n1', 1], ['ch3-n2', 1], ['ch3-n3', 1], ['ch3-n4', 2], ['ch3-n5', 2], ['ch3-n6', 1], ['ch3-n7', 1], ['ch3-n8', 4]]);
   });
 
   test('AC-47: a ref from another content version or an unknown node is refused', () => {

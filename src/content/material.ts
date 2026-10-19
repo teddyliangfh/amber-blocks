@@ -175,6 +175,28 @@ export function onMatMaterial(row: ReadonlyArray<number>, sizes: ReadonlyArray<n
   return { state, partnerIds: material.partnerIds, onMat: ids };
 }
 
+// Take-away Island material (Phase 22): `total` single blocks that start on
+// the mat, joined in one row from the left edge, in the middle of the mat's
+// height (as onMatMaterial lays partners), in the colour of their count. Their
+// tray slots stay their home (core invariant 1): the tray shows their empty
+// beds, and each block can go back to its own.
+export function presetMaterial(total: number, bounds: Bounds, prefix: string): BenchState {
+  if (!Number.isInteger(total) || total < 1) {
+    throw new Error(`content: presetMaterial expects a positive integer, got ${total}`);
+  }
+  const units: Unit[] = unitIds(prefix, total).map((id) => ({ id, hue: hueFor(total) }));
+  let state = createBenchState({ units, bounds });
+  const y = Math.max(0, Math.floor((bounds.rows - 1) / 2));
+  units.forEach((u, x) => {
+    const r = apply(state, { type: 'take', unitId: u.id, to: cell(x, y) });
+    if (!r.ok) {
+      throw new Error(`content: could not put block ${u.id} on the mat: ${r.reason}`);
+    }
+    state = r.value;
+  });
+  return state;
+}
+
 type UnitIdList = ReturnType<typeof unitIds>;
 
 const MAX_RESHUFFLES = 8;

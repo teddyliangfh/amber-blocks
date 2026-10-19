@@ -11,6 +11,7 @@ import { STORAGE_KEY, createInitialState, memoryStorage, reduce, serialize } fro
 import type { ProgressState } from '../progress';
 import { ADVANCE, MapScreen, SKIP_AFTER_MS, advanceOf, labelOf } from './MapScreen';
 import v6AllFinished from '../progress/__fixtures__/archive-v6-phase20-all-finished.json';
+import v7AllFinished from '../progress/__fixtures__/archive-v7-phase21-all-finished.json';
 import { ProgressProvider } from './progress-store';
 import { PARENT_HINT_MS } from './ui';
 
@@ -52,7 +53,7 @@ const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top:
 
 function finishedUpTo(upTo: string): ProgressState {
   let s = createInitialState(5);
-  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8'];
+  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8'];
   for (const id of order.slice(0, order.indexOf(upTo))) {
     const e = reduce(s, { type: 'enter', nodeId: nodeId(id) });
     const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
@@ -154,20 +155,20 @@ describe('the way on (2026-10-15 review H)', () => {
   test('review I: bunting and a cup only once every island is done', async () => {
     jest.useFakeTimers();
     try {
-      // Join Island ends at ch2-n8 since Phase 19: everything up to it finished is not yet every island.
-      await open(finishedUpTo('ch2-n8'), {});
+      // Take-away Island ends at ch3-n8 since Phase 22: everything up to it finished is not yet every island.
+      await open(finishedUpTo('ch3-n8'), {});
       expect(container.querySelector('[data-testid="map-trophy"]')).toBeNull();
       act(() => root.unmount());
       root = createRoot(container);
-      const all = finishedUpTo('ch2-n8');
-      const e = reduce(all, { type: 'enter', nodeId: nodeId('ch2-n8') });
-      const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId('ch2-n8'), verdict: { matched: true, benchCount: 7, reason: 'matched' } }) : e;
+      const all = finishedUpTo('ch3-n8');
+      const e = reduce(all, { type: 'enter', nodeId: nodeId('ch3-n8') });
+      const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId('ch3-n8'), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
       await open(c.ok ? c.value : all, {});
       expect(container.querySelector('[data-testid="map-trophy"]')).not.toBeNull();
       // Phase 20 Q9: the cup opens the last island's page again.
       mockRouter.replace.mockClear();
       act(() => (container.querySelector('[data-testid="map-trophy"]') as HTMLElement).click());
-      expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/island/[chapterId]', params: { chapterId: 'ch2' } });
+      expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/island/[chapterId]', params: { chapterId: 'ch3' } });
       expect(container.querySelector('[data-testid="map-trophy"]')?.getAttribute('aria-label')).toBe('奖杯');
     } finally {
       jest.useRealTimers();
@@ -220,6 +221,46 @@ describe('Phase 21: Join Island has twelve stops', () => {
     const labels = CHAPTERS[1]!.nodes.map((n) => labelOf(n).label);
     expect(labels).toEqual(['1+1', '2+1', '2+2', '10', '5', '7', '5', '6', '6', '7', '13', '7']);
     expect(labelOf(CHAPTERS[1]!.nodes[10]!).number).toBe(13);
+  });
+
+  test('Phase 22: Take-away Island\'s stops read as splits (the whole), take-aways (4−1, in the colour of what is left) and the countdown 5', () => {
+    const stops = CHAPTERS[2]!.nodes.map((n) => labelOf(n));
+    expect(stops.map((s) => s.label)).toEqual(['3', '4', '4−1', '5', '5−2', '6−2', '7−3', '5']);
+    expect(stops.map((s) => s.number)).toEqual([3, 4, 3, 5, 3, 4, 4, 5]);
+  });
+
+  test('Phase 22: a finished version 7 archive draws the third island with its first stop awake and the marker on it, the rest asleep, no cup', async () => {
+    jest.useFakeTimers();
+    try {
+      mockParams.current = {};
+      await act(async () => {
+        root.render(
+          <SafeAreaProvider initialMetrics={metrics}>
+            <ProgressProvider storage={memoryStorage({ [STORAGE_KEY]: JSON.stringify(v7AllFinished) })}>
+              <MapScreen />
+            </ProgressProvider>
+          </SafeAreaProvider>,
+        );
+      });
+      for (let i = 0; i < 4; i += 1) {
+        await act(async () => {
+          jest.advanceTimersByTime(1);
+          await Promise.resolve();
+        });
+      }
+      expect(container.querySelector('[data-testid="stop-ch3-n1"]')?.getAttribute('aria-label')).toBe('ch3-n1 available');
+      for (const id of ['ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8']) {
+        expect(container.querySelector(`[data-testid="stop-${id}"]`)?.getAttribute('aria-label')).toBe(`${id} locked`);
+      }
+      expect(container.querySelector('[data-testid="stop-ch2-n8"]')?.getAttribute('aria-label')).toBe('ch2-n8 completed');
+      expect(container.querySelector('[data-testid="map-trophy"]')).toBeNull();
+      expect(container.textContent).toContain('拿走岛');
+      mockRouter.push.mockClear();
+      act(() => (container.querySelector('[data-testid="play"]') as HTMLElement).click());
+      expect(mockRouter.push).toHaveBeenLastCalledWith({ pathname: '/play/[nodeId]', params: { nodeId: 'ch3-n1' } });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test('a finished version 6 archive: all twelve drawn, the marker on the first new stop, the four new ones awake, no cup', async () => {

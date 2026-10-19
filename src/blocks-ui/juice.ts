@@ -11,6 +11,10 @@ const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 export const CAR_DRIVE = 900;
 // How long the car's trip takes, wheels out to wheels in.
 export const CAR_MS = 1650;
+// How far the rocket flies (past the top of any phone) and how long the whole
+// launch takes, crouch to landing (Phase 22).
+export const LAUNCH_HEIGHT = 900;
+export const LAUNCH_MS = 1700;
 
 const LAND = { damping: 10, stiffness: 260, mass: 0.5 } as const;
 const SETTLE = { damping: 9, stiffness: 240 } as const;
@@ -84,6 +88,14 @@ export function useCheer(move: CheerMove, tick: number, index: number) {
         // The 8 brick on wheels: off to the right, round again from the left, home.
         x.set(withSequence(withDelay(250, withTiming(CAR_DRIVE, { duration: 650, easing: Easing.in(Easing.quad) })), withTiming(-CAR_DRIVE, { duration: 0 }), withTiming(0, { duration: 750, easing: EASE_OUT })));
         y.set(withDelay(250, withSequence(withTiming(-3, { duration: 90 }), withTiming(0, { duration: 90 }), withTiming(-3, { duration: 90 }), withTiming(0, { duration: 90 }))));
+        break;
+      }
+      case 'launch': {
+        // The countdown's rocket: a crouch, straight up and out of the picture,
+        // then back down from above to land where it was.
+        sy.set(withSequence(withTiming(0.78, { duration: 180 }), withTiming(1.3, { duration: 160, easing: EASE_OUT }), withDelay(900, withSpring(1, SETTLE))));
+        sx.set(withSequence(withTiming(1.16, { duration: 180 }), withTiming(0.84, { duration: 160, easing: EASE_OUT }), withDelay(900, withSpring(1, SETTLE))));
+        y.set(withSequence(withDelay(180, withTiming(-LAUNCH_HEIGHT, { duration: 480, easing: Easing.in(Easing.quad) })), withDelay(320, withTiming(0, { duration: LAUNCH_MS - 980, easing: EASE_OUT }))));
         break;
       }
       case 'hop': {

@@ -1,7 +1,7 @@
 import { JOIN_STEP, countPitch, createAudioSfx, createSilentSfx, notesFor } from './sfx';
 import type { SfxName } from './sfx';
 
-const NAMES: ReadonlyArray<SfxName> = ['pickup', 'drop', 'return', 'blocked', 'count', 'counted', 'adjust', 'success', 'fanfare', 'arrive', 'tap', 'join'];
+const NAMES: ReadonlyArray<SfxName> = ['pickup', 'drop', 'return', 'blocked', 'count', 'counted', 'adjust', 'success', 'fanfare', 'arrive', 'tap', 'join', 'launch'];
 
 function fakeContext(state = 'suspended') {
   const started: { f: number; at: number }[] = [];
@@ -140,3 +140,15 @@ test('Phase 20 F1: a join plays each part\'s counting note in turn, then the tot
   expect(started.map((n) => n.f)).toEqual([countPitch(1), countPitch(1), countPitch(2), countPitch(2) * 2]);
 });
 
+
+test('Phase 22: the launch runs up the counting scale, note after note, and ends higher than it began', () => {
+  const notes = notesFor('launch');
+  const run = notes.slice(0, 8).map((n) => n.f);
+  expect(run).toEqual([1, 2, 3, 4, 5, 6, 7, 8].map(countPitch));
+  for (let i = 1; i < run.length; i += 1) {
+    expect(run[i]!).toBeGreaterThan(run[i - 1]!);
+    expect(notes[i]!.at).toBeGreaterThan(notes[i - 1]!.at);
+  }
+  const last = notes[notes.length - 1]!;
+  expect(last.to).toBeGreaterThan(last.f);
+});

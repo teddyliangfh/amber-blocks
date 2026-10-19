@@ -208,9 +208,52 @@ function everyWay(question: Extract<Question, { kind: 'sum_composition' }>, init
   ]);
 }
 
+// Take away (Phase 22): what is on the mat goes home until the count is the
+// target: single blocks from the right end of the row (the last one first), or
+// the partners whose sizes add up to what has to go (validate() makes sure
+// there is one such set). One block or partner a move, so a countdown passes
+// each count on the way down.
+function sendHome(target: number, initial: BenchState): ReadonlyArray<Command> {
+  const gone = initial.bench.size - target;
+  const placed = [...initial.groups.values()].filter((g) => g.unitIds.every((u) => initial.bench.has(u)));
+  if (placed.length > 0) {
+    const groups = partnersAddingUpTo(placed, gone);
+    if (groups === undefined) {
+      throw new Error(`content: no partners on the mat add up to the ${gone} to take away`);
+    }
+    return groups.map((g): Command => ({ type: 'returnGroup', groupId: g.id }));
+  }
+  const fromRight = [...initial.bench.entries()].sort(([, a], [, b]) => b.x - a.x || b.y - a.y).map(([unitId]) => unitId);
+  return fromRight.slice(0, gone).map((unitId): Command => ({ type: 'return', unitId }));
+}
+
+// Pull apart (Phase 22): the row's last block moves one cell to the right,
+// leaving a gap: 1 and the rest. Asked again (`ways`), the next block from the
+// right moves up against it: 2 and the rest, then 3 and the rest. Each is a new
+// split while k < total − k (validate() refuses more ways than that). The mat
+// is one column wider than the row (bench.ts), so the first move always fits.
+function pullApart(initial: BenchState, ways: number): ReadonlyArray<Command> {
+  const row = [...initial.bench.entries()].sort(([, a], [, b]) => a.x - b.x || a.y - b.y);
+  const commands: Command[] = [];
+  for (let k = 1; k <= ways; k += 1) {
+    const last = row[row.length - k];
+    if (last === undefined) {
+      throw new Error(`content: ${row.length} blocks cannot be split ${ways} ways`);
+    }
+    const [unitId, at] = last;
+    commands.push({ type: 'move', unitId, to: cell(at.x + 1, at.y) });
+  }
+  return commands;
+}
+
 export function buildSolution(question: Question, initial: BenchState, steps: ReadonlyArray<Question> = [], ways = 1): ReadonlyArray<Command> {
   switch (question.kind) {
     case 'quantity': {
+      // Blocks on the mat from the start: a take-away, down to the last count asked.
+      if (initial.bench.size > 0) {
+        const last = steps[steps.length - 1] ?? question;
+        return sendHome(last.kind === 'quantity' ? last.target : question.target, initial);
+      }
       const loose = looseUnitsInTray(initial);
       if (initial.groups.size > 0) {
         const groups = partnersTowards([...initial.groups.values()], question.target, loose.length);
@@ -288,5 +331,7 @@ export function buildSolution(question: Question, initial: BenchState, steps: Re
       }
       throw new Error(`content: no allowed pair for ${question.sum} is available in the tray`);
     }
+    case 'split':
+      return pullApart(initial, ways);
   }
 }

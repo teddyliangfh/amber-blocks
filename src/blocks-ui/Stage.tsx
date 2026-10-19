@@ -64,7 +64,9 @@ export interface StageProps {
   // puts the other half right beside it instead of on top of it.
   readonly demoTo?: Cell;
   // The hand carries `demoPiece`, a partner on the mat, back to its outline in
-  // the tray instead (Phase 21: send the extra away).
+  // the tray instead (Phase 21: send the extra away), or a single block on the
+  // mat back to its bed (Phase 22: take away). A block on the mat with
+  // `demoTo` and no `demoBack` is pulled from where it sits to that cell (a split).
   readonly demoBack?: boolean;
   // A counting round just finished (0: none): the counted blocks blink together once.
   readonly wink?: number;
@@ -687,6 +689,19 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
   // Back to the tray: from where the partner sits on the mat, full size, to its outline.
   const backGroup = demoBack && demoPiece !== undefined ? state.groups.get(demoPiece as GroupId) : undefined;
   const backHome = backGroup !== undefined && allOnBench(state, backGroup) ? plan.spots.get(backGroup.id) : undefined;
+  // A single block on the mat (Phase 22): back to its bed, or pulled to `demoTo`.
+  const benchUnitCell = demoPiece !== undefined && !model.looseOnBench.includes(demoPiece as UnitId) ? undefined : state.bench.get(demoPiece as UnitId);
+  const unitHome = demoPiece === undefined ? undefined : state.home.get(demoPiece as UnitId);
+  const benchUnitHome = demoBack && benchUnitCell !== undefined && unitHome !== undefined ? plan.slotSpots.get(unitHome) : undefined;
+  const benchUnit =
+    benchUnitCell !== undefined
+      ? {
+          at: cellToPx(geometry, benchUnitCell),
+          colors: colorsFor(hueFor(model.clusterOf.get(demoPiece as UnitId)?.size ?? 1)),
+          cells: [gridCell(0, 0)],
+          scale: 1,
+        }
+      : null;
   const back =
     backGroup !== undefined && backHome !== undefined
       ? {
@@ -696,21 +711,25 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
           scale: 1,
           home: backHome,
         }
-      : null;
+      : benchUnit !== null && benchUnitHome !== undefined
+        ? { ...benchUnit, home: benchUnitHome }
+        : null;
   const givenPartner = tray.partners.find((p) => p.group.id === demoPiece);
   const givenUnit = tray.units.find((u) => u.unitId === demoPiece);
   const demoFrom =
     back !== null
       ? back
-      : givenPartner !== undefined
-        ? asPartner(givenPartner)
-        : givenUnit !== undefined
-          ? asUnit(givenUnit)
-          : tray.units[0] !== undefined
-            ? asUnit(tray.units[0])
-            : tray.partners[0] !== undefined
-              ? asPartner(tray.partners[0])
-              : null;
+      : benchUnit !== null && demoCell !== undefined
+        ? benchUnit
+        : givenPartner !== undefined
+          ? asPartner(givenPartner)
+          : givenUnit !== undefined
+            ? asUnit(givenUnit)
+            : tray.units[0] !== undefined
+              ? asUnit(tray.units[0])
+              : tray.partners[0] !== undefined
+                ? asPartner(tray.partners[0])
+                : null;
   const demoTo = (() => {
     if (demoFrom === null) {
       return null;

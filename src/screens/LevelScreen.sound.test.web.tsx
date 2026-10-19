@@ -135,7 +135,7 @@ function partnerOf(id: string, size: number): GroupId {
 
 function unlockedTo(upTo: string, seed = 5): ProgressState {
   let s = createInitialState(seed);
-  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8'];
+  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8'];
   for (const id of order.slice(0, order.indexOf(upTo))) {
     const e = reduce(s, { type: 'enter', nodeId: nodeId(id) });
     const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
@@ -463,5 +463,45 @@ describe('LevelScreen sounds (D-036: sounds first, speech when asked)', () => {
     await press('again');
     expect(mockSounds).toEqual(['arrive']);
     expect(mockSaid).toEqual([]);
+  });
+});
+
+describe('Phase 22: Take-away Island sounds', () => {
+  const row = (id: string) => [...puzzleFor(id).initial.bench.entries()].sort(([, a], [, b]) => a.x - b.x).map(([u]) => u);
+
+  test('a split opens quietly; pulled apart is the success sound; the countdown sounds the count left at each step, the fanfare at the last and the launch on the second beat', async () => {
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch3-n1')) }), 'ch3-n1');
+    expect(mockSounds).toEqual(['arrive']);
+    const three = row('ch3-n1');
+    await command({ type: 'move', unitId: three[2]!, to: { x: 3, y: 1 } });
+    expect(mockSounds).toEqual(['arrive', 'success']);
+    expect(mockSaid).toEqual([]);
+    act(() => root.unmount());
+    root = createRoot(container);
+    mockSounds.length = 0;
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch3-n8')) }), 'ch3-n8');
+    const five = row('ch3-n8');
+    for (const u of [five[4], five[3], five[2]]) {
+      await command({ type: 'return', unitId: u! });
+    }
+    expect(mockSounds).toEqual(['arrive', 'count:4', 'count:3', 'count:2']);
+    await command({ type: 'return', unitId: five[1]! });
+    expect(mockSounds.slice(4)).toEqual(['fanfare']);
+    await beat();
+    expect(mockSounds.slice(5)).toEqual(['launch']);
+    expect(mockSaid).toEqual([]);
+  });
+
+  test('a take-away from partners: the wrong one sent home is the adjust sound once; the right one is success', async () => {
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch3-n6')) }), 'ch3-n6');
+    const [four, two] = puzzleFor('ch3-n6').onMat!;
+    expect(mockSounds).toEqual(['arrive']);
+    await command({ type: 'moveGroup', groupId: two!, delta: { x: 0, y: -1 } });
+    expect(mockSounds).toEqual(['arrive']);
+    await command({ type: 'returnGroup', groupId: four! });
+    expect(mockSounds).toEqual(['arrive', 'adjust']);
+    await command({ type: 'takeGroup', groupId: four!, origin: { x: 0, y: 1 } });
+    await command({ type: 'returnGroup', groupId: two! });
+    expect(mockSounds).toEqual(['arrive', 'adjust', 'success']);
   });
 });

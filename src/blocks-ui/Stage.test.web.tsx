@@ -87,6 +87,23 @@ describe('Stage (2026-10-15 review D: the first partner stop showed one block)',
     expect(all('demo-hand')).toHaveLength(0);
   });
 
+  test('Phase 22: the hand pulls a block of the row aside (a block on the mat with demoTo), or carries one home (demoBack); nothing without either', () => {
+    const split = puzzleOf('ch3-n1');
+    const last = [...split.initial.bench.entries()].sort(([, a], [, b]) => b.x - a.x)[0]![0] as string;
+    render('ch3-n1', { demo: 1, demoPiece: last, demoTo: { x: 3, y: 1 } });
+    expect(all('demo-hand')).toHaveLength(1);
+    expect(all('demo-ghost')).toHaveLength(1);
+    render('ch3-n1', { demo: 1, demoPiece: last });
+    expect(all('demo-hand')).toHaveLength(0);
+    const away = puzzleOf('ch3-n5');
+    const right = [...away.initial.bench.entries()].sort(([, a], [, b]) => b.x - a.x)[0]![0] as string;
+    render('ch3-n5', { demo: 1, demoPiece: right, demoBack: true });
+    expect(all('demo-hand')).toHaveLength(1);
+    expect(all('demo-ghost')).toHaveLength(1);
+    // Five empty beds in the tray at the opening.
+    expect(container.querySelectorAll('[data-testid="tray"]').length).toBe(1);
+  });
+
   test('Phase 21 boss entrance: a row of n dashed cells across the middle with a sleeping face, the first lit ones filled; none without the prop', () => {
     render('ch2-n4', { outline: { n: 5, lit: 2 } });
     expect(all('boss-outline')).toHaveLength(1);

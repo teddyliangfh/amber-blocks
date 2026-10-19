@@ -1,6 +1,6 @@
 import { cell, unitIds } from '../core';
 import { CHAPTERS, CONTENT_VERSION, chapterId, materialize, nodeId } from '../content';
-import { asideCells, atStart, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, givenPartner, isCounted, matOf, onlyGiven, onlyOnMat, previewCommand, recount, roomBeside, sameWayAgain, solvedEquation, solvedParts, startSession, undoCommand, wayAside, waysApart, workWaysApart } from './level-session';
+import { asideCells, atStart, cloudTitle, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, givenPartner, isCounted, matOf, onlyGiven, onlyOnMat, onlyPreset, previewCommand, recount, roomBeside, sameWayAgain, solvedEquation, solvedParts, startSession, takeAwayAt, targetNumberOf, undoCommand, wayAside, waysApart, workWaysApart } from './level-session';
 
 const puzzle = materialize({ contentVersion: CONTENT_VERSION, chapterId: chapterId('ch1'), nodeId: nodeId('ch1-n2'), attemptVariant: 0, seed: 5 });
 const ids = [...puzzle.initial.units.keys()];
@@ -560,5 +560,170 @@ describe('Phase 21: send the extra away (ch2-n10, 3 + 4 + 2 on the mat, make 7)'
     const hand = demoMove(empty);
     expect(hand?.type).toBe('takeGroup');
     expect(hand?.type === 'takeGroup' ? [three, four].includes(hand.groupId) : false).toBe(true);
+  });
+});
+
+describe('Phase 22: Take-away Island', () => {
+  const of = (id: string) => materialize({ contentVersion: CONTENT_VERSION, chapterId: chapterId('ch3'), nodeId: nodeId(id), attemptVariant: 0, seed: 5 });
+  const run = (p: ReturnType<typeof of>, cmds: ReadonlyArray<Parameters<typeof commitCommand>[1]>, from = startSession(p, null)) =>
+    cmds.reduce((s, cmd) => {
+      const r = commitCommand(s, cmd);
+      if (!r.ok) {
+        throw new Error(`${cmd.type}: ${r.reason}`);
+      }
+      return r.session;
+    }, from);
+  const row = (p: ReturnType<typeof of>) => [...p.initial.bench.entries()].sort(([, a], [, b]) => a.x - b.x).map(([u]) => u);
+
+  test('a split (ch3-n1): the row as dealt is the opening, pushed about or not; the hand pulls the last block one cell right; pulled apart it is right and reads 3 = 1 + 2', () => {
+    const p = of('ch3-n1');
+    const units = row(p);
+    const s = startSession(p, null);
+    expect(onlyPreset(s)).toBe(true);
+    expect(atStart(s)).toBe(true);
+    expect(s.verdict).toEqual({ matched: false, benchCount: 3, reason: 'parts-mismatch' });
+    expect(cloudTitle(s)).toBe('3');
+    expect(solvedEquation(s)).toBeNull();
+    expect(demoMove(s)).toEqual({ type: 'move', unitId: units[2], to: { x: 3, y: 1 } });
+    // The whole row moved up: still the opening.
+    const up = run(p, units.map((u, i) => ({ type: 'move' as const, unitId: u, to: cell(i, 0) })).reverse());
+    expect(onlyPreset(up)).toBe(true);
+    const r = commitCommand(s, { type: 'move', unitId: units[2]!, to: cell(3, 1) });
+    expect(r.ok && r.solvedNow).toBe(true);
+    const done = r.ok ? r.session : s;
+    expect(solvedParts(done)).toEqual([2, 1]);
+    expect(solvedEquation(done)).toBe('3 = 2 + 1');
+    expect(onlyPreset(done)).toBe(false);
+    expect(demoMove(done)).toBeUndefined();
+    // Pulled the other way: 1 + 2.
+    const left = run(p, [{ type: 'move', unitId: units[0]!, to: cell(0, 0) }]);
+    expect(left.verdict.matched).toBe(true);
+    expect(solvedEquation(left)).toBe('3 = 1 + 2');
+    // One sent to the tray: no longer the opening, not right.
+    const sent = run(p, [{ type: 'return', unitId: units[2]! }]);
+    expect(onlyPreset(sent)).toBe(false);
+    expect(sent.verdict.reason).toBe('count-mismatch');
+    expect(targetNumberOf(s)).toBe(3);
+  });
+
+  test('two ways to split 5 (ch3-n4): the first split is a step done, the same split moved about is not another, the second is the solve and the cloud reads both; pushed back together it is the opening again', () => {
+    const p = of('ch3-n4');
+    const units = row(p);
+    const first = commitCommand(startSession(p, null), { type: 'move', unitId: units[4]!, to: cell(5, 1) });
+    expect(first.ok && first.stepDone && !first.solvedNow).toBe(true);
+    const s1 = first.ok ? first.session : startSession(p, null);
+    expect(s1.step).toBe(1);
+    expect(s1.used).toEqual([[4, 1]]);
+    expect(s1.verdict).toEqual({ matched: false, benchCount: 5, reason: 'split-used' });
+    expect(cloudTitle(s1)).toBe('5');
+    expect(solvedEquation(s1)).toBeNull();
+    // The pulled block moved elsewhere, still 1 and 4: still used.
+    const moved = run(p, [{ type: 'move', unitId: units[4]!, to: cell(5, 0) }], s1);
+    expect(moved.verdict.reason).toBe('split-used');
+    expect(moved.step).toBe(1);
+    // Pushed back together: the opening of the second way; the hand shows a move that makes a new split.
+    const together = run(p, [{ type: 'move', unitId: units[4]!, to: cell(4, 1) }], s1);
+    expect(onlyPreset(together)).toBe(true);
+    expect(together.used).toEqual([[4, 1]]);
+    const hand = demoMove(together);
+    expect(hand).toEqual({ type: 'move', unitId: units[3], to: { x: 4, y: 2 } });
+    const viaHand = commitCommand(together, hand!);
+    expect(viaHand.ok && viaHand.solvedNow).toBe(true);
+    // 2 + 3 from 1 + 4 by moving one more block: the solve, both lines on the cloud.
+    const second = commitCommand(s1, { type: 'move', unitId: units[3]!, to: cell(4, 1) });
+    expect(second.ok && second.solvedNow && !second.stepDone).toBe(true);
+    const done = second.ok ? second.session : s1;
+    expect(solvedParts(done)).toEqual([3, 2]);
+    expect(solvedEquation(done)).toBe('5 = 4 + 1\n5 = 3 + 2');
+    // Reopened finished: any split is right at once, one line.
+    const again = startSession(p, done.history.state, true);
+    expect(again.verdict.matched).toBe(true);
+    expect(again.step).toBe(1);
+    expect(solvedEquation(again)).toBe('5 = 3 + 2');
+    // Saved work halfway (1 + 4): the first way is counted, the second asked.
+    const resumed = startSession(p, s1.history.state);
+    expect(resumed.step).toBe(1);
+    expect(resumed.used).toEqual([[4, 1]]);
+    expect(resumed.verdict.reason).toBe('split-used');
+  });
+
+  test('a take-away (ch3-n5): the cloud reads 5 − 2, the row as dealt is the opening, the hand sends the last block home; two home is right and reads 5 − 2 = 3; three home is too many', () => {
+    const p = of('ch3-n5');
+    const units = row(p);
+    const s = startSession(p, null);
+    expect(cloudTitle(s)).toBe('5 − 2');
+    expect(takeAwayAt(s)).toEqual({ start: 5, take: 2 });
+    expect(onlyPreset(s)).toBe(true);
+    expect(atStart(s)).toBe(true);
+    expect(demoMove(s)).toEqual({ type: 'return', unitId: units[4] });
+    expect(targetNumberOf(s)).toBe(3);
+    const one = run(p, [{ type: 'return', unitId: units[0]! }]);
+    expect(onlyPreset(one)).toBe(false);
+    expect(one.verdict).toEqual({ matched: false, benchCount: 4, reason: 'count-mismatch' });
+    // The hand now sends a block that is still on the mat.
+    expect(demoMove(one)).toEqual({ type: 'return', unitId: units[4] });
+    const two = commitCommand(one, { type: 'return', unitId: units[2]! });
+    expect(two.ok && two.solvedNow).toBe(true);
+    const done = two.ok ? two.session : one;
+    expect(solvedEquation(done)).toBe('5 − 2 = 3');
+    expect(cloudTitle(done)).toBe('5 − 2');
+    const three = run(p, [{ type: 'return', unitId: units[4]! }], done);
+    expect(three.verdict).toEqual({ matched: false, benchCount: 2, reason: 'count-mismatch' });
+    expect(solvedEquation(three)).toBeNull();
+  });
+
+  test('a take-away from partners (ch3-n6): the row is the opening (onlyOnMat), the hand sends the 2 home; the 4 sent is wrong; 7 − 3 from 3 + 2 + 2: both 2s sent is 3 blocks, not 4', () => {
+    const p = of('ch3-n6');
+    const [four, two] = p.onMat!;
+    const s = startSession(p, null);
+    expect(onlyOnMat(s)).toBe(true);
+    expect(onlyPreset(s)).toBe(false);
+    expect(atStart(s)).toBe(true);
+    expect(cloudTitle(s)).toBe('6 − 2');
+    expect(demoMove(s)).toEqual({ type: 'returnGroup', groupId: two });
+    const right = commitCommand(s, { type: 'returnGroup', groupId: two! });
+    expect(right.ok && right.solvedNow).toBe(true);
+    expect(solvedEquation(right.ok ? right.session : s)).toBe('6 − 2 = 4');
+    const wrong = run(p, [{ type: 'returnGroup', groupId: four! }]);
+    expect(wrong.verdict).toEqual({ matched: false, benchCount: 2, reason: 'count-mismatch' });
+    expect(atStart(wrong)).toBe(false);
+    const q = of('ch3-n7');
+    const [, a, b] = q.onMat!;
+    const both = run(q, [{ type: 'returnGroup', groupId: a! }, { type: 'returnGroup', groupId: b! }]);
+    expect(both.verdict).toEqual({ matched: false, benchCount: 3, reason: 'count-mismatch' });
+  });
+
+  test('the countdown (ch3-n8): 5 − 1, then 4 − 1, 3 − 1, 2 − 1, each step done as a block goes home, the last the solve; saved work resumes at its step', () => {
+    const p = of('ch3-n8');
+    const units = row(p);
+    let s = startSession(p, null);
+    expect(cloudTitle(s)).toBe('5 − 1');
+    expect(takeAwayAt(s)).toEqual({ start: 5, take: 1 });
+    expect(onlyPreset(s)).toBe(true);
+    const seen: string[] = [];
+    for (const [i, u] of [units[4], units[3], units[2]].entries()) {
+      const r = commitCommand(s, { type: 'return', unitId: u! });
+      expect(r.ok && r.stepDone && !r.solvedNow).toBe(true);
+      s = r.ok ? r.session : s;
+      expect(s.step).toBe(i + 1);
+      seen.push(cloudTitle(s));
+      expect(takeAwayAt(s)).toEqual({ start: 4 - i, take: 1 });
+      expect(onlyPreset(s)).toBe(false);
+    }
+    expect(seen).toEqual(['4 − 1', '3 − 1', '2 − 1']);
+    const last = commitCommand(s, { type: 'return', unitId: units[1]! });
+    expect(last.ok && last.solvedNow && !last.stepDone).toBe(true);
+    const done = last.ok ? last.session : s;
+    expect(solvedEquation(done)).toBe('2 − 1 = 1');
+    expect(targetNumberOf(done)).toBe(1);
+    // Two blocks sent at once skips nothing: 3 left is step 2 at once.
+    const quick = run(p, [{ type: 'return', unitId: units[4]! }, { type: 'return', unitId: units[3]! }]);
+    expect(quick.step).toBe(2);
+    expect(cloudTitle(quick)).toBe('3 − 1');
+    const resumed = startSession(p, quick.history.state);
+    expect(resumed.step).toBe(2);
+    expect(resumed.verdict).toEqual({ matched: false, benchCount: 3, reason: 'count-mismatch' });
+    // Finished and reopened: the last count, right.
+    expect(startSession(p, done.history.state, true).verdict.matched).toBe(true);
   });
 });

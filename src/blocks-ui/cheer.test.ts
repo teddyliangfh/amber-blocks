@@ -15,4 +15,11 @@ describe('cheer moves (2026-10-15 review J)', () => {
     expect(cheerFor(17)).toBe('hop');
     expect(cheerFor(3, { boss: true, shape: { w: 2, h: 2 } })).toBe('stack');
   });
+
+  test('Phase 22: the countdown boss launches what is left; a countdown that is no boss, or a boss that is no countdown, does not', () => {
+    expect(cheerFor(1, { boss: true, countdown: true })).toBe('launch');
+    expect(cheerFor(1, { boss: false, countdown: true })).toBe('spin');
+    expect(cheerFor(1, { boss: true })).toBe('spin');
+    expect(cheerFor(5, { boss: true, countdown: false })).toBe('wave');
+  });
 });

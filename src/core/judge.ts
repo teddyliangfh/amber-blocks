@@ -18,6 +18,16 @@ export type Question =
       readonly kind: 'sum_composition';
       readonly sum: number;
       readonly allowed: ReadonlyArray<readonly [number, number]>;
+    }
+  // Pull a number apart (Phase 22, Take-away Island): exactly `total` blocks
+  // on the bench, in exactly `parts` clusters, whatever their sizes. `except`:
+  // splits made already that do not count again (a stop asked several ways),
+  // each as its part sizes in any order.
+  | {
+      readonly kind: 'split';
+      readonly total: number;
+      readonly parts: number;
+      readonly except?: ReadonlyArray<ReadonlyArray<number>>;
     };
 
 // Descriptive, for the UI to phrase a hint. Never a score.
@@ -27,7 +37,11 @@ export type VerdictReason =
   | 'not-one-cluster'
   | 'shape-mismatch'
   | 'groups-mismatch'
-  | 'not-merged';
+  | 'not-merged'
+  // A split: the right count, but not that many clusters.
+  | 'parts-mismatch'
+  // A split made before (in `except`): right, but not again.
+  | 'split-used';
 
 export interface Verdict {
   readonly matched: boolean;
@@ -38,6 +52,12 @@ export interface Verdict {
 
 function verdict(count: number, reason: VerdictReason): Verdict {
   return { matched: reason === 'matched', benchCount: count, reason };
+}
+
+// The same sizes, in any order.
+function sameSizes(a: ReadonlyArray<number>, b: ReadonlyArray<number>): boolean {
+  const sort = (xs: ReadonlyArray<number>) => [...xs].sort((x, y) => x - y).join(',');
+  return a.length === b.length && sort(a) === sort(b);
 }
 
 // All ordered pairs of distinct groups whose sizes are exactly {a, b} as a multiset.
@@ -99,6 +119,16 @@ export function judge(state: BenchState, question: Question): Verdict {
         return verdict(count, 'count-mismatch');
       }
       return judgePairs(state, count, question.allowed);
+    }
+    case 'split': {
+      if (count !== question.total) {
+        return verdict(count, 'count-mismatch');
+      }
+      const sizes = clusters(state).map((c) => c.unitIds.length);
+      if (sizes.length !== question.parts) {
+        return verdict(count, 'parts-mismatch');
+      }
+      return verdict(count, (question.except ?? []).some((e) => sameSizes(e, sizes)) ? 'split-used' : 'matched');
     }
   }
 }

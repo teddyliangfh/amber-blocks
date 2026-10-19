@@ -57,6 +57,12 @@ function numberOf(spec: QuestionSpec): number {
       return Math.max(...spec.pairs.map(([a, b]) => a + b));
     case 'sum_composition':
       return spec.sum;
+    // Take-away Island (Phase 22): the whole that is split, or the start.
+    // Random puzzles do not ask these kinds yet (design §4.6).
+    case 'split':
+      return spec.total;
+    case 'take_away':
+      return spec.start;
   }
 }
 

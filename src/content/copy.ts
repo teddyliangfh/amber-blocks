@@ -28,6 +28,7 @@ function numberEntries(): Record<string, CopyEntry> {
 export const COPY: Readonly<Record<string, CopyEntry>> = {
   'chapter.ch1.title': { zh: '数字岛', en: 'Number Island', params: [] },
   'chapter.ch2.title': { zh: '合体岛', en: 'Join Island', params: [] },
+  'chapter.ch3.title': { zh: '拿走岛', en: 'Take-away Island', params: [] },
 
   'prompt.quantity': { zh: '拼出 {n} 块', en: 'Make {n}', params: ['n'] },
   'prompt.quantity_shape': { zh: '用 {n} 块拼成这个样子', en: 'Build this with {n}', params: ['n'] },
@@ -38,6 +39,14 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
   'prompt.missing_part': { zh: '已经有 {a} 了，再找一个伙伴，拼成 {n}', en: 'Here is {a}. Find one more partner to make {n}', params: ['a', 'n'] },
   // Partners already on the mat make too many (Phase 21 "send the extra away").
   'prompt.send_away': { zh: '工作台上多了，送走多的，拼成 {n}', en: 'Too many! Send one back to make {n}', params: ['n'] },
+  // Take-away Island (Phase 22): pull a row apart; send some home (the tray
+  // is home); a countdown's next step. Chinese counts single blocks as 块 and
+  // partners as 个 (design §6).
+  'prompt.split': { zh: '把 {n} 分成两个伙伴', en: 'Split {n} into two partners', params: ['n'] },
+  'prompt.split.again': { zh: '换一种分法！', en: 'Split it another way!', params: [] },
+  'prompt.take_away': { zh: '{n} 个伙伴，送 {k} 个回家', en: '{n} here. Send {k} home', params: ['n', 'k'] },
+  'prompt.take_away.partner': { zh: '{n} 里送走 {k}，还剩几个？', en: 'Send the {k} home from {n}', params: ['n', 'k'] },
+  'prompt.countdown': { zh: '再送一个回家！', en: 'One more goes home!', params: [] },
 
   'feedback.matched.quantity': { zh: '{n}，就是 {n} 块', en: '{n}. {n} blocks', params: ['n'] },
   // One block: "one. one block", not "one blocks" (Phase 20, play review Q6).
@@ -51,6 +60,9 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
   'feedback.matched.same': { zh: '变了样子，还是 {n} 块', en: 'A new shape, still {n} blocks', params: ['n'] },
   'feedback.matched.shape': { zh: '拼好了，{n} 块', en: 'Done. {n} blocks', params: ['n'] },
   'feedback.matched.addition': { zh: '{a} 加 {b}，一共 {n}', en: '{a} plus {b} makes {n}', params: ['a', 'b', 'n'] },
+  // Take-away Island (Phase 22): a split named left to right; a take-away as it reads.
+  'feedback.matched.split': { zh: '{n} 分成了 {a} 和 {b}', en: '{n} splits into {a} and {b}', params: ['n', 'a', 'b'] },
+  'feedback.matched.take_away': { zh: '{n} 拿走 {k}，还剩 {r}', en: '{n} take away {k} leaves {r}', params: ['n', 'k', 'r'] },
   'feedback.start': { zh: '动手试试看', en: 'Give it a try', params: [] },
   'feedback.success': { zh: '拼对啦！', en: 'You did it!', params: [] },
   'feedback.fewer': { zh: '还差 {n} 块', en: '{n} more blocks to go', params: ['n'] },
@@ -74,6 +86,16 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
   // Short of the target, and nothing left in the tray adds up to the gap.
   'feedback.stuck': { zh: '这样拼不到 {n}', en: "Can't make {n} this way", params: ['n'] },
   'feedback.listen': { zh: '听提示', en: 'Hear the hint', params: [] },
+  // Take-away Island cards (Phase 22, design §5.1–5.2). Pulled into more than
+  // two piles; sent to the tray on a split; on a take-away: more to send (the
+  // gap told on the first stops, GAP_TOLD_UNTIL), the gap not told, too many
+  // sent, the wrong partner sent.
+  'feedback.split.three': { zh: '分成了 {k} 堆，要两堆', en: "That's {k} piles. Make two", params: ['k'] },
+  'feedback.split.keep': { zh: '都留在工作台上，只要分开', en: 'Keep them all here, just pull apart', params: [] },
+  'feedback.send.more': { zh: '还要再送 {k} 个', en: '{k} more to go home', params: ['k'] },
+  'feedback.send.notyet': { zh: '还没拿走 {k} 块', en: 'Not {k} gone yet', params: ['k'] },
+  'feedback.send.toomany': { zh: '送多了，叫 {k} 个回来', en: 'Too many went home. Bring {k} back', params: ['k'] },
+  'feedback.send.wrong': { zh: '拿走的是 {x}，不是 {k}', en: 'That was the {x}, not the {k}', params: ['x', 'k'] },
   // A right answer: the badge already shows what was built, so the card says what comes next.
   'feedback.next': { zh: '可以去下一站啦', en: 'On to the next stop', params: [] },
   'feedback.done': { zh: '回地图看看吧', en: 'Head back to the map', params: [] },
@@ -109,6 +131,19 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
   'hint.stuck.named': { zh: '先放回 {k} 块，再把 {a} 搬过来', en: 'Put {k} back, then bring the {a}', params: ['k', 'a'] },
   // Two other partners that make the same total: right first, then which two to find (2026-10-16 review A-4).
   'hint.same-sum': { zh: '{x} 加 {y} 也是 {n}！再找 {a} 和 {b}', en: '{x} plus {y} is {n} too! Now find {a} and {b}', params: ['x', 'y', 'n', 'a', 'b'] },
+  // Take-away Island help (Phase 22, design §5.5), by rung: pull one away /
+  // the last one; another split; one pile too many; blocks back from the
+  // tray; send k home / and what stays; the partner to bring back, and the
+  // one to send instead.
+  'hint.pull': { zh: '把一块拉开', en: 'Pull one block away', params: [] },
+  'hint.pull.right': { zh: '把最右边的一块拉开', en: 'Pull the last block away', params: [] },
+  'hint.split.another': { zh: '再分成另外两个数', en: 'Split it into two other numbers', params: [] },
+  'hint.split.two': { zh: '把一块推回去，只留两堆', en: 'Push one back. Just two piles', params: [] },
+  'hint.bring.back': { zh: '把 {k} 块叫回来', en: 'Bring {k} back', params: ['k'] },
+  'hint.send.home': { zh: '送 {k} 块回家', en: 'Send {k} home', params: ['k'] },
+  'hint.send.home.left': { zh: '送 {k} 块回家，剩 {r} 块', en: 'Send {k} home, {r} stay', params: ['k', 'r'] },
+  'hint.call.back': { zh: '把 {a} 叫回来，送走 {b}', en: 'Bring the {a} back, send the {b}', params: ['a', 'b'] },
+  'hint.call.back.one': { zh: '把 {a} 叫回来', en: 'Bring the {a} back', params: ['a'] },
 
   // The end of an island (2026-10-15): the button on its last stop, the line
   // on the island page (said when tapped, never on its own) and its button.

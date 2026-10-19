@@ -10,9 +10,9 @@ describe('M2 map via the public API', () => {
     chapter.nodes.map((node) => ({ contentVersion: CONTENT_VERSION, chapterId: chapter.id, nodeId: node.id, attemptVariant: 0, seed: 2026 })),
   );
 
-  test('twenty-four stops, five of them bosses', () => {
-    expect(refs).toHaveLength(24);
-    expect(CHAPTERS.flatMap((c) => c.nodes).filter((n) => n.role === 'boss')).toHaveLength(5);
+  test('thirty-two stops, seven of them bosses', () => {
+    expect(refs).toHaveLength(32);
+    expect(CHAPTERS.flatMap((c) => c.nodes).filter((n) => n.role === 'boss')).toHaveLength(7);
   });
 
   test('every stop at variants 0 to 4 validates and its solution passes the judge', () => {

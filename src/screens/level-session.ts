@@ -3,6 +3,14 @@ import type { BenchState, Cell, Command, CountRound, Group, GroupId, History, Re
 import { benchPair, questionAt, samePair, stepCount } from '../content';
 import type { NodeSpec, Pair, Puzzle } from '../content';
 
+// How a split's cloud reads once it is right (Phase 22, design §9 #4):
+// 'whole-first' writes `3 = 1 + 2` (Numberblocks and ACARA say "3 is 1 and
+// 2"); 'none' leaves the cloud at `3` and lets the card say the parts. A
+// default for Ted; one word to change.
+export const SPLIT_EQUATION: 'whole-first' | 'none' = 'whole-first';
+// The minus sign the cloud writes (U+2212, the same width as +).
+export const MINUS = '−';
+
 // Everything a level screen needs to know between gestures, kept pure so the
 // rules can be tested without rendering: committed history, the current verdict
 // and the counting round. Saving and audio are the screen's job.
@@ -193,7 +201,10 @@ function walk(whole: Puzzle, state: BenchState, from: At, byJudge: boolean): At 
   while (at.step < lastStep(whole)) {
     const view = judgedMat(state, at.used);
     const q = stepView(whole, at.step, at.used).question;
-    if (byJudge && judge(view, q).matched) {
+    // A countdown's count only goes down (Phase 22): fewer blocks than a step
+    // asks means that step is behind us (two sent at once; saved work resumed).
+    const passed = whole.takeAway !== undefined && q.kind === 'quantity' && view.bench.size < q.target;
+    if (byJudge && (judge(view, q).matched || passed)) {
       at = advance(whole, view, at.step, at.used);
       continue;
     }
@@ -340,6 +351,13 @@ export function solvedParts(session: LevelSession): readonly [number, number] | 
   if (q.kind === 'addition_exact') {
     return q.operands;
   }
+  // A split (Phase 22): its two piles, left (then top) first.
+  if (q.kind === 'split') {
+    const piles = clusters(session.history.state)
+      .map((c) => ({ size: c.unitIds.length, ...corner(session.history.state, c.unitIds) }))
+      .sort((a, b) => a.x - b.x || a.y - b.y);
+    return piles.length === 2 ? [piles[0]!.size, piles[1]!.size] : null;
+  }
   if (q.kind !== 'sum_composition') {
     return null;
   }
@@ -378,11 +396,85 @@ export function onlyOnMat(session: LevelSession): boolean {
   return state.bench.size === units.length && units.every((u) => state.bench.has(u));
 }
 
+// A split, or a take-away of single blocks (Phase 22): the stop's blocks start
+// on the mat and the tray holds only their beds.
+function isPreset(whole: Puzzle): boolean {
+  return whole.onMat === undefined && (whole.question.kind === 'split' || whole.takeAway !== undefined);
+}
+
+// Every block a split / take-away stop starts with still on the mat, nothing
+// gone home (anywhere on the mat); on a split, still in one piece: its opening
+// (Phase 22). Pulled apart is judged; pushed back together is the opening again.
+export function onlyPreset(session: LevelSession): boolean {
+  const { whole } = session;
+  if (!isPreset(whole)) {
+    return false;
+  }
+  const state = session.history.state;
+  const units = [...whole.initial.bench.keys()];
+  if (state.bench.size !== units.length || !units.every((u) => state.bench.has(u))) {
+    return false;
+  }
+  return whole.question.kind !== 'split' || clusters(state).length === 1;
+}
+
 // The stop as it opens: an empty mat, or only the partner a "who's missing?"
-// stop starts with, or the row a "send the extra away" stop starts with. The
-// card gives the task and the hand may show the first move.
+// stop starts with, or the row a "send the extra away" stop starts with, or a
+// split's / take-away's blocks as dealt. The card gives the task and the hand
+// may show the first move.
 export function atStart(session: LevelSession): boolean {
-  return session.history.state.bench.size === 0 || onlyGiven(session) || onlyOnMat(session);
+  return session.history.state.bench.size === 0 || onlyGiven(session) || onlyOnMat(session) || onlyPreset(session);
+}
+
+// A take-away stop's current step (Phase 22): how many it starts with and how
+// many go home. A countdown's later steps start with what the step before left.
+export function takeAwayAt(session: LevelSession): { readonly start: number; readonly take: number } | null {
+  const { whole, step } = session;
+  const away = whole.takeAway;
+  if (away === undefined) {
+    return null;
+  }
+  const steps = whole.steps;
+  if (steps === undefined) {
+    return away;
+  }
+  const left = (i: number): number => {
+    const q = steps[i];
+    return q?.kind === 'quantity' ? q.target : away.start;
+  };
+  const start = step === 0 ? away.start : left(step - 1);
+  return { start, take: start - left(step) };
+}
+
+// The first move that makes a new split of the row (Phase 22): the last block
+// pulled one cell to the right (1 and the rest); asked another way, the k-th
+// block from the right put under the last one (k and the rest), skipping the
+// splits made. Only from the row as dealt; undefined once it is apart.
+function splitDemo(session: LevelSession): Command | undefined {
+  const state = session.history.state;
+  const q = session.puzzle.question;
+  if (q.kind !== 'split' || !onlyPreset(session)) {
+    return undefined;
+  }
+  const row = [...state.bench.entries()].sort(([, a], [, b]) => a.x - b.x || a.y - b.y);
+  const last = row[row.length - 1];
+  if (last === undefined) {
+    return undefined;
+  }
+  const { rows } = state.bounds;
+  const below = last[1].y + 1 < rows ? last[1].y + 1 : last[1].y - 1;
+  for (let k = 1; k <= Math.floor(q.total / 2); k += 1) {
+    if (session.used.some((u) => samePair(u, [k, q.total - k]))) {
+      continue;
+    }
+    const [unitId, at] = row[row.length - k]!;
+    const to = k === 1 ? { x: at.x + 1, y: at.y } : { x: last[1].x, y: below };
+    const cmd: Command = { type: 'move', unitId, to };
+    if (apply(state, cmd).ok) {
+      return cmd;
+    }
+  }
+  return undefined;
 }
 
 // A sum asked several ways, past its first way, with the mat still showing a
@@ -462,6 +554,14 @@ export function demoMove(session: LevelSession): Command | undefined {
   const { whole, puzzle } = session;
   const state = session.history.state;
   const q = puzzle.question;
+  // A split: pull one block away (Phase 22). A take-away of single blocks: the
+  // first of the answer's blocks still on the mat goes home.
+  if (q.kind === 'split') {
+    return splitDemo(session);
+  }
+  if (isPreset(whole)) {
+    return whole.solution.find((c) => apply(state, c).ok);
+  }
   if (session.used.length > 0 && q.kind === 'sum_composition') {
     const sizes = new Set(q.allowed.flat());
     return whole.solution.find((c) => c.type === 'takeGroup' && sizes.has(groupSize(state.groups.get(c.groupId)!)));
@@ -492,12 +592,66 @@ export function demoMove(session: LevelSession): Command | undefined {
 // standing beside the one just judged, both, one a line, in the order they
 // were made: 3 + 4 = 7 / 5 + 2 = 7.
 export function solvedEquation(session: LevelSession): string | null {
+  const q = session.puzzle.question;
+  // A take-away (Phase 22): `5 − 2 = 3`, this step's.
+  const away = takeAwayAt(session);
+  if (away !== null) {
+    return session.verdict.matched ? `${away.start} ${MINUS} ${away.take} = ${away.start - away.take}` : null;
+  }
   const parts = solvedParts(session);
   if (parts === null) {
     return null;
+  }
+  // A split (Phase 22): `3 = 1 + 2` (SPLIT_EQUATION), the splits made before it
+  // each a line, in the order they were made.
+  if (q.kind === 'split') {
+    if (SPLIT_EQUATION === 'none') {
+      return null;
+    }
+    const split = ([a, b]: readonly [number, number]) => `${q.total} = ${a} + ${b}`;
+    return [...session.used.map(split), split(parts)].join('\n');
   }
   const line = ([a, b]: readonly [number, number]) => `${a} + ${b} = ${a + b}`;
   const made = madeWays(session.history.state, session.used);
   const order = (w: MadeWay) => session.used.findIndex((p) => samePair(p, w.parts));
   return [...[...made].sort((a, b) => order(a) - order(b)).map((w) => line(w.parts)), line(parts)].join('\n');
+}
+
+// What the cloud shows before the answer is right: the number to make, the
+// sum to put together (`3 + 4`), a split's whole, or a take-away as it reads
+// (`5 − 2`; a countdown's current step, Phase 22). solvedEquation() takes over
+// once it is right.
+export function cloudTitle(session: LevelSession): string {
+  const q = session.puzzle.question;
+  const away = takeAwayAt(session);
+  if (away !== null) {
+    return `${away.start} ${MINUS} ${away.take}`;
+  }
+  switch (q.kind) {
+    case 'addition_exact':
+      return `${q.operands[0]} + ${q.operands[1]}`;
+    case 'sum_composition':
+      return String(q.sum);
+    case 'split':
+      return String(q.total);
+    default:
+      return String(q.target);
+  }
+}
+
+// The number the stop is about, for colour and the solve's move: the count to
+// make, the sum, a split's whole, or what a take-away leaves (the character
+// the child ends with, design §4.2).
+export function targetNumberOf(session: LevelSession): number {
+  const q = session.puzzle.question;
+  switch (q.kind) {
+    case 'addition_exact':
+      return q.operands[0] + q.operands[1];
+    case 'sum_composition':
+      return q.sum;
+    case 'split':
+      return q.total;
+    default:
+      return q.target;
+  }
 }

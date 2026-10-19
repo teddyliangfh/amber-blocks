@@ -5,7 +5,7 @@ export { chapterId, nodeId } from './ids';
 
 export type { Chapter, NodeSpec, Puzzle, PuzzleDisplay, PuzzleRef, QuestionSpec } from './schema';
 
-export { BOSS_ENTRANCE, CHAPTERS, CONTENT_CHANGES, CONTENT_VERSION, COUNT_TO_PASS, findChapter, findNode } from './catalog';
+export { BOSS_ENTRANCE, CHAPTERS, CONTENT_CHANGES, CONTENT_VERSION, COUNT_TO_PASS, ISLAND_SHOWCASE, findChapter, findNode } from './catalog';
 
 export { materialize, materializeNode } from './generate';
 export { validate } from './validate';

@@ -51,7 +51,7 @@ afterEach(() => {
 });
 
 const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } };
-const ORDER = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8'];
+const ORDER = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8'];
 
 function finished(count: number, language: 'zh' | 'en' = 'zh'): ProgressState {
   let s = { ...createInitialState(5), language };
@@ -111,16 +111,38 @@ describe('island page (2026-10-15 review I)', () => {
     expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/', params: { from: 'ch1-n12', to: 'ch2-n1' } });
   });
 
-  test('the last island: every island done, back to the map; its boss is 7 made two ways, drawn as the last way when there is no picture', async () => {
+  test('Join Island done: on to Take-away Island (Phase 22); its boss is 7 made two ways, drawn as the last way when there is no picture', async () => {
     await open(finished(24, 'en'), 'ch2');
     expect(container.querySelectorAll('[data-testid="island-cheer"]')).toHaveLength(12);
     // No album picture and no saved work: the reference answer's end, the second way (5 + 2, Phase 19).
     expect([...container.querySelectorAll('[data-testid="island-work"] [data-testid^="partner-"]')].map((p) => p.getAttribute('data-testid')).filter((t) => /^partner-\d+$/.test(t!)).sort()).toEqual(['partner-2', 'partner-5']);
+    expect(q('island-line')?.textContent).toBe('Join Island is done. On to Take-away Island!');
+    expect(q('island-go')?.textContent).toBe('On to Take-away Island');
+    act(() => jest.advanceTimersByTime(ISLAND_SKIP_AFTER_MS));
+    await act(async () => q('island-go')!.click());
+    expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/', params: { from: 'ch2-n8', to: 'ch3-n1' } });
+  });
+
+  test('Phase 22, the last island: every island done, back to the map; Take-away Island shows its mini boss, 5 split two ways (ISLAND_SHOWCASE), not the countdown\'s lone 1', async () => {
+    await open(finished(32, 'en'), 'ch3');
+    const cheers = [...container.querySelectorAll('[data-testid="island-cheer"]')];
+    expect(cheers).toHaveLength(8);
+    expect(cheers.map((c) => c.textContent)).toEqual(['3', '4', '4−1', '5', '5−2', '6−2', '7−3', '5']);
+    // No album picture and no saved work: the reference answer's end, 2 + 3 (two piles of single blocks, no partner).
+    const blocks = container.querySelectorAll('[data-testid="island-work"] [data-testid="block"]');
+    expect(blocks.length).toBe(5);
+    expect(container.querySelectorAll('[data-testid="island-work"] [data-testid^="partner-"]')).toHaveLength(0);
     expect(q('island-line')?.textContent).toBe('Every island is done!');
     expect(q('island-go')?.textContent).toBe('Back to map');
     act(() => jest.advanceTimersByTime(ISLAND_SKIP_AFTER_MS));
     await act(async () => q('island-go')!.click());
     expect(mockRouter.replace).toHaveBeenLastCalledWith('/');
+    // In Chinese: 拿走岛.
+    act(() => root.unmount());
+    root = createRoot(container);
+    await open(finished(32), 'ch3');
+    expect(q('island-line')?.textContent).toBe('所有的岛都完成了！');
+    expect(container.querySelector('[data-testid="island-done"]')?.textContent).toContain('★ 拿走岛 ★');
   });
 
   test('an unfinished or unknown island has no page: back to the map, nothing thrown', async () => {

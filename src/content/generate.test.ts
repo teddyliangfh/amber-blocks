@@ -4,7 +4,7 @@ import { fitBench } from './bench';
 import { STAIRS_6, TEN_2X5 } from './catalog/shapes';
 import { CONTENT_VERSION } from './catalog';
 import { materialize, materializeNode } from './generate';
-import { partnerMaterial } from './material';
+import { onMatMaterial, partnerMaterial, presetMaterial } from './material';
 import { buildSolution } from './solution';
 import { benchPair, questionAt, samePair, stepCount } from './steps';
 import { validate } from './validate';
@@ -321,7 +321,7 @@ describe('Phase 19: two ways to make 7 (a sum asked several ways)', () => {
     const once = p.solution.slice(0, 2);
     expect(() => validate({ ...p, solution: [...once, p.solution[2]!, p.solution[3]!, ...once] }, spec)).toThrow(/does not pass/);
     const square = materialize(ref('ch1', 'ch1-n3'));
-    expect(() => validate({ ...square, ways: 2 }, { kind: 'quantity_shape', target: 4, templates: [square.display.template!], extra: 2 })).toThrow(/ways come from a sum spec/);
+    expect(() => validate({ ...square, ways: 2 }, { kind: 'quantity_shape', target: 4, templates: [square.display.template!], extra: 2 })).toThrow(/ways come from a sum/);
   });
 });
 
@@ -415,7 +415,7 @@ describe('Phase 21: send the extra away (partners already on the mat)', () => {
     // Partners on the mat the spec does not have.
     expect(() => validate(p, { kind: 'sum_composition', sum: 7, allowed: [[3, 4]], distractors: [2] })).toThrow(/start in the tray|onMat/);
     const square = materialize(ref('ch1', 'ch1-n3'));
-    expect(() => validate({ ...square, onMat: p.onMat }, { kind: 'quantity_shape', target: 4, templates: [square.display.template!], extra: 2 })).toThrow(/come from a sum spec/);
+    expect(() => validate({ ...square, onMat: p.onMat }, { kind: 'quantity_shape', target: 4, templates: [square.display.template!], extra: 2 })).toThrow(/come from a sum or take-away spec/);
   });
 
   test('a row that is not joined is refused', () => {
@@ -514,5 +514,209 @@ describe('Phase 21: teens (10 already on the mat)', () => {
       expect(move?.type === 'takeGroup' ? move.origin.x : -1).toBe(5);
       expect(judge(replay(p.initial, p.solution), p.question)).toEqual({ matched: true, benchCount: 13, reason: 'matched' });
     }
+  });
+});
+
+describe('Phase 22: pull apart (a split, Take-away Island)', () => {
+  const spec = { kind: 'split', total: 3, parts: 2 } as const;
+  const mat = fitBench(spec);
+  const split = (s: NodeSpec['spec'] = spec, seed = 11, v = 0) => materializeNode(custom(s), fitBench(s), ref('ch3', 'x-n1', v, seed));
+  const row = (p: ReturnType<typeof split>) => [...p.initial.bench.entries()].sort(([, a], [, b]) => a.x - b.x);
+
+  test('three blocks start joined in one row from the left, in the middle of a 4 × 3 mat; the tray keeps their beds', () => {
+    expect(mat).toEqual({ cols: 4, rows: 3 });
+    const p = split();
+    expect(p.question).toEqual({ kind: 'split', total: 3, parts: 2 });
+    expect(p.initial.units.size).toBe(3);
+    expect(p.initial.groups.size).toBe(0);
+    expect(row(p).map(([, c]) => [c.x, c.y])).toEqual([[0, 1], [1, 1], [2, 1]]);
+    expect(p.initial.tray.map((t) => t.unitId)).toEqual([null, null, null]);
+    expect([...p.initial.units.values()].every((u) => u.hue === 'n3')).toBe(true);
+    expect(p.display).toEqual({ target: 3, operands: null, template: null, partnerIds: [] });
+    expect(p.prompt).toBe('prompt.split');
+    expect(p.ways).toBeUndefined();
+    expect(p.takeAway).toBeUndefined();
+    expect(split(spec, 4242, 2)).toEqual(split(spec, 4242, 2));
+    // Opening: one pile, not two.
+    expect(judge(p.initial, p.question)).toEqual({ matched: false, benchCount: 3, reason: 'parts-mismatch' });
+  });
+
+  test('the reference answer pulls the last block one cell to the right: 1 and 2; any other split is right too', () => {
+    const p = split();
+    const [last] = row(p).slice(-1);
+    expect(p.solution).toEqual([{ type: 'move', unitId: last![0], to: cell(3, 1) }]);
+    expect(judge(replay(p.initial, p.solution), p.question)).toEqual({ matched: true, benchCount: 3, reason: 'matched' });
+    const [first] = row(p);
+    const other = replay(p.initial, [{ type: 'move', unitId: first![0], to: cell(0, 0) }]);
+    expect(judge(other, p.question).matched).toBe(true);
+  });
+
+  test('two ways (5): the answer makes 1 + 4, then 2 + 3 by moving one more block; the same split twice does not pass', () => {
+    const five = { kind: 'split', total: 5, parts: 2, ways: 2 } as const;
+    const p = split(five);
+    expect(fitBench(five)).toEqual({ cols: 6, rows: 3 });
+    expect(p.ways).toBe(2);
+    expect(stepCount(p)).toBe(2);
+    expect(p.solution.map((c) => (c.type === 'move' ? [c.to.x, c.to.y] : null))).toEqual([[5, 1], [4, 1]]);
+    const one = replay(p.initial, p.solution.slice(0, 1));
+    expect(benchPair(one)).toEqual([4, 1]);
+    expect(questionAt(p, 1, [[4, 1]])).toEqual({ kind: 'split', total: 5, parts: 2, except: [[4, 1]] });
+    expect(judge(one, questionAt(p, 1, [[4, 1]]))).toEqual({ matched: false, benchCount: 5, reason: 'split-used' });
+    const two = replay(p.initial, p.solution);
+    expect(benchPair(two)).toEqual([3, 2]);
+    expect(judge(two, questionAt(p, 1, [[4, 1]])).matched).toBe(true);
+    // Moving the pulled block back and forth is the same way: the answer does not pass.
+    const again = [p.solution[0]!, { type: 'move', unitId: (p.solution[0] as unknown as { unitId: never }).unitId, to: cell(4, 0) } as Command];
+    expect(() => validate({ ...p, solution: again }, five)).toThrow(/does not pass/);
+  });
+
+  test('content bugs: fewer than two blocks, not two parts, more ways than splits, blocks in the tray, partners, a broken row, a stray except', () => {
+    expect(() => split({ kind: 'split', total: 1, parts: 2 })).toThrow(/at least 2 blocks/);
+    expect(() => split({ kind: 'split', total: 4, parts: 3 })).toThrow(/two parts this round/);
+    expect(() => split({ kind: 'split', total: 3, parts: 2, ways: 2 })).toThrow(/3 splits in two only 1 way/);
+    expect(() => split({ kind: 'split', total: 4, parts: 2, ways: 0 })).toThrow(/ways must be a positive integer/);
+    const p = split();
+    const [last] = row(p).slice(-1);
+    const back = replay(p.initial, [{ type: 'return', unitId: last![0] }]);
+    expect(() => validate({ ...p, initial: back }, spec)).toThrow(/all on the mat/);
+    const apart = replay(p.initial, p.solution);
+    expect(() => validate({ ...p, initial: apart }, spec)).toThrow(/starts as one row/);
+    expect(() => validate({ ...p, question: { ...p.question, except: [[1, 2]] } as never }, spec)).toThrow(/does not match its spec/);
+    expect(() => validate({ ...p, ways: 2 }, spec)).toThrow(/ways must be a positive integer the puzzle carries/);
+    expect(() => validate(p, { kind: 'quantity', targets: [3], extra: 1 })).toThrow(/must start in the tray/);
+    // A split is single blocks: the partner material of 2 + 1 is not one.
+    const partners = partnerMaterial([2, 1], mat, 'x');
+    expect(() => validate({ ...p, initial: partners.state }, spec)).toThrow(/all on the mat/);
+  });
+});
+
+describe('Phase 22: take away (blocks on the mat go home)', () => {
+  const spec = { kind: 'take_away', start: 5, take: 2 } as const;
+  const away = (s: NodeSpec['spec'] = spec, seed = 11, v = 0) => materializeNode(custom(s), fitBench(s), ref('ch3', 'x-n1', v, seed));
+  const row = (p: ReturnType<typeof away>) => [...p.initial.bench.entries()].sort(([, a], [, b]) => a.x - b.x);
+
+  test('5 − 2: five blocks start in a row on a 6 × 3 mat, judged as "3"; the answer sends the last two home, right to left', () => {
+    expect(fitBench(spec)).toEqual({ cols: 6, rows: 3 });
+    const p = away();
+    expect(p.question).toEqual({ kind: 'quantity', target: 3 });
+    expect(p.takeAway).toEqual({ start: 5, take: 2 });
+    expect(p.steps).toBeUndefined();
+    expect(p.onMat).toBeUndefined();
+    expect(row(p).map(([, c]) => [c.x, c.y])).toEqual([[0, 1], [1, 1], [2, 1], [3, 1], [4, 1]]);
+    expect(p.initial.tray.every((t) => t.unitId === null)).toBe(true);
+    expect(p.prompt).toBe('prompt.take_away');
+    expect(p.display.target).toBe(3);
+    const units = row(p).map(([u]) => u);
+    expect(p.solution).toEqual([{ type: 'return', unitId: units[4] }, { type: 'return', unitId: units[3] }]);
+    expect(judge(p.initial, p.question)).toEqual({ matched: false, benchCount: 5, reason: 'count-mismatch' });
+    const solved = replay(p.initial, p.solution);
+    expect(judge(solved, p.question).matched).toBe(true);
+    // Each block goes back to its own bed.
+    expect(solved.tray.map((t) => t.unitId)).toEqual([null, null, null, units[3], units[4]]);
+    expect(away(spec, 4242, 2)).toEqual(away(spec, 4242, 2));
+  });
+
+  test('from partners (6 − 2 from a 4 and a 2): the row starts joined, the answer sends the 2 home; 7 − 3 from 3 + 2 + 2 sends the 3', () => {
+    const six = { kind: 'take_away', start: 6, take: 2, onMat: [4, 2] } as const;
+    expect(fitBench(six)).toEqual({ cols: 7, rows: 3 });
+    const p = away(six);
+    expect(p.onMat!.map((id) => groupSize(p.initial.groups.get(id)!))).toEqual([4, 2]);
+    expect(p.display.partnerIds).toEqual(p.onMat);
+    expect(p.initial.bench.size).toBe(6);
+    expect(p.initial.tray.every((t) => t.unitId === null)).toBe(true);
+    expect(p.prompt).toBe('prompt.take_away.partner');
+    expect(p.question).toEqual({ kind: 'quantity', target: 4 });
+    expect(p.solution).toEqual([{ type: 'returnGroup', groupId: p.onMat![1] }]);
+    expect(judge(replay(p.initial, p.solution), p.question).matched).toBe(true);
+    // Sending the 4 leaves 2: wrong, and the card says which went (hints).
+    expect(judge(replay(p.initial, [{ type: 'returnGroup', groupId: p.onMat![0]! }]), p.question)).toEqual({ matched: false, benchCount: 2, reason: 'count-mismatch' });
+    const seven = { kind: 'take_away', start: 7, take: 3, onMat: [3, 2, 2] } as const;
+    expect(fitBench(seven)).toEqual({ cols: 8, rows: 3 });
+    const q = away(seven);
+    expect(q.solution).toEqual([{ type: 'returnGroup', groupId: q.onMat![0] }]);
+    // The two 2s are 4 blocks: sending both leaves 3, not 4.
+    const both = replay(q.initial, [{ type: 'returnGroup', groupId: q.onMat![1]! }, { type: 'returnGroup', groupId: q.onMat![2]! }]);
+    expect(judge(both, q.question)).toEqual({ matched: false, benchCount: 3, reason: 'count-mismatch' });
+  });
+
+  test('a countdown (5, steps [1, 1, 1, 1]): the counts left are the steps, one block home each; the answer passes 4, 3, 2 on its way to 1', () => {
+    const rocket = { kind: 'take_away', start: 5, take: 4, steps: [1, 1, 1, 1] } as const;
+    const p = away(rocket);
+    expect(p.steps).toEqual([{ kind: 'quantity', target: 4 }, { kind: 'quantity', target: 3 }, { kind: 'quantity', target: 2 }, { kind: 'quantity', target: 1 }]);
+    expect(p.question).toEqual(p.steps![0]);
+    expect(stepCount(p)).toBe(4);
+    expect(p.solution.map((c) => c.type)).toEqual(['return', 'return', 'return', 'return']);
+    let state = p.initial;
+    p.solution.forEach((cmd, i) => {
+      state = replay(state, [cmd]);
+      expect(judge(state, p.steps![i]!).matched).toBe(true);
+    });
+    expect(state.bench.size).toBe(1);
+    // Two at a time is allowed as steps too: 5, steps [2, 1] asks 3 then 2.
+    const two = away({ kind: 'take_away', start: 5, take: 3, steps: [2, 1] });
+    expect(two.steps!.map((q) => (q.kind === 'quantity' ? q.target : 0))).toEqual([3, 2]);
+    expect(two.solution).toHaveLength(3);
+  });
+
+  test('content bugs: nothing left, blocks in the tray, partners that are not the start, two ways to take, a countdown of partners or of one step, steps that do not add up, a stray take-away', () => {
+    expect(() => away({ kind: 'take_away', start: 3, take: 3 })).toThrow(/leaves nothing to count/);
+    expect(() => away({ kind: 'take_away', start: 3, take: 0 })).toThrow(/leaves nothing to count/);
+    expect(() => away({ kind: 'take_away', start: 6, take: 2, onMat: [4, 1] })).toThrow(/starts with exactly 6 blocks/);
+    const five = away({ kind: 'take_away', start: 5, take: 2, onMat: [3, 2] });
+    expect(() => validate(five, { kind: 'take_away', start: 5, take: 2, onMat: [4, 1] })).toThrow(/not as dealt|all there is on the mat|is not 5/);
+    // A 2 or the other 2: a guess (two sets of the same sizes count as one way, so 2 + 2 take 2 is fine).
+    expect(() => away({ kind: 'take_away', start: 6, take: 3, onMat: [3, 1, 2] })).toThrow(/2 ways to take 3/);
+    expect(() => away({ kind: 'take_away', start: 4, take: 2, onMat: [2, 2] })).not.toThrow();
+    expect(() => away({ kind: 'take_away', start: 6, take: 2, onMat: [4, 2], steps: [1, 1] })).toThrow(/countdown is of single blocks/);
+    expect(() => away({ kind: 'take_away', start: 5, take: 2, steps: [2] })).toThrow(/at least two steps/);
+    expect(() => away({ kind: 'take_away', start: 5, take: 2, steps: [1, 2] })).toThrow(/do not add up to 2/);
+    const p = away();
+    const [first] = row(p);
+    expect(() => validate({ ...p, initial: replay(p.initial, [{ type: 'return', unitId: first![0] }]) }, spec)).toThrow(/all on the mat/);
+    expect(() => validate(p, { kind: 'quantity', targets: [3], extra: 2 })).toThrow(/must start in the tray/);
+    expect(() => validate({ ...p, takeAway: { start: 5, take: 3 } }, spec)).toThrow(/carries its start and take/);
+    expect(() => validate({ ...p, question: { kind: 'quantity', target: 4 } }, spec)).toThrow(/judged as the count left, 3/);
+    const quantity = materialize(ref('ch1', 'ch1-n2'));
+    expect(() => validate({ ...quantity, takeAway: { start: 4, take: 2 } }, { kind: 'quantity', targets: [2], extra: 2 })).toThrow(/take-away puzzle comes from a take-away spec/);
+    // An answer that sends the wrong partner home does not pass.
+    const six = away({ kind: 'take_away', start: 6, take: 2, onMat: [4, 2] });
+    expect(() => validate({ ...six, solution: [{ type: 'returnGroup', groupId: six.onMat![0]! }] }, { kind: 'take_away', start: 6, take: 2, onMat: [4, 2] })).toThrow(/does not pass/);
+  });
+});
+
+describe('Phase 22: the content bugs the builders refuse (split and take-away material, answers and steps)', () => {
+  const mat = { cols: 4, rows: 3 };
+
+  test('presetMaterial needs a positive count and a mat the row fits on', () => {
+    expect(() => presetMaterial(0, mat, 'x')).toThrow(/positive integer/);
+    expect(() => presetMaterial(5, mat, 'x')).toThrow(/could not put block/);
+    const three = presetMaterial(3, mat, 'x');
+    expect([...three.bench.values()]).toEqual([cell(0, 1), cell(1, 1), cell(2, 1)]);
+  });
+
+  test('the reference answer refuses a take-away no partners on the mat make, and a split asked more ways than it has blocks', () => {
+    const onMat = onMatMaterial([4, 2], [], { cols: 7, rows: 3 }, 'x');
+    expect(() => buildSolution({ kind: 'quantity', target: 1 }, onMat.state)).toThrow(/no partners on the mat add up to the 5/);
+    expect(() => buildSolution({ kind: 'split', total: 2, parts: 2 }, presetMaterial(2, mat, 'x'), [], 5)).toThrow(/cannot be split 5 ways/);
+  });
+
+  test('validate: a split of partners, a take-away of single blocks carrying partners, a partner row that is not the start, a split spec on a quantity question, a countdown step that is not the count left', () => {
+    const splitSpec = { kind: 'split', total: 3, parts: 2 } as const;
+    const split = materializeNode(custom(splitSpec), mat, ref('ch3', 'x-n1'));
+    const partners = onMatMaterial([2, 1], [], mat, 'x');
+    expect(() => validate({ ...split, initial: partners.state }, splitSpec)).toThrow(/single blocks/);
+    const awaySpec = { kind: 'take_away', start: 5, take: 2 } as const;
+    const away = materializeNode(custom(awaySpec), fitBench(awaySpec), ref('ch3', 'x-n1'));
+    expect(() => validate({ ...away, onMat: [] }, awaySpec)).toThrow(/without `onMat` is of single blocks/);
+    expect(() => validate(away, { kind: 'split', total: 5, parts: 2 })).toThrow(/question quantity does not match spec split/);
+    const sixSpec = { kind: 'take_away', start: 6, take: 2, onMat: [4, 2] } as const;
+    const six = materializeNode(custom(sixSpec), fitBench(sixSpec), ref('ch3', 'x-n1'));
+    expect(() => validate(six, { ...sixSpec, onMat: [4, 1] })).toThrow(/4 \+ 1 on the mat is not 6/);
+    const rocketSpec = { kind: 'take_away', start: 5, take: 4, steps: [1, 1, 1, 1] } as const;
+    const rocket = materializeNode(custom(rocketSpec), fitBench(rocketSpec), ref('ch3', 'x-n1'));
+    const steps = rocket.steps!;
+    expect(() => validate({ ...rocket, steps: [steps[0]!, { kind: 'quantity', target: 2 }, steps[2]!, steps[3]!] }, rocketSpec)).toThrow(/count left/);
+    // benchPair: one partner on the bench is no pair (the 2 of 6 − 2 sent home).
+    expect(benchPair(replay(six.initial, six.solution))).toBeNull();
   });
 });

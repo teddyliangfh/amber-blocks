@@ -78,6 +78,33 @@ export type QuestionSpec =
       // they make more than the sum. The child sends back what is too many.
       // `allowed` is then the one pair left, side by side in the row.
       readonly onMat?: ReadonlyArray<number>;
+    }
+  // Pull a number apart (Phase 22, Take-away Island): `total` single blocks
+  // start joined in one row on the mat and the tray holds only their empty
+  // beds; the child pulls them into `parts` piles (two, this round), any
+  // sizes. `ways`: asked this many times on the same blocks, each time a split
+  // not made yet (part sizes as a multiset: 1 + 4 and 4 + 1 are one). 1 when
+  // left out.
+  | {
+      readonly kind: 'split';
+      readonly total: number;
+      readonly parts: number;
+      readonly ways?: number;
+    }
+  // Take away (Phase 22): `start` blocks start on the mat and the tray holds
+  // only their empty beds; the child sends `take` of them home. Judged as a
+  // plain quantity of `start − take`: the subtraction is in the opening
+  // material and in the cloud's notation, not in the judge (design §2.2).
+  // `onMat`: the start dealt as partners of these sizes, joined in a row, so
+  // the child picks which partner goes (6 − 2 from a 4 and a 2). `steps`: taken
+  // in these amounts one step at a time, the count left after each being a
+  // step (the countdown boss: 5, steps [1, 1, 1, 1]); they add up to `take`.
+  | {
+      readonly kind: 'take_away';
+      readonly start: number;
+      readonly take: number;
+      readonly onMat?: ReadonlyArray<number>;
+      readonly steps?: ReadonlyArray<number>;
     };
 
 export interface PuzzleRef {
@@ -113,9 +140,15 @@ export interface Puzzle {
   // its home slot in the tray, so taking it back is always possible.
   readonly given?: GroupId;
   // The partners already on the mat at the start, left to right (a sum with
-  // `onMat`). Each keeps its home slot in the tray, so any can go back.
+  // `onMat`, or a take-away from partners). Each keeps its home slot in the
+  // tray, so any can go back.
   readonly onMat?: ReadonlyArray<GroupId>;
-  // All material, in the tray except a given partner or the partners on the mat; partners already defined with their shapes.
+  // A take-away stop (Phase 22): how many it starts with on the mat and how
+  // many go home in all. The question itself is the count left; a countdown's
+  // steps are the counts left after each block goes.
+  readonly takeAway?: { readonly start: number; readonly take: number };
+  // All material, in the tray except a given partner, the partners on the mat
+  // or a take-away / split stop's blocks (all on the mat); partners already defined with their shapes.
   readonly initial: BenchState;
   readonly display: PuzzleDisplay;
   readonly prompt: CopyKey;

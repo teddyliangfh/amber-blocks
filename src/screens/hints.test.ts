@@ -2,7 +2,7 @@ import { areTouching, groupSize } from '../core';
 import type { Command, Group } from '../core';
 import { CHAPTERS, CONTENT_VERSION, chapterId, format, materialize, materializeNode, nodeId } from '../content';
 import type { Puzzle } from '../content';
-import { HELP_LADDER_STEPS, asksForHelp, biggestFirst, cardFor, feedbackFor, guidanceFor, helpAt, hintFor, promptParams, rungOf } from './hints';
+import { GAP_TOLD_UNTIL, HELP_LADDER_STEPS, asksForHelp, biggestFirst, cardFor, feedbackFor, guidanceFor, helpAt, hintFor, promptLine, promptParams, rungOf } from './hints';
 import { commitCommand, startSession } from './level-session';
 import type { LevelSession } from './level-session';
 
@@ -19,14 +19,14 @@ function exactJoin(): Puzzle {
   return materializeNode({ id: nodeId('ch2-n7'), role: 'boss', spec }, { cols: 8, rows: 3 }, { contentVersion: CONTENT_VERSION, chapterId: chapterId('ch2'), nodeId: nodeId('ch2-n7'), attemptVariant: 0, seed: 5 });
 }
 
-function play(puzzle: Puzzle, cmds: ReadonlyArray<Command>): LevelSession {
+function play(puzzle: Puzzle, cmds: ReadonlyArray<Command>, from: LevelSession = startSession(puzzle, null)): LevelSession {
   return cmds.reduce((s, cmd) => {
     const r = commitCommand(s, cmd);
     if (!r.ok) {
       throw new Error(`${cmd.type}: ${r.reason}`);
     }
     return r.session;
-  }, startSession(puzzle, null));
+  }, from);
 }
 
 function say(s: LevelSession): string {
@@ -1071,5 +1071,146 @@ describe('Phase 21: three partners on the stairs (ch2-n11)', () => {
     const s = play(p, p.solution);
     expect(s.verdict.matched).toBe(true);
     expect(say(s)).toBe('1、2 和 3，一共 6 块');
+  });
+});
+
+describe('Phase 22: Take-away Island cards and help', () => {
+  const card = (s: LevelSession, lang: 'zh' | 'en' = 'zh') => {
+    const f = feedbackFor(s);
+    return { tone: f.tone, title: format(f.title.key, lang, f.title.params), detail: format(f.detail.key, lang, f.detail.params) };
+  };
+  const asked = (s: LevelSession, n: number) => {
+    const h = helpAt(s, n);
+    return { line: format(h.line.key, 'zh', h.line.params), focus: h.focus.objects, countUp: h.countUp };
+  };
+  const row = (p: Puzzle) => [...p.initial.bench.entries()].sort(([, a], [, b]) => a.x - b.x).map(([u]) => u);
+
+  test('a split (ch3-n1): the task, then "pull one block away", then "pull the last block away" with it lit; apart is 3 splits into 1 and 2', () => {
+    const p = puzzleOf('ch3-n1');
+    const units = row(p);
+    const s = play(p, []);
+    expect(card(s)).toEqual({ tone: 'start', title: '动手试试看', detail: '把 3 分成两个伙伴' });
+    expect(card(s, 'en').detail).toBe('Split 3 into two partners');
+    expect(promptParams(p)).toEqual({ n: 3 });
+    expect(asksForHelp(s)).toBe(true);
+    expect(asked(s, 1)).toEqual({ line: '把 3 分成两个伙伴', focus: units, countUp: false });
+    expect(asked(s, 2)).toEqual({ line: '把一块拉开', focus: [units[2]], countUp: false });
+    expect(asked(s, 3)).toEqual({ line: '把最右边的一块拉开', focus: [units[2]], countUp: false });
+    const apart = play(p, [{ type: 'move', unitId: units[0]!, to: { x: 0, y: 0 } }]);
+    expect(card(apart)).toEqual({ tone: 'success', title: '拼对啦！', detail: '3 分成了 1 和 2' });
+    expect(card(apart, 'en').detail).toBe('3 splits into 1 and 2');
+    expect(say(apart)).toBe('3 分成了 1 和 2');
+  });
+
+  test('a split pulled into three piles is building ("make two"), one sent to the tray is a correction ("keep them all here"); help names the move and lights the pile or the tray', () => {
+    const p = puzzleOf('ch3-n2');
+    const units = row(p);
+    const three = play(p, [{ type: 'move', unitId: units[0]!, to: { x: 0, y: 0 } }, { type: 'move', unitId: units[3]!, to: { x: 4, y: 1 } }]);
+    expect(card(three)).toEqual({ tone: 'building', title: '分成了 3 堆，要两堆', detail: '把一块推回去，只留两堆' });
+    expect(card(three, 'en')).toEqual({ tone: 'building', title: "That's 3 piles. Make two", detail: 'Push one back. Just two piles' });
+    expect(asked(three, 1).focus).toEqual([units[0]]);
+    expect(asked(three, 3)).toEqual({ line: '把一块推回去，只留两堆', focus: [units[0]], countUp: false });
+    const sent = play(p, [{ type: 'return', unitId: units[3]! }]);
+    expect(card(sent)).toEqual({ tone: 'adjust', title: '都留在工作台上，只要分开', detail: '把 1 块叫回来' });
+    expect(card(sent, 'en').title).toBe('Keep them all here, just pull apart');
+    expect(asked(sent, 3)).toEqual({ line: '把 1 块叫回来', focus: [units[3]], countUp: false });
+    expect(say(sent)).toBe('把 1 块叫回来');
+  });
+
+  test('two ways to split 5 (ch3-n4): the first split is "split it another way"; the same split moved about still is; pushed back together it is too; the second split is right', () => {
+    const p = puzzleOf('ch3-n4');
+    const units = row(p);
+    const first = play(p, [{ type: 'move', unitId: units[4]!, to: { x: 5, y: 1 } }]);
+    expect(card(first)).toEqual({ tone: 'building', title: '换一种分法！', detail: '再分成另外两个数' });
+    expect(card(first, 'en')).toEqual({ tone: 'building', title: 'Split it another way!', detail: 'Split it into two other numbers' });
+    expect(asksForHelp(first)).toBe(true);
+    expect(asked(first, 3).line).toBe('再分成另外两个数');
+    const back = play(p, [{ type: 'move', unitId: units[4]!, to: { x: 4, y: 1 } }], first);
+    expect(card(back).title).toBe('换一种分法！');
+    expect(asked(back, 3)).toEqual({ line: '再分成另外两个数', focus: [units[3]], countUp: false });
+    const second = play(p, [{ type: 'move', unitId: units[3]!, to: { x: 4, y: 1 } }], first);
+    expect(card(second)).toEqual({ tone: 'success', title: '拼对啦！', detail: '5 分成了 3 和 2' });
+  });
+
+  test('a take-away of single blocks (ch3-n3, ch3-n5): the task; help counts the blocks, then "send 1 home", then "send 2 home, 3 stay" with the blocks to send lit; the gap is told up to GAP_TOLD_UNTIL', () => {
+    expect(GAP_TOLD_UNTIL).toBe('ch3-n5');
+    const p = puzzleOf('ch3-n5');
+    const units = row(p);
+    const s = play(p, []);
+    expect(card(s)).toEqual({ tone: 'start', title: '动手试试看', detail: '5 个伙伴，送 2 个回家' });
+    expect(card(s, 'en').detail).toBe('5 here. Send 2 home');
+    expect(promptParams(p)).toEqual({ n: 5, k: 2 });
+    expect(format(p.prompt, 'zh', promptParams(p), { numbers: 'word' })).toBe('五 个伙伴，送 两 个回家');
+    expect(asked(s, 1)).toEqual({ line: '5 个伙伴，送 2 个回家', focus: [], countUp: true });
+    expect(asked(s, 2)).toEqual({ line: '送 2 块回家', focus: [units[4], units[3]], countUp: false });
+    expect(asked(s, 3)).toEqual({ line: '送 2 块回家，剩 3 块', focus: [units[4], units[3]], countUp: false });
+    expect(format(helpAt(s, 3).line.key, 'en', helpAt(s, 3).line.params)).toBe('Send 2 home, 3 stay');
+    // One gone: the gap is told on this stop.
+    const one = play(p, [{ type: 'return', unitId: units[4]! }]);
+    expect(card(one)).toEqual({ tone: 'building', title: '还要再送 1 个', detail: '送 1 块回家' });
+    expect(card(one, 'en').title).toBe('1 more to go home');
+    expect(asked(one, 3)).toEqual({ line: '送 1 块回家，剩 3 块', focus: [units[3]], countUp: false });
+    // Three gone: too many, bring one back (lit in the tray).
+    const three = play(p, [{ type: 'return', unitId: units[4]! }, { type: 'return', unitId: units[3]! }, { type: 'return', unitId: units[2]! }]);
+    expect(card(three)).toEqual({ tone: 'adjust', title: '送多了，叫 1 个回来', detail: '把 1 块叫回来' });
+    expect(card(three, 'en').title).toBe('Too many went home. Bring 1 back');
+    expect(asked(three, 3)).toEqual({ line: '把 1 块叫回来', focus: [units[4]], countUp: false });
+    // Two gone: right.
+    const two = play(p, [{ type: 'return', unitId: units[4]! }, { type: 'return', unitId: units[3]! }]);
+    expect(card(two)).toEqual({ tone: 'success', title: '拼对啦！', detail: '5 拿走 2，还剩 3' });
+    expect(card(two, 'en').detail).toBe('5 take away 2 leaves 3');
+    // The first take-away: 4 − 1 also tells the gap... there is none to tell with one to send; the card is the task, then success.
+    const four = puzzleOf('ch3-n3');
+    expect(card(play(four, []))).toEqual({ tone: 'start', title: '动手试试看', detail: '4 个伙伴，送 1 个回家' });
+    expect(card(play(four, four.solution)).detail).toBe('4 拿走 1，还剩 3');
+  });
+
+  test('a take-away from partners (ch3-n6, ch3-n7): the task lights the partners (no counting up); the 4 sent is "that was the 4, not the 2"; help brings it back, then the swap; the two 2s sent leave 3, not 4', () => {
+    const p = puzzleOf('ch3-n6');
+    const [four, two] = p.onMat!;
+    const s = play(p, []);
+    expect(card(s)).toEqual({ tone: 'start', title: '动手试试看', detail: '6 里送走 2，还剩几个？' });
+    expect(card(s, 'en').detail).toBe('Send the 2 home from 6');
+    expect(asked(s, 1)).toEqual({ line: '6 里送走 2，还剩几个？', focus: [four, two], countUp: false });
+    expect(asked(s, 2)).toEqual({ line: '把 2 送回去', focus: [two], countUp: false });
+    expect(asked(s, 3)).toEqual({ line: '把 2 送回去', focus: [two], countUp: false });
+    const wrong = play(p, [{ type: 'returnGroup', groupId: four! }]);
+    expect(card(wrong)).toEqual({ tone: 'adjust', title: '拿走的是 4，不是 2', detail: '把 4 叫回来，送走 2' });
+    expect(card(wrong, 'en')).toEqual({ tone: 'adjust', title: 'That was the 4, not the 2', detail: 'Bring the 4 back, send the 2' });
+    expect(asked(wrong, 1)).toEqual({ line: '把 4 叫回来，送走 2', focus: [two], countUp: false });
+    expect(asked(wrong, 2)).toEqual({ line: '把 4 叫回来', focus: [four], countUp: false });
+    expect(asked(wrong, 3)).toEqual({ line: '把 4 叫回来，送走 2', focus: [four, two], countUp: false });
+    // Both sent: bring the 4 back.
+    const both = play(p, [{ type: 'returnGroup', groupId: four! }, { type: 'returnGroup', groupId: two! }]);
+    expect(card(both)).toEqual({ tone: 'adjust', title: '拿走的是 6，不是 2', detail: '把 4 叫回来' });
+    expect(card(play(p, p.solution))).toEqual({ tone: 'success', title: '拼对啦！', detail: '6 拿走 2，还剩 4' });
+    const q = puzzleOf('ch3-n7');
+    const [three, a, b] = q.onMat!;
+    const oneTwo = play(q, [{ type: 'returnGroup', groupId: a! }]);
+    // One 2 gone: not 3 gone yet; the gap is never told from partners.
+    expect(card(oneTwo)).toEqual({ tone: 'building', title: '还没拿走 3 块', detail: '把 2 叫回来，送走 3' });
+    expect(card(oneTwo, 'en').title).toBe('Not 3 gone yet');
+    const twoTwos = play(q, [{ type: 'returnGroup', groupId: a! }, { type: 'returnGroup', groupId: b! }]);
+    expect(card(twoTwos)).toEqual({ tone: 'adjust', title: '拿走的是 4，不是 3', detail: '把 2 叫回来，送走 3' });
+    expect(asked(twoTwos, 3).focus).toEqual([a, three]);
+    expect(card(play(q, q.solution)).detail).toBe('7 拿走 3，还剩 4');
+  });
+
+  test('the countdown (ch3-n8): the task is 5 and 1; after each block "one more goes home!" with this step\'s task; the last reads 2 take away 1 leaves 1', () => {
+    const p = puzzleOf('ch3-n8');
+    const units = row(p);
+    const s = play(p, []);
+    expect(card(s)).toEqual({ tone: 'start', title: '动手试试看', detail: '5 个伙伴，送 1 个回家' });
+    expect(promptParams(p)).toEqual({ n: 5, k: 1 });
+    const one = play(p, [{ type: 'return', unitId: units[4]! }]);
+    expect(card(one)).toEqual({ tone: 'building', title: '再送一个回家！', detail: '4 个伙伴，送 1 个回家' });
+    expect(card(one, 'en')).toEqual({ tone: 'building', title: 'One more goes home!', detail: '4 here. Send 1 home' });
+    expect(format(promptLine(one).key, 'zh', promptLine(one).params)).toBe('4 个伙伴，送 1 个回家');
+    expect(asked(one, 3)).toEqual({ line: '送 1 块回家，剩 3 块', focus: [units[3]], countUp: false });
+    const done = play(p, p.solution);
+    expect(card(done)).toEqual({ tone: 'success', title: '拼对啦！', detail: '2 拿走 1，还剩 1' });
+    // Everything sent: too many, bring one back.
+    const none = play(p, [...p.solution, { type: 'return', unitId: units[0]! }]);
+    expect(card(none)).toEqual({ tone: 'adjust', title: '送多了，叫 1 个回来', detail: '把 1 块叫回来' });
   });
 });

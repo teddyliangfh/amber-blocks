@@ -5,7 +5,7 @@ import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, w
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Buddy, Confetti, FONT, Stage, THEME, colorsFor, showcaseGeometry } from '../blocks-ui';
-import { CHAPTERS, CONTENT_VERSION, copyKey, format, hueFor, materialize } from '../content';
+import { CHAPTERS, CONTENT_VERSION, ISLAND_SHOWCASE, copyKey, format, hueFor, materialize } from '../content';
 import type { Chapter, CopyKey, Lang, NodeSpec, Puzzle } from '../content';
 import { apply, judge } from '../core';
 import type { BenchState } from '../core';
@@ -53,9 +53,12 @@ function Cheer({ index, size, colors, label }: { readonly index: number; readonl
 // The boss's finished work: its album picture (how the child last had it
 // right, 2026-10-15 review Q); else the child's own work when it is still
 // right; else the stop's reference answer (work is cleared by "play again",
-// for one). Drawn on its own mat size.
+// for one). Drawn on its own mat size. The stop shown is the island's last
+// boss, or the one ISLAND_SHOWCASE names (Phase 22: Take-away Island's 5 split
+// two ways, not the countdown's lone 1).
 function bossOf(chapter: Chapter): NodeSpec | undefined {
-  return [...chapter.nodes].reverse().find((n) => n.role === 'boss') ?? chapter.nodes[chapter.nodes.length - 1];
+  const pick = ISLAND_SHOWCASE[chapter.id];
+  return chapter.nodes.find((n) => n.id === pick) ?? [...chapter.nodes].reverse().find((n) => n.role === 'boss') ?? chapter.nodes[chapter.nodes.length - 1];
 }
 
 function bossWork(chapter: Chapter, state: ProgressState): BenchState | null {

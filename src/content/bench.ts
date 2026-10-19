@@ -87,6 +87,18 @@ function needOf(spec: QuestionSpec): Need {
       const partners = partnerSizesFor({ kind: 'sum_composition', sum: spec.sum, allowed: spec.allowed }, spec.distractors);
       return { shapes: [...shapes, ...partners.map(numberBox)], partners, loose: 0 };
     }
+    // Take-away Island (Phase 22): the row the stop opens with, with the spare
+    // row and column around it (a block pulled away, or sent home, needs
+    // somewhere to be); a row of partners the same.
+    case 'split':
+      return { shapes: [numberBox(spec.total)], partners: [], loose: spec.total };
+    case 'take_away': {
+      if (spec.onMat === undefined) {
+        return { shapes: [numberBox(spec.start)], partners: [], loose: spec.start };
+      }
+      const row = { w: spec.onMat.reduce((w, n) => w + numberBox(n).w, 0), h: Math.max(...spec.onMat.map((n) => numberBox(n).h)) };
+      return { shapes: [row, ...spec.onMat.map(numberBox)], partners: spec.onMat, loose: 0 };
+    }
   }
 }
 

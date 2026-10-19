@@ -12,14 +12,14 @@ import type { Lang, NodeId, Puzzle } from '../content';
 import type { BenchState, Command, UnitId } from '../core';
 import { chapterOf, nextNodeOf, statusOf } from '../progress';
 import { createCorrectionVoice } from './correction-voice';
-import { asksForHelp, biggestFirst, cardFor, feedbackFor, guidanceFor, helpAt, matchedFeedback, promptParams } from './hints';
+import { asksForHelp, biggestFirst, cardFor, feedbackFor, guidanceFor, helpAt, matchedFeedback, promptLine as taskLine, promptParams } from './hints';
 import type { AskedHelp, Line } from './hints';
 import { AmberGuide } from './AmberGuide';
 import { AnswerFeedback } from './AnswerFeedback';
 import { Cloud, SkyCloud } from './Cloud';
 import { Icon } from './icons';
 import type { IconName } from './icons';
-import { asideCells, atStart, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, matOf, previewCommand, recount, solvedEquation, startSession, undoCommand, waysApart } from './level-session';
+import { asideCells, atStart, cloudTitle, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, matOf, previewCommand, recount, solvedEquation, startSession, targetNumberOf, undoCommand, waysApart } from './level-session';
 import type { LevelSession } from './level-session';
 import { LevelRecovery } from './LevelRecovery';
 import { useProgress } from './progress-store';
@@ -323,11 +323,17 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
       if ((stepDone && !solvedNow) || (!solvedNow && sameSum(next) && !sameSum(before))) {
         // One picture made, the next to make with the same blocks: a hop, the
         // success sound and the cloud's pop; the paper waits for the last one.
+        // A countdown's step (Phase 22) sounds the count left instead, so the
+        // steps go down the scale: 4, 3, 2.
         solves.current += 1;
         setStepHop(solves.current);
         setCelebration(0);
         setBadgePops((n) => n + 1);
-        play('success');
+        if (stepDone && next.whole.takeAway !== undefined) {
+          play('count', next.verdict.benchCount);
+        } else {
+          play('success');
+        }
         return;
       }
       setStepHop(0);
@@ -550,7 +556,10 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
 
   const onPrompt = useCallback(() => {
     corrections.activity();
-    say(lang, puzzle.prompt, promptParams(puzzle));
+    // A countdown's cloud says its current step (Phase 22); every other stop its own task.
+    const current = sessionRef.current;
+    const task = current === null ? { key: puzzle.prompt, params: promptParams(puzzle) } : taskLine(current);
+    say(lang, task.key, task.params);
   }, [lang, puzzle, corrections]);
 
   const [stageSize, setStageSize] = useState<{ width: number; height: number } | null>(null);
@@ -579,6 +588,13 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
   );
   const shownCounts = useMemo(() => (countUp === null ? order : new Map(countUp.units.slice(0, countUp.shown).map((u, i) => [u, i + 1]))), [countUp, order]);
   const breathe = useBreathe(session?.verdict.matched ?? false);
+  // The countdown's rocket (Phase 22): the launch sound goes with the second beat.
+  const countdown = puzzle.takeAway !== undefined && puzzle.steps !== undefined;
+  useEffect(() => {
+    if (celebration > 0 && boss && countdown) {
+      play('launch');
+    }
+  }, [celebration, boss, countdown]);
 
   if (session === null) {
     return <View style={[styles.root, { paddingTop: insets.top }]} />;
@@ -588,27 +604,29 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
   const card = cardFor(session, asks > 0 ? 2 : 0, true, guide?.line);
   const feedback = card.tone === 'success' ? { ...card, detail: host.next(session) } : card;
   // The stop as asked right now (the current step's picture on a stop in steps).
-  const q = session.puzzle.question;
-  const title = solvedEquation(session) ?? (q.kind === 'addition_exact' ? `${q.operands[0]} + ${q.operands[1]}` : String(q.kind === 'sum_composition' ? q.sum : q.target));
+  const title = solvedEquation(session) ?? cloudTitle(session);
   const counting = countProgress(session);
   // The hand shows the first move of the reference answer: on a partner stop a
   // whole partner (never a decoy), on a loose stop one block. Past the first way
   // of a two-ways stop, a partner of the other way; on a "who's missing?" stop
   // the other half, put down beside the partner already there (Phase 19); on a
   // "send the extra away" stop the extra, from the mat back to the tray (Phase 21).
+  // On Take-away Island (Phase 22) the hand pulls a block of the row aside
+  // (`move`, to its cell) or carries one home (`return`, demoBack).
   const first = demoMove(session);
-  const demoPiece = first === undefined ? undefined : first.type === 'takeGroup' || first.type === 'returnGroup' ? (first.groupId as string) : first.type === 'take' ? (first.unitId as string) : undefined;
-  const demoTo = puzzle.given !== undefined && first?.type === 'takeGroup' ? first.origin : undefined;
+  const demoPiece = first === undefined ? undefined : first.type === 'takeGroup' || first.type === 'returnGroup' ? (first.groupId as string) : first.type === 'take' || first.type === 'move' || first.type === 'return' ? (first.unitId as string) : undefined;
+  const demoTo = puzzle.given !== undefined && first?.type === 'takeGroup' ? first.origin : first?.type === 'move' ? first.to : undefined;
   const template = session.puzzle.display.template;
   const isBoss = boss;
   const solved = session.verdict.matched;
   const groundTop = geometry === null || geometry.arrangement !== 'below' ? null : geometry.tray.y - 18;
   const small = compact || landscape;
-  const targetNumber = q.kind === 'addition_exact' ? q.operands[0] + q.operands[1] : q.kind === 'sum_composition' ? q.sum : q.target;
+  const targetNumber = targetNumberOf(session);
   const targetColors = colorsFor(hueFor(targetNumber));
-  // Each number celebrates its own way; the 8 brick drives off, 17 stands and waves (cheer.ts).
+  // Each number celebrates its own way; the 8 brick drives off, 17 stands and
+  // waves, the countdown's last block launches (cheer.ts).
   const picture = session.puzzle.display.template;
-  const cheer = cheerFor(targetNumber, { boss: isBoss, shape: picture === null ? null : { w: Math.max(...picture.cells.map((c) => c.x)) + 1, h: Math.max(...picture.cells.map((c) => c.y)) + 1 } });
+  const cheer = cheerFor(targetNumber, { boss: isBoss, countdown, shape: picture === null ? null : { w: Math.max(...picture.cells.map((c) => c.x)) + 1, h: Math.max(...picture.cells.map((c) => c.y)) + 1 } });
   // The number to make sits on a cloud; a boss cloud wears a star.
   // The whole cloud says the task again, not just the number on it (2026-10-16
   // review B-2: only the digit, 24px wide, answered a tap).
@@ -702,7 +720,7 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
           demo={demo}
           demoPiece={demoPiece}
           demoTo={demoTo}
-          demoBack={first?.type === 'returnGroup'}
+          demoBack={first?.type === 'returnGroup' || first?.type === 'return'}
           // A boss's entrance (Phase 21): the answer's outline until it is solved,
           // a cell lit for each block on the part of the mat being judged; past
           // a first way, off the way made (D-097).

@@ -179,7 +179,7 @@ function badge(): string {
 // Every stop up to (not including) `upTo` is finished; the stop itself not yet entered.
 function unlockedTo(upTo: string, seed = 5): ProgressState {
   let s = createInitialState(seed);
-  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8'];
+  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8'];
   for (const id of order.slice(0, order.indexOf(upTo))) {
     const e = reduce(s, { type: 'enter', nodeId: nodeId(id) });
     const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
@@ -1372,6 +1372,150 @@ describe('Phase 21: the new Join Island stops', () => {
     expect(title()).toBe('拼对啦！');
     await beat();
     expect(nextText()).toBe('下一站');
+    await flushSaves();
+  });
+});
+
+describe('Phase 22: Take-away Island on the level screen', () => {
+  const title = () => container.querySelector('[data-testid="feedback-title"]')?.textContent ?? '';
+  const detailText = () => container.querySelector('[data-testid="feedback-detail"]')?.textContent ?? '';
+  const nextText = () => container.querySelector('[data-testid="next"]')?.textContent ?? '';
+  const row = (id: string) => [...puzzleFor(id).initial.bench.entries()].sort(([, a], [, b]) => a.x - b.x).map(([u]) => u);
+
+  test('ch3-n1 opens with 3 in a row: the task, the hand pulls the last block aside; apart it reads 3 = 2 + 1 and says what it split into', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch3-n1')) });
+    await open(storage, 'ch3-n1');
+    const units = row('ch3-n1');
+    expect(badge()).toBe('3');
+    expect(title()).toBe('动手试试看');
+    expect(detailText()).toBe('把 3 分成两个伙伴');
+    expect(mockSaid).toEqual(['把 3 分成两个伙伴']);
+    expect(mockStage.current!.state.bench.size).toBe(3);
+    expect(mockStage.current!.trayObjects).toHaveLength(3);
+    expect(mockStage.current!.mood).toBe('calm');
+    expect(has('next')).toBe(false);
+    expect(mockStage.current!.demoPiece).toBe(units[2]);
+    expect(mockStage.current!.demoTo).toEqual({ x: 3, y: 1 });
+    expect(mockStage.current!.demoBack).toBe(false);
+    mockSaid.length = 0;
+    await press('answer-feedback');
+    await press('answer-feedback');
+    await press('answer-feedback');
+    expect(mockSaid).toEqual(['把 3 分成两个伙伴', '把一块拉开', '把最右边的一块拉开']);
+    expect(mockStage.current!.spotlight).toEqual([units[2]]);
+    mockSaid.length = 0;
+    expect(await command({ type: 'move', unitId: units[2]!, to: { x: 3, y: 1 } })).toBe(true);
+    expect(badge()).toBe('3 = 2 + 1');
+    expect(title()).toBe('拼对啦！');
+    expect(mockSaid).toEqual(['3 分成了 2 和 1']);
+    expect(mockStage.current!.mood).toBe('happy');
+    await beat();
+    expect(nextText()).toBe('下一站');
+    expect(mockStage.current!.cheer).toBe('stack');
+    await flushSaves();
+  });
+
+  test('ch3-n4 (boss): the first split is a small celebration and "split it another way"; the second is the solve with both lines on the cloud', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch3-n4')) });
+    await open(storage, 'ch3-n4');
+    const units = row('ch3-n4');
+    expect(badge()).toBe('5');
+    expect(await command({ type: 'move', unitId: units[4]!, to: { x: 5, y: 1 } })).toBe(true);
+    expect(title()).toBe('换一种分法！');
+    expect(detailText()).toBe('再分成另外两个数');
+    expect(mockStage.current!.celebrateTick).toBeGreaterThan(0);
+    expect(mockStage.current!.cheer).toBe('hop');
+    expect(has('next')).toBe(false);
+    expect(badge()).toBe('5');
+    expect(await command({ type: 'move', unitId: units[3]!, to: { x: 4, y: 1 } })).toBe(true);
+    expect(badge()).toBe('5 = 4 + 1\n5 = 3 + 2');
+    expect(title()).toBe('拼对啦！');
+    await beat();
+    expect(nextText()).toBe('下一站');
+    expect(mockStage.current!.cheer).toBe('wave');
+    await flushSaves();
+  });
+
+  test('ch3-n5: the cloud reads 5 − 2, the hand carries the last block home; two home is 5 − 2 = 3 and "5 take away 2 leaves 3"', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch3-n5')) });
+    await open(storage, 'ch3-n5');
+    const units = row('ch3-n5');
+    expect(badge()).toBe('5 − 2');
+    expect(detailText()).toBe('5 个伙伴，送 2 个回家');
+    expect(mockStage.current!.demoPiece).toBe(units[4]);
+    expect(mockStage.current!.demoBack).toBe(true);
+    expect(mockStage.current!.demoTo).toBeUndefined();
+    mockSaid.length = 0;
+    expect(await command({ type: 'return', unitId: units[4]! })).toBe(true);
+    expect(title()).toBe('还要再送 1 个');
+    expect(mockStage.current!.mood).toBe('calm');
+    expect(await command({ type: 'return', unitId: units[3]! })).toBe(true);
+    expect(badge()).toBe('5 − 2 = 3');
+    expect(mockSaid).toEqual(['5 拿走 2，还剩 3']);
+    await beat();
+    expect(nextText()).toBe('下一站');
+    // Tapping the cloud says the task.
+    mockSaid.length = 0;
+    await press('prompt');
+    expect(mockSaid).toEqual(['5 个伙伴，送 2 个回家']);
+    await flushSaves();
+  });
+
+  test('ch3-n6: the 4 sent home is "that was the 4, not the 2" with a puzzled face; help brings it back, then the swap; the 2 sent is 6 − 2 = 4', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch3-n6')) });
+    await open(storage, 'ch3-n6');
+    const [four, two] = puzzleFor('ch3-n6').onMat!;
+    expect(badge()).toBe('6 − 2');
+    expect(detailText()).toBe('6 里送走 2，还剩几个？');
+    expect(mockStage.current!.demoPiece).toBe(two);
+    expect(mockStage.current!.demoBack).toBe(true);
+    expect(await command({ type: 'returnGroup', groupId: four! })).toBe(true);
+    expect(title()).toBe('拿走的是 4，不是 2');
+    expect(detailText()).toBe('把 4 叫回来，送走 2');
+    expect(mockStage.current!.mood).toBe('puzzled');
+    mockSaid.length = 0;
+    await press('answer-feedback');
+    await press('answer-feedback');
+    expect(mockSaid.slice(-1)).toEqual(['把 4 叫回来']);
+    expect(mockStage.current!.spotlight).toEqual([four]);
+    expect(await command({ type: 'takeGroup', groupId: four!, origin: { x: 0, y: 1 } })).toBe(true);
+    expect(title()).toBe('动手试试看');
+    expect(await command({ type: 'returnGroup', groupId: two! })).toBe(true);
+    expect(badge()).toBe('6 − 2 = 4');
+    await beat();
+    expect(nextText()).toBe('下一站');
+    expect(mockStage.current!.cheer).toBe('wiggle');
+    await flushSaves();
+  });
+
+  test('ch3-n8 (boss): 5 − 1 counts down a block at a time, each a step with the cloud popping to the next; the last one launches and the island is done', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch3-n8')) });
+    await open(storage, 'ch3-n8');
+    const units = row('ch3-n8');
+    expect(badge()).toBe('5 − 1');
+    expect(detailText()).toBe('5 个伙伴，送 1 个回家');
+    const clouds: string[] = [];
+    for (const u of [units[4], units[3], units[2]]) {
+      expect(await command({ type: 'return', unitId: u! })).toBe(true);
+      clouds.push(badge());
+      expect(title()).toBe('再送一个回家！');
+      expect(has('next')).toBe(false);
+      expect(mockStage.current!.cheer).toBe('hop');
+    }
+    expect(clouds).toEqual(['4 − 1', '3 − 1', '2 − 1']);
+    expect(detailText()).toBe('2 个伙伴，送 1 个回家');
+    mockSaid.length = 0;
+    await press('prompt');
+    expect(mockSaid).toEqual(['2 个伙伴，送 1 个回家']);
+    expect(await command({ type: 'return', unitId: units[1]! })).toBe(true);
+    expect(badge()).toBe('2 − 1 = 1');
+    expect(title()).toBe('拼对啦！');
+    await beat();
+    expect(mockStage.current!.cheer).toBe('launch');
+    expect(mockStage.current!.celebrateTick).toBeGreaterThan(0);
+    expect(nextText()).toBe('拿走岛完成了');
+    await press('next');
+    expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/island/[chapterId]', params: { chapterId: 'ch3' } });
     await flushSaves();
   });
 });
