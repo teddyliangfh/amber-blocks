@@ -29,7 +29,9 @@ import type { Puzzle } from './schema';
 // byte-identical to version 8.
 // Version 10 (2026-10-23, Phase 23b) added Shape Island (ch5-n1 – n8) after
 // Number Island; all thirty-eight stops before are byte-identical to version 9.
-const FINGERPRINT_VERSION = 10;
+// Version 11 (2026-10-23, Phase 23c) added Compare Island (ch4-n1 – n8) after
+// Take-away Island; all forty-six stops before are byte-identical to version 10.
+const FINGERPRINT_VERSION = 11;
 const FINGERPRINTS: Readonly<Record<string, string>> = {
   'ch1-n1': 'df3b63c2',
   'ch1-n2': '795c9b41',
@@ -77,6 +79,14 @@ const FINGERPRINTS: Readonly<Record<string, string>> = {
   'ch5-n6': 'ba1e51ce',
   'ch5-n7': '871ee45c',
   'ch5-n8': 'c92ed705',
+  'ch4-n1': '193a0041',
+  'ch4-n2': 'e1a7170e',
+  'ch4-n3': '225d6ea7',
+  'ch4-n4': 'f75ed30e',
+  'ch4-n5': '606bca21',
+  'ch4-n6': 'ba41a567',
+  'ch4-n7': 'bb3e3f1a',
+  'ch4-n8': 'f843b856',
 };
 
 const REFS = [1, 7, 4242].flatMap((seed) => [0, 1, 2].map((attemptVariant) => ({ seed, attemptVariant })));

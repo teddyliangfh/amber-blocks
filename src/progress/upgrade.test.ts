@@ -50,6 +50,13 @@ import v8Ch2Half from './__fixtures__/archive-v8-phase22-ch2-half.json';
 import v9AllFinished from './__fixtures__/archive-v9-phase23a-all-finished.json';
 import v9Ch1Half from './__fixtures__/archive-v9-phase23a-ch1-half.json';
 import v9Ch2Half from './__fixtures__/archive-v9-phase23a-ch2-half.json';
+// Phase 23c (content version 11): frozen with version 10's code before Compare
+// Island was added (the version 9 seeds through version 10's migrate; the
+// finished one played Shape Island's eight by their reference answers, so all
+// forty-six stops, the map back on ch3-n8; the halves as they were).
+import v10AllFinished from './__fixtures__/archive-v10-phase23b-all-finished.json';
+import v10Ch1Half from './__fixtures__/archive-v10-phase23b-ch1-half.json';
+import v10Ch2Half from './__fixtures__/archive-v10-phase23b-ch2-half.json';
 
 const ok = { matched: true, benchCount: 1, reason: 'matched' } as const;
 
@@ -58,8 +65,10 @@ const V9_NEW: ReadonlyArray<string> = ['ch1-n13', 'ch1-n14', 'ch1-n15', 'ch1-n16
 // Since version 9 a finished archive from before rests on the first of them
 // (UPGRADE_CURRENT 'first-open': ch1-n13 comes first in map order).
 const V9_FIRST = 'ch1-n13';
-// Every stop but these and Shape Island's (the ones a version 8 archive could not have).
-const beforeV9 = () => mapOrder().filter((e) => !V9_NEW.includes(e.nodeId) && e.chapterId !== 'ch5');
+// Every stop but these, Shape Island's and Compare Island's (the ones a version 8 archive could not have).
+const beforeV9 = () => mapOrder().filter((e) => !V9_NEW.includes(e.nodeId) && e.chapterId !== 'ch5' && e.chapterId !== 'ch4');
+// Every stop but Compare Island's (Phase 23c): the ones a version 10 archive could have.
+const beforeV11 = () => mapOrder().filter((e) => e.chapterId !== 'ch4');
 // The stops of the islands an archive from before Phase 22 could finish: all but Take-away Island (and Phase 23a's).
 const beforeTakeAway = () => beforeV9().filter((e) => e.chapterId !== 'ch3');
 
@@ -321,7 +330,7 @@ describe('content upgrade v5 → v6 → v7 (Phase 19: Join Island 5–7 start wi
     }, p.initial);
 
   // Version 5's map: Number Island and Join Island 1–7 (unlocking in that order); no Take-away Island (Phase 22).
-  const V5_CHAPTERS = CHAPTERS.filter((c) => c.id !== 'ch3' && c.id !== 'ch5').map((c) => (c.id === 'ch2' ? { ...c, nodes: c.nodes.filter((n) => ['ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n4', 'ch2-n5', 'ch2-n6', 'ch2-n7'].includes(n.id)) } : { ...c, nodes: c.nodes.filter((n) => !V9_NEW.includes(n.id)) }));
+  const V5_CHAPTERS = CHAPTERS.filter((c) => c.id !== 'ch3' && c.id !== 'ch5' && c.id !== 'ch4').map((c) => (c.id === 'ch2' ? { ...c, nodes: c.nodes.filter((n) => ['ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n4', 'ch2-n5', 'ch2-n6', 'ch2-n7'].includes(n.id)) } : { ...c, nodes: c.nodes.filter((n) => !V9_NEW.includes(n.id)) }));
   // Every stop version 5 had, finished by its reference answer, with its work
   // and album picture as version 5 dealt them; the map rests on ch2-n7, the
   // last stop entered.
@@ -765,8 +774,8 @@ describe('content upgrade v8 → v9 (Phase 23a: six new picture stops among the 
       expect(await storage.getItem(BACKUP_KEY)).toBeNull();
     }
     expect((await loadArchive(memoryStorage({ [STORAGE_KEY]: JSON.stringify(v8AllFinished) }), 1)).state.current).toBe('ch1-n13');
-    // 'next' only looks at the very next stop: a map on the last stop has none.
-    expect(onwardFrom(nodeId('ch3-n8'), old('all').completedNodeIds, CHAPTERS, 'next')).toBe('ch3-n8');
+    // 'next' only looks at the very next stop: a map on the last stop (ch4-n8 since Phase 23c) has none.
+    expect(onwardFrom(nodeId('ch4-n8'), new Set([...old('all').completedNodeIds, ...mapOrder().map((e) => e.nodeId)]), CHAPTERS, 'next')).toBe('ch4-n8');
   });
 });
 
@@ -776,19 +785,19 @@ describe('content upgrade v9 → v10 (Phase 23b: Shape Island, second on the map
   const old = (name: keyof typeof fixtures) => deserialize(JSON.stringify(fixtures[name]))!;
 
   test('version 10 changed no stop: every completion, every piece of work, the album and free play are kept as they were', () => {
-    expect(CONTENT_VERSION).toBe(10);
+    expect(CONTENT_VERSION).toBeGreaterThanOrEqual(10);
     expect(CONTENT_CHANGES[10]).toEqual([]);
     for (const name of ['all', 'ch2Half', 'ch1Half'] as const) {
       const before = old(name);
       expect(before.contentVersion).toBe(9);
       const r = migrate(before);
       expect(r.setAside).toEqual([]);
-      expect(r.state.contentVersion).toBe(10);
+      expect(r.state.contentVersion).toBe(CONTENT_VERSION);
       expect(r.state.completedNodeIds).toEqual(before.completedNodeIds);
       for (const [id, n] of before.nodes) {
         const now = r.state.nodes.get(id)!;
         expect(now.work).toBe(n.work);
-        expect(now.ref).toEqual({ ...n.ref, contentVersion: 10 });
+        expect(now.ref).toEqual({ ...n.ref, contentVersion: CONTENT_VERSION });
         if (n.work !== null) {
           expect(`${id} ${sameMaterial(n.work, materialize(now.ref).initial)}`).toBe(`${id} true`);
         }
@@ -813,13 +822,13 @@ describe('content upgrade v9 → v10 (Phase 23b: Shape Island, second on the map
       expect(`${id} ${statusOf(r, nodeId(id))}`).toBe(`${id} locked`);
     }
     expect(chapterCompletion(r, chapterId('ch5'))).toEqual({ done: 0, total: 8 });
-    expect(mapOrder().every((e) => r.completedNodeIds.has(e.nodeId))).toBe(false);
+    expect(beforeV11().every((e) => r.completedNodeIds.has(e.nodeId))).toBe(false);
     let s = r;
     for (const id of NEW) {
       s = must(reduce(s, { type: 'enter', nodeId: nodeId(id) }));
       s = must(reduce(s, { type: 'complete', nodeId: nodeId(id), verdict: ok, work: solved(s, id) }));
     }
-    expect(mapOrder().every((e) => s.completedNodeIds.has(e.nodeId))).toBe(true);
+    expect(beforeV11().every((e) => s.completedNodeIds.has(e.nodeId))).toBe(true);
     expect(s.album.size).toBe(46);
     for (const id of NEW) {
       const p = materialize(s.nodes.get(nodeId(id))!.ref);
@@ -861,14 +870,107 @@ describe('content upgrade v9 → v10 (Phase 23b: Shape Island, second on the map
       expect(loaded.issue).toBeNull();
       expect(loaded.upgraded).toEqual([]);
       expect(loaded.repairs).toEqual([]);
-      expect(loaded.state.contentVersion).toBe(10);
+      expect(loaded.state.contentVersion).toBe(CONTENT_VERSION);
       expect(await storage.getItem(UPGRADE_BACKUP_KEY)).toBeNull();
       expect(await storage.getItem(BACKUP_KEY)).toBeNull();
     }
     expect((await loadArchive(memoryStorage({ [STORAGE_KEY]: JSON.stringify(v9AllFinished) }), 1)).state.current).toBe('ch5-n1');
     expect((await loadArchive(memoryStorage({ [STORAGE_KEY]: JSON.stringify(v8AllFinished) }), 1)).state.current).toBe(V9_FIRST);
     // UPGRADE_CURRENT 'next' would leave a finished map on ch3-n8 (nothing after it).
-    expect(onwardFrom(nodeId('ch3-n8'), old('all').completedNodeIds, CHAPTERS, 'next')).toBe('ch3-n8');
+    // (Since version 11 'next' from ch3-n8 is Compare Island's first stop.)
+    expect(onwardFrom(nodeId('ch3-n8'), old('all').completedNodeIds, CHAPTERS, 'next')).toBe('ch4-n1');
     expect(onwardFrom(nodeId('ch1-n12'), old('all').completedNodeIds, CHAPTERS, 'next')).toBe('ch5-n1');
+  });
+});
+
+describe('content upgrade v10 → v11 (Phase 23c: Compare Island, after Take-away Island, on the way)', () => {
+  const NEW = ['ch4-n1', 'ch4-n2', 'ch4-n3', 'ch4-n4', 'ch4-n5', 'ch4-n6', 'ch4-n7', 'ch4-n8'];
+  const fixtures = { all: v10AllFinished, ch2Half: v10Ch2Half, ch1Half: v10Ch1Half };
+  const old = (name: keyof typeof fixtures) => deserialize(JSON.stringify(fixtures[name]))!;
+
+  test('version 11 changed no stop: every completion, every piece of work, the album and free play are kept as they were', () => {
+    expect(CONTENT_VERSION).toBe(11);
+    expect(CONTENT_CHANGES[11]).toEqual([]);
+    for (const name of ['all', 'ch2Half', 'ch1Half'] as const) {
+      const before = old(name);
+      expect(before.contentVersion).toBe(10);
+      const r = migrate(before);
+      expect(r.setAside).toEqual([]);
+      expect(r.state.contentVersion).toBe(11);
+      expect(r.state.completedNodeIds).toEqual(before.completedNodeIds);
+      for (const [id, n] of before.nodes) {
+        const now = r.state.nodes.get(id)!;
+        expect(now.work).toBe(n.work);
+        expect(now.ref).toEqual({ ...n.ref, contentVersion: 11 });
+        if (n.work !== null) {
+          expect(`${id} ${sameMaterial(n.work, materialize(now.ref).initial)}`).toBe(`${id} true`);
+        }
+      }
+      expect(r.state.album).toBe(before.album);
+      expect(r.state.sandbox).toBe(before.sandbox);
+      expect(NEW.some((id) => r.state.nodes.has(nodeId(id)) || r.state.completedNodeIds.has(nodeId(id)))).toBe(false);
+    }
+    expect(old('all').album.size).toBe(46);
+    expect(migrate(old('all')).state.sandbox?.bench.size).toBe(3);
+  });
+
+  test('everything finished: the map rests on Compare Island\'s first stop, the rest asleep; playing the eight finishes every island, each by its own question', () => {
+    const before = old('all');
+    expect(before.current).toBe('ch3-n8');
+    expect(before.completedNodeIds.size).toBe(46);
+    const r = migrate(before).state;
+    expect(r.current).toBe('ch4-n1');
+    expect(defaultCurrent(r)).toBe('ch4-n1');
+    expect(statusOf(r, nodeId('ch4-n1'))).toBe('available');
+    for (const id of NEW.slice(1)) {
+      expect(`${id} ${statusOf(r, nodeId(id))}`).toBe(`${id} locked`);
+    }
+    expect(chapterCompletion(r, chapterId('ch4'))).toEqual({ done: 0, total: 8 });
+    expect(mapOrder().every((e) => r.completedNodeIds.has(e.nodeId))).toBe(false);
+    let s = r;
+    for (const id of NEW) {
+      expect(`${id} ${statusOf(s, nodeId(id))}`).toBe(`${id} available`);
+      s = must(reduce(s, { type: 'enter', nodeId: nodeId(id) }));
+      s = must(reduce(s, { type: 'complete', nodeId: nodeId(id), verdict: ok, work: solved(s, id) }));
+    }
+    expect(mapOrder().every((e) => s.completedNodeIds.has(e.nodeId))).toBe(true);
+    expect(s.album.size).toBe(54);
+    for (const id of NEW) {
+      const p = materialize(s.nodes.get(nodeId(id))!.ref);
+      const last = p.steps?.[p.steps.length - 1] ?? p.question;
+      expect(`${id} ${judge(s.nodes.get(nodeId(id))!.work!, last).matched}`).toBe(`${id} true`);
+    }
+    // The rail is not material: a compare's work is only the child's row.
+    expect(s.nodes.get(nodeId('ch4-n1'))!.work!.bench.size).toBe(3);
+  });
+
+  test('Join Island half way, Number Island half way: nothing moves, Compare Island stays shut', () => {
+    for (const [name, current] of [['ch2Half', 'ch2-n5'], ['ch1Half', 'ch1-n7']] as const) {
+      const before = old(name);
+      const r = migrate(before).state;
+      expect(r.current).toBe(current);
+      expect(r.nodes.get(nodeId(current))!.work).toBe(before.nodes.get(nodeId(current))!.work);
+      expect(statusOf(r, nodeId('ch4-n1'))).toBe('locked');
+    }
+    // Resting on a finished stop with Take-away Island not played: Shape Island's first, as in version 10.
+    expect(migrate({ ...old('ch2Half'), current: nodeId('ch2-n4') }).state.current).toBe('ch5-n1');
+  });
+
+  test('through the store: no upgrade to report, nothing backed up; a finished version 10 archive rests on ch4-n1, older ones where they did', async () => {
+    for (const name of ['all', 'ch2Half', 'ch1Half'] as const) {
+      const storage = memoryStorage({ [STORAGE_KEY]: JSON.stringify(fixtures[name]) });
+      const loaded = await loadArchive(storage, 1);
+      expect(loaded.issue).toBeNull();
+      expect(loaded.upgraded).toEqual([]);
+      expect(loaded.repairs).toEqual([]);
+      expect(loaded.state.contentVersion).toBe(11);
+      expect(await storage.getItem(UPGRADE_BACKUP_KEY)).toBeNull();
+      expect(await storage.getItem(BACKUP_KEY)).toBeNull();
+    }
+    expect((await loadArchive(memoryStorage({ [STORAGE_KEY]: JSON.stringify(v10AllFinished) }), 1)).state.current).toBe('ch4-n1');
+    expect((await loadArchive(memoryStorage({ [STORAGE_KEY]: JSON.stringify(v9AllFinished) }), 1)).state.current).toBe('ch5-n1');
+    expect((await loadArchive(memoryStorage({ [STORAGE_KEY]: JSON.stringify(v8AllFinished) }), 1)).state.current).toBe(V9_FIRST);
+    // UPGRADE_CURRENT 'next' from ch3-n8 lands on ch4-n1 as well.
+    expect(onwardFrom(nodeId('ch3-n8'), old('all').completedNodeIds, CHAPTERS, 'next')).toBe('ch4-n1');
   });
 });

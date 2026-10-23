@@ -45,7 +45,15 @@ interface Need {
   // What the stop deals onto the mat itself, which must lie on it as it is,
   // with no spare row or column (Phase 21: the row to send the extra back from).
   readonly dealt?: Box;
+  // A height fixed by the stop rather than fitted (Phase 23c: a compare's two
+  // rows, design §5.6); the mat then grows wider, never taller.
+  readonly rows?: number;
 }
+
+// A compare's mat (Phase 23c, design §5.6): two rows, so the child's row lies
+// right under the partner on the rail and the rail takes the third row's
+// height. MIN_BENCH's three rows do not apply.
+export const COMPARE_ROWS = 2;
 
 function needOf(spec: QuestionSpec): Need {
   switch (spec.kind) {
@@ -99,6 +107,18 @@ function needOf(spec: QuestionSpec): Need {
       const row = { w: spec.onMat.reduce((w, n) => w + numberBox(n).w, 0), h: Math.max(...spec.onMat.map((n) => numberBox(n).h)) };
       return { shapes: [row, ...spec.onMat.map(numberBox)], partners: spec.onMat, loose: 0 };
     }
+    // Compare Island (Phase 23c): a compare leaves a spare column beside the
+    // longest row it can hold (the rail as it grows, every single block, the
+    // biggest partner); a line-up the three side by side.
+    case 'compare': {
+      const partners = spec.partners ?? [];
+      const longest = Math.max(spec.given + (spec.steps ?? 1) - 1, spec.singles ?? 0, ...partners.map((n) => numberBox(n).w));
+      return { shapes: [{ w: longest, h: 1 }], partners, loose: spec.singles ?? 0, rows: COMPARE_ROWS };
+    }
+    case 'order': {
+      const row = { w: spec.sizes.reduce((w, n) => w + numberBox(n).w, 0), h: Math.max(...spec.sizes.map((n) => numberBox(n).h)) };
+      return { shapes: [row, ...spec.sizes.map(numberBox)], partners: spec.sizes, loose: 0 };
+    }
   }
 }
 
@@ -139,11 +159,11 @@ export function holdsAll(bounds: Bounds, partners: ReadonlyArray<Box & { readonl
 export function fitBench(spec: QuestionSpec): Bounds {
   const need = needOf(spec);
   let cols = Math.max(MIN_BENCH.cols, ...need.shapes.map((s) => s.w + BENCH_MARGIN), need.dealt?.w ?? 0);
-  let rows = Math.max(MIN_BENCH.rows, ...need.shapes.map((s) => s.h + BENCH_MARGIN), need.dealt?.h ?? 0);
+  let rows = need.rows ?? Math.max(MIN_BENCH.rows, ...need.shapes.map((s) => s.h + BENCH_MARGIN), need.dealt?.h ?? 0);
   const partners = need.partners.map((n) => ({ ...numberBox(n), cells: n }));
   // Grow downwards: on a phone the width is what sets the block size.
   while (!holdsAll({ cols, rows }, partners, need.loose)) {
-    if (partners.some((p) => p.w > cols)) {
+    if (partners.some((p) => p.w > cols) || need.rows !== undefined) {
       cols += 1;
     } else {
       rows += 1;

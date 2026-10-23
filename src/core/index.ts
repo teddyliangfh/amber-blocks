@@ -22,8 +22,8 @@ export { clusterOf, clusters } from './clusters';
 export type { ShapeTemplate, Symmetry } from './shapes';
 export { DEFAULT_SYMMETRY, matchesTemplate, mirrorX, rotate90, template, variants } from './shapes';
 
-export type { Question, Verdict, VerdictReason } from './judge';
-export { judge } from './judge';
+export type { CompareRelation, Question, Verdict, VerdictReason } from './judge';
+export { compares, judge } from './judge';
 
 export type { CountRound } from './counting';
 export { countUnit, fingerprintOf, isRoundValid, reconcile, startRound } from './counting';

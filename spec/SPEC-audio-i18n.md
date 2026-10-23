@@ -25,6 +25,7 @@ src/audio-i18n/
 - 纠正提示用 `interrupt: false` 排队，不打断点数数词和题目播报（时机见 SPEC-screens"可见答题反馈"）。
 - 原生端（Expo Go）暂为静音实现；接 `expo-speech` 时只换 Voice 实现。
 - 音效（`sfx.ts`，Web Audio 合成，D-036）：过关 `success` 与 Boss `fanfare` 的每个音整体晚 `SOLVE_AFTER = 0.1` 秒，让促成答案的那一下落地声（`drop`）先响（2026-10-16 测评 H-1）；地图上前进标记落地只响一下 `tap`，进站音 `arrive` 只在关卡打开时响一次（D-4）。
+- 比较音 `compare`（Phase 23c，D-128）：`play('compare', rail, [child])` 先响孩子那个数的点数音、`COMPARE_STEP`（0.28 秒）后再响比较台的数：多是高→低、少是低→高、一样是同音两声；排队 `play('compare', 4, [1, 3])` 从小到大三声。关卡页在过关第二拍（彩纸时）响。
 - 停止（2026-10-16 测评 H-3）：点"再数一遍"、或一次改动让工作台上的块变多 / 变少而本轮已有数词时，界面先 `stop()`，旧数词和"一共 n 块"不再接着念。
 
 ## 验证

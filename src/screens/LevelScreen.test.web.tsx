@@ -16,6 +16,7 @@ import { STORAGE_KEY, UPGRADE_BACKUP_KEY, createInitialState, deserialize, memor
 import n10Unfinished from '../progress/__fixtures__/archive-v1-phase11-n10-unfinished.json';
 import type { ProgressState, ProgressStorage } from '../progress';
 import { COUNT_UP_STEP_MS, LevelScreen, SOLVE_SETTLE_MS } from './LevelScreen';
+import { RAIL_SPOT } from './hints';
 import { ProgressProvider, useProgress } from './progress-store';
 import { PARENT_HINT_MS } from './ui';
 
@@ -180,7 +181,7 @@ function badge(): string {
 // Every stop up to (not including) `upTo` is finished; the stop itself not yet entered.
 function unlockedTo(upTo: string, seed = 5): ProgressState {
   let s = createInitialState(seed);
-  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n13', 'ch1-n7', 'ch1-n14', 'ch1-n8', 'ch1-n15', 'ch1-n9', 'ch1-n16', 'ch1-n10', 'ch1-n17', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n13', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8'];
+  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n13', 'ch1-n7', 'ch1-n14', 'ch1-n8', 'ch1-n15', 'ch1-n9', 'ch1-n16', 'ch1-n10', 'ch1-n17', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n13', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8', 'ch4-n1', 'ch4-n2', 'ch4-n3', 'ch4-n4', 'ch4-n5', 'ch4-n6', 'ch4-n7', 'ch4-n8'];
   for (const id of order.slice(0, order.indexOf(upTo))) {
     const e = reduce(s, { type: 'enter', nodeId: nodeId(id) });
     const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
@@ -1649,6 +1650,105 @@ describe('Phase 23b: Shape Island on the level screen', () => {
     expect(mockSaid).toContain('小火箭，发射！');
     await beat();
     expect(mockStage.current!.cheer).toBe('launch');
+    await flushSaves();
+  });
+});
+
+describe('Phase 23c: Compare Island on the level screen', () => {
+  const title = () => container.querySelector('[data-testid="feedback-title"]')?.textContent ?? '';
+  const detailText = () => container.querySelector('[data-testid="feedback-detail"]')?.textContent ?? '';
+  const nextText = () => container.querySelector('[data-testid="next"]')?.textContent ?? '';
+  const units = (id: string) => [...puzzleFor(id).initial.units.keys()];
+
+  test('ch4-n1: the rail\'s 3 above the mat, the cloud shows 3 and two rows; the hand puts a block right under the rail; three is "3 = 3", the rail and the row cheer', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch4-n1')) });
+    await open(storage, 'ch4-n1');
+    expect(badge()).toBe('3');
+    expect(has('compare-sketch')).toBe(true);
+    expect(container.querySelectorAll('[data-testid="compare-sketch-row"]')).toHaveLength(3);
+    expect(title()).toBe('动手试试看');
+    expect(detailText()).toBe('搭一排和它一样多的');
+    expect(mockStage.current!.rail).toEqual({ n: 3, id: RAIL_SPOT });
+    expect(mockStage.current!.state.bench.size).toBe(0);
+    expect(mockStage.current!.trayObjects).toHaveLength(5);
+    // Two rows of mat under a row kept for the rail.
+    expect(mockStage.current!.geometry.bench.rows).toBe(2);
+    expect(mockStage.current!.geometry.bench.y).toBeGreaterThanOrEqual(mockStage.current!.geometry.cell);
+    expect(mockStage.current!.demoTo).toEqual({ x: 0, y: 0 });
+    // Asked for help: the rail lights up.
+    await press('answer-feedback');
+    expect(mockStage.current!.spotlight).toEqual([RAIL_SPOT]);
+    const ids = units('ch4-n1');
+    expect(await command({ type: 'take', unitId: ids[0]!, to: { x: 0, y: 0 } })).toBe(true);
+    expect(await command({ type: 'take', unitId: ids[1]!, to: { x: 1, y: 0 } })).toBe(true);
+    expect(title()).toBe('还比它少');
+    expect(await command({ type: 'take', unitId: ids[2]!, to: { x: 2, y: 0 } })).toBe(true);
+    expect(badge()).toBe('3 = 3');
+    expect(has('compare-sketch')).toBe(false);
+    expect(title()).toBe('拼对啦！');
+    await beat();
+    expect(nextText()).toBe('下一站');
+    expect(mockStage.current!.cheer).toBe('stack');
+    await flushSaves();
+  });
+
+  test('ch4-n4 (boss): one more three times, the rail growing 3 → 4 → 5 with a small celebration each; the last is 6 > 5', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch4-n4')) });
+    await open(storage, 'ch4-n4');
+    const ids = units('ch4-n4');
+    for (let i = 0; i < 4; i += 1) {
+      expect(await command({ type: 'take', unitId: ids[i]!, to: { x: i, y: 0 } })).toBe(true);
+    }
+    expect(mockStage.current!.rail).toEqual({ n: 4, id: RAIL_SPOT });
+    expect(badge()).toBe('4');
+    expect(title()).toBe('它也变成 4 了！再多一块');
+    expect(mockStage.current!.celebrateTick).toBeGreaterThan(0);
+    expect(has('next')).toBe(false);
+    expect(await command({ type: 'take', unitId: ids[4]!, to: { x: 4, y: 0 } })).toBe(true);
+    expect(mockStage.current!.rail?.n).toBe(5);
+    expect(await command({ type: 'take', unitId: ids[5]!, to: { x: 5, y: 0 } })).toBe(true);
+    expect(badge()).toBe('6 > 5');
+    expect(title()).toBe('拼对啦！');
+    await beat();
+    expect(nextText()).toBe('下一站');
+    await flushSaves();
+  });
+
+  test('ch4-n6: a 2 is "2 is fewer than 3" (a correction, puzzled faces); 5 swapped in is right; the hand carries the 5 under the rail', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch4-n6')) });
+    await open(storage, 'ch4-n6');
+    expect(detailText()).toBe('找一个比 3 多的伙伴');
+    expect(mockStage.current!.demoPiece).toBe(partnerOf('ch4-n6', 5));
+    expect(mockStage.current!.demoTo).toEqual({ x: 0, y: 0 });
+    expect(await command({ type: 'takeGroup', groupId: partnerOf('ch4-n6', 2), origin: { x: 0, y: 0 } })).toBe(true);
+    expect(title()).toBe('2 比 3 少');
+    expect(detailText()).toBe('换一个伙伴试试');
+    expect(mockStage.current!.mood).toBe('puzzled');
+    expect(await command({ type: 'returnGroup', groupId: partnerOf('ch4-n6', 2) })).toBe(true);
+    expect(await command({ type: 'takeGroup', groupId: partnerOf('ch4-n6', 5), origin: { x: 0, y: 0 } })).toBe(true);
+    expect(badge()).toBe('5 > 3');
+    expect(title()).toBe('拼对啦！');
+    await flushSaves();
+  });
+
+  test('ch4-n8 (boss): no rail, three bars on the cloud; smallest first is 1 < 3 < 4, the three kept apart, the parade', async () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch4-n8')) });
+    await open(storage, 'ch4-n8');
+    expect(mockStage.current!.rail).toBeUndefined();
+    expect(has('compare-sketch')).toBe(true);
+    expect(detailText()).toBe('从小到大排好队');
+    expect(mockStage.current!.demoPiece).toBe(partnerOf('ch4-n8', 1));
+    expect(mockStage.current!.demoTo).toEqual({ x: 0, y: 0 });
+    expect(await command({ type: 'takeGroup', groupId: partnerOf('ch4-n8', 1), origin: { x: 0, y: 0 } })).toBe(true);
+    expect(await command({ type: 'takeGroup', groupId: partnerOf('ch4-n8', 3), origin: { x: 1, y: 0 } })).toBe(true);
+    expect(title()).toBe('再搬一个');
+    expect(await command({ type: 'takeGroup', groupId: partnerOf('ch4-n8', 4), origin: { x: 4, y: 0 } })).toBe(true);
+    expect(badge()).toBe('1 < 3 < 4');
+    expect(mockStage.current!.apart?.map((a) => a.length).sort()).toEqual([1, 3, 4]);
+    await beat();
+    expect(mockStage.current!.cheer).toBe('stack');
+    // The last stop on the map: the island's page is next.
+    expect(nextText()).toBe('比一比岛完成了');
     await flushSaves();
   });
 });

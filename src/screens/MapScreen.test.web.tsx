@@ -9,7 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { CHAPTERS, chapterId, findChapter, materialize, nodeId } from '../content';
 import { STORAGE_KEY, createInitialState, memoryStorage, reduce, serialize } from '../progress';
 import type { ProgressState } from '../progress';
-import { ADVANCE, MAP_SHAPE_LABEL, MapScreen, SKIP_AFTER_MS, advanceOf, labelOf, mapPictureOf } from './MapScreen';
+import { ADVANCE, MAP_ORDER_LABEL, MAP_SHAPE_LABEL, MapScreen, SKIP_AFTER_MS, advanceOf, labelOf, mapPictureOf } from './MapScreen';
 import v6AllFinished from '../progress/__fixtures__/archive-v6-phase20-all-finished.json';
 import v7AllFinished from '../progress/__fixtures__/archive-v7-phase21-all-finished.json';
 import { ProgressProvider } from './progress-store';
@@ -174,12 +174,22 @@ describe('the way on (2026-10-15 review H)', () => {
         const d = r.ok ? reduce(r.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : r;
         withShapes = d.ok ? d.value : withShapes;
       }
+      // Phase 23c: Compare Island, last on the map, too.
+      await open(withShapes, {});
+      expect(container.querySelector('[data-testid="map-trophy"]')).toBeNull();
+      act(() => root.unmount());
+      root = createRoot(container);
+      for (const id of ['ch4-n1', 'ch4-n2', 'ch4-n3', 'ch4-n4', 'ch4-n5', 'ch4-n6', 'ch4-n7', 'ch4-n8']) {
+        const r = reduce(withShapes, { type: 'enter', nodeId: nodeId(id) });
+        const d = r.ok ? reduce(r.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : r;
+        withShapes = d.ok ? d.value : withShapes;
+      }
       await open(withShapes, {});
       expect(container.querySelector('[data-testid="map-trophy"]')).not.toBeNull();
       // Phase 20 Q9: the cup opens the last island's page again.
       mockRouter.replace.mockClear();
       act(() => (container.querySelector('[data-testid="map-trophy"]') as HTMLElement).click());
-      expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/island/[chapterId]', params: { chapterId: 'ch3' } });
+      expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/island/[chapterId]', params: { chapterId: 'ch4' } });
       expect(container.querySelector('[data-testid="map-trophy"]')?.getAttribute('aria-label')).toBe('奖杯');
     } finally {
       jest.useRealTimers();
@@ -247,7 +257,7 @@ describe('Phase 23b: Shape Island on the map', () => {
       expect(container.querySelectorAll('[data-testid="stop-picture"]')).toHaveLength(8);
       expect(container.querySelector('[data-testid="stop-ch5-n1"] [data-testid="stop-picture"]')).not.toBeNull();
       const islands = [...container.querySelectorAll('[data-testid^="stop-ch"]')].map((e) => e.getAttribute('data-testid')!.slice(5, 8));
-      expect([...new Set(islands)]).toEqual(['ch1', 'ch5', 'ch2', 'ch3']);
+      expect([...new Set(islands)]).toEqual(['ch1', 'ch5', 'ch2', 'ch3', 'ch4']);
     } finally {
       jest.useRealTimers();
     }
@@ -268,6 +278,13 @@ describe('Phase 21: Join Island has twelve stops', () => {
     const stops = findChapter(chapterId('ch3')).nodes.map((n) => labelOf(n));
     expect(stops.map((s) => s.label)).toEqual(['3', '4', '4−1', '5', '5−2', '6−2', '7−3', '5']);
     expect(stops.map((s) => s.number)).toEqual([3, 4, 3, 5, 3, 4, 4, 5]);
+  });
+
+  test('Phase 23c: Compare Island\'s stops read as the sign then the rail\'s number, in its colour; the one-more boss its first number; the line-up its three (MAP_ORDER_LABEL)', () => {
+    const stops = findChapter(chapterId('ch4')).nodes.map((n) => labelOf(n));
+    expect(MAP_ORDER_LABEL).toBe('sizes');
+    expect(stops.map((s) => s.label)).toEqual(['=3', '>2', '<4', '3', '=4', '>3', '<5', '134']);
+    expect(stops.map((s) => s.number)).toEqual([3, 2, 4, 3, 4, 3, 5, 4]);
   });
 
   test('Phase 22: a finished version 7 archive draws the third island with its first stop awake and the marker on it, the rest asleep, no cup', async () => {

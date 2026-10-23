@@ -35,7 +35,12 @@ export type SfxName =
   // "Look up here" (Phase 23-0): a soft two-note chime as the cloud pops at a
   // stop's opening, LOOK_AT seconds in. `step` 2: the cloud's later reminder,
   // at once and a little quieter.
-  | 'look';
+  | 'look'
+  // A compare solved (Phase 23c, design §5.3): each number's counting note, a
+  // beat apart, the child's first (`parts`), the rail's last (`step`), so
+  // "more" is heard high to low, "fewer" low to high, "the same" one note
+  // twice. A line-up: its partners' notes, smallest first.
+  | 'compare';
 
 export interface Sfx {
   readonly play: (name: SfxName, step?: number, parts?: ReadonlyArray<number>) => void;
@@ -74,6 +79,8 @@ export const LOOK_AT = 0.45;
 
 // Seconds between the notes of a join.
 export const JOIN_STEP = 0.11;
+// The beat between a compare's notes (Phase 23c): slow enough to hear two numbers.
+export const COMPARE_STEP = 0.28;
 
 export function notesFor(name: SfxName, step = 1, parts: ReadonlyArray<number> = []): ReadonlyArray<Note> {
   switch (name) {
@@ -88,6 +95,8 @@ export function notesFor(name: SfxName, step = 1, parts: ReadonlyArray<number> =
         { f: total * 2, at: end + 0.02, dur: 0.26, type: 'sine', gain: 0.18 },
       ];
     }
+    case 'compare':
+      return [...parts, step].map((n, i) => ({ f: countPitch(n), at: i * COMPARE_STEP, dur: 0.2, type: 'sine' as const, gain: 0.45 }));
     case 'launch':
       // Do re mi fa so la ti do, fast and rising, then a long high note as it flies.
       return [

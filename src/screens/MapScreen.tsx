@@ -115,8 +115,21 @@ export function labelOf(node: NodeSpec): { label: string; number: number } {
       return { label: String(s.total), number: s.total };
     case 'take_away':
       return s.steps !== undefined ? { label: String(s.start), number: s.start } : { label: `${s.start}−${s.take}`, number: s.start - s.take };
+    // Compare Island (Phase 23c, design §4.2): the sign first, then the rail's
+    // number, in the rail's colour (`=3`, `>2`, `<4`); the "one more" boss is
+    // just its first number (`+1` would read as a sum). The line-up: MAP_ORDER_LABEL.
+    case 'compare': {
+      const sign = { same: '=', more: '>', one_more: '>', fewer: '<', one_fewer: '<' }[s.relation];
+      return { label: s.steps !== undefined && s.steps > 1 ? String(s.given) : `${sign}${s.given}`, number: s.given };
+    }
+    case 'order':
+      return { label: MAP_ORDER_LABEL === 'sizes' ? s.sizes.join('') : '≤', number: Math.max(...s.sizes) };
   }
 }
+
+// How the line-up boss (Phase 23c) reads on the map (design §4.2): 'sizes',
+// its three numbers run together (`134`); 'sign', `≤`. A default for Ted.
+export const MAP_ORDER_LABEL: 'sizes' | 'sign' = 'sizes';
 
 // A winding trail: stops swing left and right down the island.
 function trailX(index: number, width: number, size: number): number {

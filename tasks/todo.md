@@ -1925,3 +1925,106 @@ brief 第 4 节列出、本轮按要求没做的：三个伙伴合体、凑到 1
 - `SANDBOX_DAILY_SHADOW`（沙盒今日造型，默认关）没做，也没留常量；旧形状站 `SHADOW_ON_OLD_SHAPE_STOPS` 没做（PRD §8 #14 默认"求助浮现"，需要给旧站加 `shadow`，会改指纹 → 另开版本）。
 - `PICTURE_PLACEMENT = 'fixed'` 判定分支没做（'anywhere' 是唯一实现，没加常量）。
 - 比一比岛（23c）。
+
+---
+
+# Phase 23c：比一比岛 Compare Island（2026-10-23，D-122 – D-128，内容版本 11）
+
+依据 [take-away-and-compare-design.md](../docs/take-away-and-compare-design.md) §3.2、§4、§5.3 – §5.6、§6、§7"Phase 23"、§9（全按默认）与 [shape-island-and-header-prd.md](../docs/shape-island-and-header-prd.md) §5、§9。顺序：冻结 v10 种子存档 → core → content → progress → screens / blocks-ui → 三视口走查 → 文档。没有 git 操作、没加依赖、`schemaVersion` 不变、旧 46 站指纹一字未变、`lint:purity` 零命中、没加自动语音 / 失败音 / 红叉。决策编号从 D-122 起（D-121 已被"提示卡改回 ✦"占用）。
+
+## 种子存档（先于题库）
+
+- [x] v10 代码（23b 完成、题库没动前）生成，临时 jest 测试写文件、用完删除：`src/progress/__fixtures__/archive-v10-phase23b-{all-finished,ch1-half,ch2-half}.json`（v9 三份经 v10 `migrate`；全通那份按参考解打完造型岛 8 站：46 站、作品册 46、地图回到 ch3-n8、自由玩三块；合体岛一半停 ch2-n5、数字岛 17 / 17；数字岛一半停 ch1-n7、三块在台上）。
+
+## core（D-123）
+
+- [x] `judge.ts`：`compare { given, relation }`（`CompareRelation`，空工作台不算）、`order { sizes }`、新 reason `order-mismatch`；导出 `compares`。`judge.test.ts` +5。
+
+## content（D-122、D-124）
+
+- [x] `schema.ts`（`compare` / `order` 规格）；`material.ts singlesMaterial`；`generate.ts`（`targetOf`、三连 steps、题目 key）；`solution.ts compareRow` + 排队；`validate.ts assertCompare / assertOrder` + 三连 steps；`bench.ts`（`COMPARE_ROWS = 2`、`Need.rows`）；`challenge.ts numberOf`；`copy.ts`（岛名 + 比一比 39 个 key，共 40）；`catalog/chapter-4.ts`；`catalog/index.ts`（`CHAPTERS` 末尾加 ch4、`CONTENT_VERSION = 11`、`CONTENT_CHANGES[11] = []`）。
+- [x] 指纹：`FINGERPRINT_VERSION = 11`，旧 46 站不变，新 n1 `193a0041`、n2 `e1a7170e`、n3 `225d6ea7`、n4 `f75ed30e`、n5 `606bca21`、n6 `ba41a567`、n7 `bb3e3f1a`、n8 `f843b856`（描述函数没改：`question` 与 `steps` 已经带着 `given` / `relation` / `sizes`）。
+- [x] 测试：catalog 新 describe（8 站规格、工作台 6 / 5 / 6 / 7 / 6 / 6 / 7 × 2 与 9 × 3、参考解拖数 3 3 1 6 1 1 4 3、挑站恰好一个对、1 + 2 一样多 / 2 + 5 比 3 多、三连 3 → 4 → 5、排队洗牌且相邻两次不同、反着排是 `order-mismatch`）；generate 新 describe（材料、`fitBench` 只加宽、validate 与构建器拒绝的各条）。
+
+## progress（D-125）
+
+- [x] `upgrade.test.ts` 新 describe v10 → v11（三份什么都不丢、全通 → ch4-n1 其余锁着、按顺序打完 8 站全通作品册 54 且每站作品按自己的题判对、比较站作品只有孩子那排、两份一半不动 ch4-n1 锁着、经 `loadArchive` 不报升级不备份、v9 / v8 全通仍落 ch5-n1 / ch1-n13）。`migrate.ts`、`unlock.ts` 没改。
+
+## blocks-ui / audio（D-126、D-128）
+
+- [x] `CompareRail.tsx`（新）；`Stage.rail`（比较台与它的聚光）；`layout.computeGeometry(..., rail)`；`cheer.ts LINE_UP_CHEER`、`cheerFor({ lineUp })`；`sfx.ts compare`、`COMPARE_STEP`。测试：Stage（比较台位置 = 工作台上方一格、徽章、点它念数、聚光）、layout（留行后格子与托盘不变；全题库三视口检查按留行算）、cheer、sfx。
+
+## screens（D-126 – D-128）
+
+- [x] `level-session.ts`：`COMPARE_ORDER`、`compareLine`、`lineUp`、`grownPast`（三连续档）、`cloudTitle` / `solvedEquation` / `targetNumberOf` 新分支、`waysApart` / `workWaysApart` 排队分开。
+- [x] `hints.ts`：`RAIL_SPOT`、`compareFeedback` / `orderFeedback`、`comparePlan` / `orderPlan`、`promptParams` / `matchedFeedback` / `hintFor` / `lookHere` / `asksForHelp` / `sendOnly` 新分支；排队不逐块亮数。
+- [x] `CompareSketch.tsx`（新，云朵小图）；`LevelScreen.tsx`（留行、`Stage.rail`、示范手落在 (0, 0)、第二拍 `compare` 音、排队 `lineUp` 动作）；`MapScreen.tsx labelOf` + `MAP_ORDER_LABEL`。
+- [x] 测试：`level-session.test.ts` +4、`hints.test.ts` +5、`LevelScreen.test.web.tsx` +4、`LevelScreen.sound.test.web.tsx` +1、`MapScreen.test.web.tsx` +1、`IslandDoneScreen.test.web.tsx` +1。
+
+### 改了期望的旧测试（逐条）
+
+- `catalog.test.ts`：地图四岛 → 五岛（`[..., 'ch3', 'ch4']`）；工作台表加 ch4；23a 那条"38 站"再去掉 ch4，23b 那条"46 站 / 21 造型站"去掉 ch4。
+- `demo.test.ts`：46 → 54 站，9 → 11 Boss。
+- `fingerprint.test.ts`：版本 11，加 8 个新指纹。
+- `unlock.test.ts`：地图 46 → 54；ch3-n8 的下一站是 ch4-n1（原 null）；打完全部旧岛 `defaultCurrent` 是 ch4-n1（原 ch3-n8），再打完 ch4 停 ch4-n8；`CHAPTERS` 4 → 5；无造型岛的岛表里 ch4-n1 由 ch3-n8 打开。
+- `upgrade.test.ts`：`V5_CHAPTERS` / `beforeV9` 去掉 ch4；v8 → v9 组"'next' 在最后一站没有下一站"从 ch3-n8 改为 ch4-n8；v9 → v10 组写死的版本 10 改为 `CONTENT_VERSION`、"全通"改为"v10 及以前的站全通"（`beforeV11`）、'next' 从 ch3-n8 现在落到 ch4-n1。
+- `layout.test.ts`：比较站（新站，没有旧工作台）加进"不比旧工作台小"的排除；全题库三视口检查与预算测试对比较站按留一行算。
+- `IslandDoneScreen.test.web.tsx`：拿走岛收尾"所有的岛都完成了 / 回地图"→"去比一比岛"（按钮进 ch4-n1 的地图跳跃）；`ORDER` 加 ch4。
+- `MapScreen.test.web.tsx`：奖杯要比一比岛也打完，奖杯进 `/island/ch4`；地图岛顺序加 ch4。
+- `LevelScreen.test.web.tsx` / `LevelScreen.sound.test.web.tsx`：`unlockedTo` 的地图顺序加 ch4。
+- `audio-i18n/sfx.test.ts`：`NAMES` 加 `compare`。
+
+## 门禁（最终）
+
+- [x] `pnpm lint` 0；`pnpm typecheck` 过；`pnpm lint:purity` 零命中；`pnpm test:gate` 59 suite / **1486**（基线 1337，+149，没删测试）；覆盖率全部 97.52 / 93.72（语句 / 分支），content 98.58 / 96.47、core 100 / 99.21、progress 99.06 / 97.71、blocks-ui 98.12 / 92.30、screens 95.96 / 91.14；`pnpm build:web` 过。
+
+## 浏览器走查（Checkpoint 23c，Playwright）
+
+内建浏览器面板仍不去 localhost，改用 Playwright（Chromium）对 `static-dist`（`pnpm build:web` 产物，8787）。v10 全通夹具临时拷进 `dist/`、fetch 后写进 localStorage `amber-blocks/progress`（走查后已删）；后几站把夹具的 `current` 改成要去的站再进（`current` 的站总是开着）。拖放用 Playwright 真实鼠标事件。没有听声音。截图 `docs/review-assets/p23c-*.jpg`。
+
+- [x] 375 × 812 地图：v10 全通存档打开即迁移，拿走岛下面"比一比岛 0/8"，标记在 `=3`（醒着），其余睡着，标签 `=3 >2 <4 3 =4 >3 <5 134`（`p23c-01`）。
+- [x] ch4-n1（375）：云朵 `3` + 两排小图；卡片"动手试试看 / 搭一排和它一样多的"；比较台 (13, 336) 348 × 58，格 58，三块黄色 3 带脸带徽章；工作台 6 × 2；托盘五块红色单块 58（`p23c-02`）。拖 1、2 块 →"还比它少 / 在它下面再放一块"（`p23c-03`）；第 3 块 → 云朵 `3 = 3`、"拼对啦！"、下一站，孩子那排正好在比较台下面、变成一个黄色的 3（`p23c-04`）。
+- [x] ch4-n4 ★（375，格 50）：3 块"还比它少"→"一样多了，再多 1 块"；第 4 块 → 比较台长成绿色的 4、云朵 `4`、"它也变成 4 了！再多一块"、比较台套光圈（`p23c-05`）；第 5 块 → 比较台 5；第 6 块 → `6 > 5`、"拼对啦！"（`p23c-06`）。
+- [x] ch4-n6（375）：放 2 →琥珀"2 比 3 少 / 换一个伙伴试试"（`p23c-07`）；再放 1 → 蓝色"2 加 1 是 3，和它一样多！/ 找一个比 3 多的伙伴"（`p23c-08`）。
+- [x] ch4-n8 ★（375）：没有比较台，云朵三根灰条，工作台 9 × 3 格 41（用满屏宽），托盘伙伴 41（`p23c-09`）；3 放最左、1 放后面 →"3 比 1 多，1 排前面 / 先放最小的"（`p23c-10`）；改成 1、3、4 → `1 < 3 < 4`、三个伙伴各自一张脸一个徽章（没合成 8）（`p23c-11`）。
+- [x] 360 × 640（英文）开局：n1 比较台 y 232、格 56、托盘 56；n4 格 48、托盘 48；n6 格 56、托盘伙伴 56；n8 托盘 40；托盘下沿 476 – 508 / 640（`p23c-360-*`）。n1 搭对后"Next stop"按钮 591 – 637 / 640（`p23c-360-ch4-n1-solved`）。
+- [x] 667 × 331（英文）开局：比较台在右侧舞台顶部，n1 / n6 格 79、n4 格 67；托盘 n1 / n6 42、n4 67、n8 55；托盘下沿 ≤ 311 / 331（`p23c-667-*`）；n1 搭对后侧栏"Next stop"270 – 327 / 331。
+- [x] 卡片文字在 360 宽一行（JS 量 Fredoka 15px，可用 226px）：最长标题 "3 is more than 1. 1 goes first" 185、"1 加 2 是 3，和它一样多！" 172；最长正文 "The 1 on the left, then the 3, then the 4" 209。
+- [x] 控制台 0 error。
+- [ ] n3 / n5 / n7 只在 jsdom / 单元测试里走过；比较台被点时的跳动与念数、减少动效、三连长大时的变色 pop 只在代码与 jsdom 里看过。
+
+## 需要 Ted 决定（都有一处常量或一行）
+
+1. 8 站数字与顺序、岛名"比一比岛 / Compare Island"、Boss 是排队 [1, 3, 4]（`catalog/chapter-4.ts`、`copy.ts chapter.ch4.title`；设计稿 §9 #2 #3 #11）。
+2. `COMPARE_ORDER = 'child-first'`（`screens/level-session.ts`，`4 > 2`；`'rail-first'` 写 `2 < 4`，§9 #5）。没做"鳄鱼嘴"装扮、没念"大于 / 小于"（§9 #5 #6 默认，没留开关常量）。
+3. `MAP_ORDER_LABEL = 'sizes'`（`MapScreen.tsx`，`134`；`'sign'` 是 `≤`）。三连的标签只写 `3`（设计稿默认）。
+4. `LINE_UP_CHEER = 'stack'`（`blocks-ui/cheer.ts`，用现成的"一个比一个跳得高"代替设计稿的新动作 parade）。
+5. `COMPARE_ROWS = 2`（`content/bench.ts`）与比较台占一行（`LevelScreen COMPARE_RAIL_ROWS = 1`）。
+6. 单块颜色是 1 的红色（`singlesMaterial`），不是比较台的颜色——用同色会在比之前就像"一样"。
+7. `COMPARE_STEP = 0.28` 秒（两声之间）；第二拍才响（和火箭发射音同一时刻）。
+8. 挑站放错是琥珀"调整"（会响一下"嗯？"音、脸歪头）——设计稿 §5.3 写琥珀；如果觉得"2 比 3 少"本身是知识、不该算调整，可以改成蓝色拼搭态（一行）。
+
+## 与设计稿的出入
+
+- 内容版本 11（稿子写 9）。
+- 文案：`feedback.compare.is` 按稿子自己的建议拆成三个 key；成功句叫 `feedback.matched.compare.*`（`feedback.matched.same` 已被占用）；另加了几条稿子没列的 key（见 D-127），每种关系都有题目句（含没用到的"搭比它少"、"挑多 1 / 少 1"）。
+- 发现句按工作台从左到右念（"2 加 1 是 3"，稿子例句是"1 加 2"）。
+- 求助第 1 下：稿子说"比较台伙伴依次亮出 1–3"；实现是点亮整条比较台，搭站数量不对时改为孩子那排逐块亮数（现成的 countUp），没有给比较台逐块亮数。
+- 三连每步过后没有"先 pop 成 `4 > 3`、再换"的停顿（同 Phase 22 倒数）：云朵立刻换成新的比较台数，只有最后一步写 `6 > 5`；点云朵念的是当前题目，不是"依次念三句"。
+- 排队过关没有新动作 parade（用 'stack'），也没有在跳的同时逐个响 count 音；第二拍一次响 1、3、4 三声。
+- 长出来的那截 / 空出来的格子"亮一下"没做；比较台长大用 `BlockBody` 自带的变色 pop（减少动效时直接换色）。
+- 作品册里比较站的缩略图没有补画比较台（只有孩子那一排）；排队站作品用 `apart` 分开（做了）。
+- 比较站工作台是拟合出来的 2 行（`fitBench` 的 `rows`），不是写死在节点上的 `bounds`；结果与稿子的表一致。
+
+## 只能真机确认
+
+- 比较台与孩子那排"对齐比长短"在手机上是否一眼看得出（S：第一块会不会放在比较台旁边）；沙色窄台与托盘同色会不会被当成第二个托盘。
+- 两声比较音（高→低 / 低→高）在手机扬声器上听不听得出方向。
+- 排队站 375 宽 9 × 3 格 41、360 宽托盘 40——够大但贴边；小手能不能把 4 精确放在 3 的右边。
+- iOS Safari 的音频解锁与语音（同前）。
+
+## 已知遗留 / 没做
+
+- 自由玩随机题不出比较 / 排队题（设计稿 §4.6 本轮不加）。
+- 作品册比较站补画比较台（见"出入"）。
+- 走查时看到的旧现象（没改）：9 列工作台用满屏宽时木框贴到屏幕边（Phase 21 起 9 × 3 的站都这样）。

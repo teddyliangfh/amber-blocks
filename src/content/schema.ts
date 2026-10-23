@@ -1,4 +1,4 @@
-import type { BenchState, Bounds, Command, GroupId, Question, ShapeTemplate, Symmetry } from '../core';
+import type { BenchState, Bounds, Command, CompareRelation, GroupId, Question, ShapeTemplate, Symmetry } from '../core';
 import type { ChapterId, CopyKey, NodeId } from './ids';
 
 export interface Chapter {
@@ -110,6 +110,29 @@ export type QuestionSpec =
       readonly take: number;
       readonly onMat?: ReadonlyArray<number>;
       readonly steps?: ReadonlyArray<number>;
+    }
+  // Compare (Phase 23c, Compare Island, design §2.1 / §2.3): a partner of
+  // `given` stands on a rail above the mat (scenery: not material, never
+  // judged, never saved) and the child puts out a row that stands to it as
+  // `relation` says. Judged by count alone. Exactly one of: `singles`, that
+  // many single blocks in the tray to build a row from; `partners`, one
+  // partner of each size in the tray (shuffled) to pick from, exactly one of
+  // them right alone. `steps`: asked this many times on the same blocks, the
+  // partner on the rail growing by one after each ("one more" three times:
+  // 3 → 4 → 5); 1 when left out.
+  | {
+      readonly kind: 'compare';
+      readonly given: number;
+      readonly relation: CompareRelation;
+      readonly singles?: number;
+      readonly partners?: ReadonlyArray<number>;
+      readonly steps?: number;
+    }
+  // Line up (Phase 23c): one partner of each size in the tray (shuffled), to
+  // stand side by side on the mat from the smallest; `sizes` smallest first.
+  | {
+      readonly kind: 'order';
+      readonly sizes: ReadonlyArray<number>;
     };
 
 // The pictures Shape Island names (copy `picture.<id>`).

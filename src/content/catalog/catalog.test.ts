@@ -5,7 +5,7 @@ import { SHADOW_POLICY } from './chapter-5';
 import { chapterId, nodeId } from '../ids';
 import type { PuzzleRef, QuestionSpec } from '../schema';
 import type { ShapeTemplate } from '../../core';
-import { DEFAULT_SYMMETRY, matchesTemplate, mirrorX, rotate90, variants } from '../../core';
+import { DEFAULT_SYMMETRY, apply, judge, matchesTemplate, mirrorX, rotate90, variants } from '../../core';
 import { SINGLES_DRAG_CAP } from './chapter-1';
 import { BOAT_5, BOAT_5_C, CORNER_5, DOG_6, DUCK_5, L_4, PLUS_5, RING_8, SQUARE_3X3, STAIRS_10, STAIRS_6, S_4, TEN_2X5, TEN_STANDING, T_4 } from './shapes';
 
@@ -23,7 +23,7 @@ const ref = (chapter: string, node: string, contentVersion = CONTENT_VERSION): P
 describe('catalog', () => {
   test('map: three islands, three legs with a boss each (seventeen stops since Phase 23a), thirteen join stops, then eight take-away stops', () => {
     // Phase 23b: Shape Island (ch5) between Number Island and Join Island (SHAPE_ISLAND_POSITION).
-    expect(CHAPTERS.map((c) => c.id)).toEqual(['ch1', 'ch5', 'ch2', 'ch3']);
+    expect(CHAPTERS.map((c) => c.id)).toEqual(['ch1', 'ch5', 'ch2', 'ch3', 'ch4']);
     expect(ch(3).nodes).toHaveLength(8);
     expect(ch(3).nodes.filter((n) => n.role === 'boss').map((n) => n.id)).toEqual(['ch3-n4', 'ch3-n8']);
     expect(ch(1).nodes).toHaveLength(17);
@@ -61,6 +61,9 @@ describe('catalog', () => {
       // never turned, it needs no room standing up (6 × 3, not 6 × 5).
       'ch5-n1': '5x4', 'ch5-n2': '6x3', 'ch5-n3': '6x4', 'ch5-n4': '6x4', 'ch5-n5': '6x4', 'ch5-n6': '6x4', 'ch5-n7': '6x4', 'ch5-n8': '6x5',
       'ch3-n1': '4x3', 'ch3-n2': '5x3', 'ch3-n3': '5x3', 'ch3-n4': '6x3', 'ch3-n5': '6x3', 'ch3-n6': '7x3', 'ch3-n7': '8x3', 'ch3-n8': '6x3',
+      // Phase 23c: a compare's two rows under the rail, a spare column past
+      // its longest row (design §3.2); the line-up's three side by side.
+      'ch4-n1': '6x2', 'ch4-n2': '5x2', 'ch4-n3': '6x2', 'ch4-n4': '7x2', 'ch4-n5': '6x2', 'ch4-n6': '6x2', 'ch4-n7': '7x2', 'ch4-n8': '9x3',
     });
   });
 
@@ -254,7 +257,7 @@ describe('catalog', () => {
       expect(at(id).role).toBe('normal');
     }
     // (Shape Island's eight, Phase 23b, left out.)
-    const all = CHAPTERS.filter((c) => c.id !== 'ch5').flatMap((c) => c.nodes);
+    const all = CHAPTERS.filter((c) => c.id !== 'ch5' && c.id !== 'ch4').flatMap((c) => c.nodes);
     expect(all).toHaveLength(38);
     expect(all.filter((n) => n.spec.kind === 'quantity_shape')).toHaveLength(13);
     // Three faces of 4: one block moved for each new picture (4 + 1 + 1 drags).
@@ -319,7 +322,8 @@ describe('Phase 23b: Shape Island', () => {
       expect(at(id).spec).not.toHaveProperty('symmetry');
     }
     expect(BOSS_ENTRANCE.has(nodeId('ch5-n8'))).toBe(false);
-    const all = CHAPTERS.flatMap((c) => c.nodes);
+    // (Compare Island's eight, Phase 23c, left out.)
+    const all = CHAPTERS.filter((c) => c.id !== 'ch4').flatMap((c) => c.nodes);
     expect(all).toHaveLength(46);
     expect(all.filter((n) => n.spec.kind === 'quantity_shape')).toHaveLength(21);
     // Every mat is six columns or fewer.
@@ -374,6 +378,134 @@ describe('Phase 23b: Shape Island', () => {
     expect(p.solution.map((c) => c.type)).toEqual(['take', 'take', 'take', 'take', 'take', 'move']);
     expect(matchesTemplate(BOAT_5_C.cells, BOAT_5)).toBe(true);
     expect(BOAT_5_C.cells).not.toEqual(BOAT_5.cells);
+  });
+});
+
+describe('Phase 23c: Compare Island', () => {
+  const at = (id: string) => ch(4).nodes.find((n) => n.id === id)!;
+
+  test('eight stops after Take-away Island, on the way: build, pick, one more three times, the line-up; numbers up to 6', () => {
+    expect(CHAPTERS[CHAPTERS.length - 1]!.id).toBe('ch4');
+    expect(SIDE_ISLANDS.has(chapterId('ch4'))).toBe(false);
+    expect(ch(4).title).toBe('chapter.ch4.title');
+    expect(ch(4).nodes.filter((n) => n.role === 'boss').map((n) => n.id)).toEqual(['ch4-n4', 'ch4-n8']);
+    expect(ch(4).nodes.map((n) => n.spec)).toEqual([
+      { kind: 'compare', given: 3, relation: 'same', singles: 5 },
+      { kind: 'compare', given: 2, relation: 'more', singles: 4 },
+      { kind: 'compare', given: 4, relation: 'fewer', partners: [2, 5, 4] },
+      { kind: 'compare', given: 3, relation: 'one_more', steps: 3, singles: 6 },
+      { kind: 'compare', given: 4, relation: 'same', partners: [4, 2, 5] },
+      { kind: 'compare', given: 3, relation: 'more', partners: [1, 5, 2] },
+      { kind: 'compare', given: 5, relation: 'one_fewer', singles: 6 },
+      { kind: 'order', sizes: [1, 3, 4] },
+    ]);
+    // No stop builds "fewer": the first block would do (design §3.2).
+    expect(ch(4).nodes.some((n) => n.spec.kind === 'compare' && n.spec.relation === 'fewer' && n.spec.singles !== undefined)).toBe(false);
+    // The rail is not material: nothing starts on the mat, the cloud shows its number.
+    for (const n of ch(4).nodes) {
+      const p = materializeFor(n.id);
+      expect(p.initial.bench.size).toBe(0);
+      expect(p.display.target).toBe(n.spec.kind === 'compare' ? n.spec.given : null);
+    }
+    expect(BOSS_ENTRANCE.has(nodeId('ch4-n4'))).toBe(false);
+    expect(BOSS_ENTRANCE.has(nodeId('ch4-n8'))).toBe(false);
+  });
+
+  test('the tasks: build lines and pick lines with the rail\'s number; the reference answers take 3, 3, 1, 6, 1, 1, 4 and 3 drags', () => {
+    expect(ch(4).nodes.map((n) => [materializeFor(n.id).prompt, materializeFor(n.id).solution.length])).toEqual([
+      ['prompt.compare.same', 3],
+      ['prompt.compare.more', 3],
+      ['prompt.compare.pick.fewer', 1],
+      ['prompt.compare.one_more', 6],
+      ['prompt.compare.pick.same', 1],
+      ['prompt.compare.pick.more', 1],
+      ['prompt.compare.one_fewer', 4],
+      ['prompt.order', 3],
+    ]);
+    // Every drag of a single block goes right under the rail, from the left of the top row.
+    for (const id of ['ch4-n1', 'ch4-n2', 'ch4-n4', 'ch4-n7']) {
+      materializeFor(id).solution.forEach((cmd, i) => expect(cmd).toMatchObject({ type: 'take', to: { x: i, y: 0 } }));
+    }
+  });
+
+  test('pick stops: exactly one partner alone is right; n6\'s 1 and 2 together are the same as 3, and 2 + 5 is more', () => {
+    for (const id of ['ch4-n3', 'ch4-n5', 'ch4-n6']) {
+      const p = materializeFor(id);
+      const q = p.question;
+      const spec = at(id).spec;
+      if (q.kind !== 'compare' || spec.kind !== 'compare') {
+        throw new Error('compare expected');
+      }
+      const right = [...p.initial.groups.values()].filter((g) => {
+        const r = apply(p.initial, { type: 'takeGroup', groupId: g.id, origin: { x: 0, y: 0 } });
+        return r.ok && judge(r.value, q).matched;
+      });
+      expect(`${id} ${right.map((g) => g.unitIds.length)}`).toBe(`${id} ${{ 'ch4-n3': 2, 'ch4-n5': 4, 'ch4-n6': 5 }[id]}`);
+    }
+    const six = materializeFor('ch4-n6');
+    const bySize = (n: number) => [...six.initial.groups.values()].find((g) => g.unitIds.length === n)!.id;
+    // One row each, so 2 + 5 fits the 6-column mat.
+    const put = (sizes: ReadonlyArray<number>) =>
+      sizes.reduce((s, n, i) => {
+        const r = apply(s, { type: 'takeGroup', groupId: bySize(n), origin: { x: 0, y: i } });
+        if (!r.ok) {
+          throw new Error(r.reason);
+        }
+        return r.value;
+      }, six.initial);
+    expect(judge(put([1, 2]), six.question)).toMatchObject({ matched: false, benchCount: 3 });
+    expect(judge(put([1, 2]), { kind: 'compare', given: 3, relation: 'same' }).matched).toBe(true);
+    expect(judge(put([2, 5]), six.question)).toMatchObject({ matched: true, benchCount: 7 });
+  });
+
+  test('n4: one more three times, the rail growing 3, 4, 5; the reference passes each step on the way', () => {
+    const p = materializeFor('ch4-n4');
+    expect(p.steps).toEqual([3, 4, 5].map((given) => ({ kind: 'compare', given, relation: 'one_more' })));
+    let state = p.initial;
+    const passed: number[] = [];
+    let step = 0;
+    for (const cmd of p.solution) {
+      const r = apply(state, cmd);
+      if (!r.ok) {
+        throw new Error(r.reason);
+      }
+      state = r.value;
+      if (judge(state, p.steps![step]!).matched) {
+        passed.push(state.bench.size);
+        step = Math.min(step + 1, 2);
+      }
+    }
+    expect(passed).toEqual([4, 5, 6]);
+  });
+
+  test('n8: 1, 3 and 4 dealt shuffled; smallest first side by side is right, the other way round is not', () => {
+    const orders = [0, 1, 2, 3].map((v) => {
+      const dealt = materialize({ ...ref('ch4', 'ch4-n8'), attemptVariant: v });
+      return dealt.display.partnerIds.map((id) => dealt.initial.groups.get(id)!.unitIds.length).join();
+    });
+    // Not lined up already in the tray every time, and never the same twice running.
+    expect(orders.some((o) => o !== '1,3,4')).toBe(true);
+    orders.slice(1).forEach((o, i) => expect(o).not.toBe(orders[i]));
+    const p = materializeFor('ch4-n8');
+    const final = p.solution.reduce((s, cmd) => {
+      const r = apply(s, cmd);
+      if (!r.ok) {
+        throw new Error(r.reason);
+      }
+      return r.value;
+    }, p.initial);
+    expect(judge(final, p.question).matched).toBe(true);
+    const size = (id: string) => p.initial.groups.get(id as never)!.unitIds.length;
+    expect(p.solution.map((c) => (c.type === 'takeGroup' ? size(c.groupId) : 0))).toEqual([1, 3, 4]);
+    const backwards = [4, 3, 1].reduce((s, n, i) => {
+      const id = [...p.initial.groups.values()].find((g) => g.unitIds.length === n)!.id;
+      const r = apply(s, { type: 'takeGroup', groupId: id, origin: { x: [0, 4, 7][i]!, y: 0 } });
+      if (!r.ok) {
+        throw new Error(r.reason);
+      }
+      return r.value;
+    }, p.initial);
+    expect(judge(backwards, p.question)).toMatchObject({ matched: false, reason: 'order-mismatch' });
   });
 });
 

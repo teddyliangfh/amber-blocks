@@ -750,3 +750,62 @@ describe('Phase 23b: pictures and shadows (validate)', () => {
     expect(() => validate({ ...p, picture: 'duck' }, { kind: 'quantity', targets: [3], extra: 1 })).toThrow(/come from a shape spec/);
   });
 });
+
+describe('Phase 23c: compare and line up (validate, builders)', () => {
+  const r = ref('x', 'x-n1');
+  const at = (spec: NodeSpec['spec']) => () => materializeNode(custom(spec), fitBench(spec), r);
+
+  test('a compare deals single blocks or partners into the tray, nothing on the mat; the line-up deals its partners', () => {
+    const build = at({ kind: 'compare', given: 3, relation: 'same', singles: 5 })();
+    expect(build.initial.units.size).toBe(5);
+    expect(build.initial.groups.size).toBe(0);
+    expect([...build.initial.units.values()].every((u) => u.hue === 'n1')).toBe(true);
+    expect(build.question).toEqual({ kind: 'compare', given: 3, relation: 'same' });
+    expect(build.steps).toBeUndefined();
+    const pick = at({ kind: 'compare', given: 4, relation: 'fewer', partners: [2, 5, 4] })();
+    expect([...pick.initial.groups.values()].map((g) => g.unitIds.length).sort()).toEqual([2, 4, 5]);
+    expect(pick.display.partnerIds).toHaveLength(3);
+    const line = at({ kind: 'order', sizes: [1, 3, 4] })();
+    expect(line.question).toEqual({ kind: 'order', sizes: [1, 3, 4] });
+    expect(line.display.target).toBeNull();
+    expect(fitBench({ kind: 'compare', given: 3, relation: 'same', singles: 5 })).toEqual({ cols: 6, rows: 2 });
+    // Too much for two rows: the mat grows wider, never taller.
+    expect(fitBench({ kind: 'compare', given: 2, relation: 'more', partners: [5, 4, 3] })).toEqual({ cols: 7, rows: 2 });
+  });
+
+  test('the compare content bugs validate refuses', () => {
+    const five = at({ kind: 'compare', given: 3, relation: 'same', singles: 5 })();
+    expect(at({ kind: 'compare', given: 3, relation: 'same' })).toThrow(/single blocks or partners, one of them|positive integer/);
+    expect(at({ kind: 'compare', given: 3, relation: 'same', singles: 5, partners: [2] })).toThrow(/one of them|partners alone are same than 3/);
+    expect(at({ kind: 'compare', given: 3, relation: 'same', singles: 2 })).toThrow(/2 single blocks cannot be same than 3/);
+    expect(() => validate(five, { kind: 'compare', given: 3, relation: 'same', singles: 2 })).toThrow(/2 single blocks cannot answer same 3/);
+    expect(() => validate(five, { kind: 'compare', given: 7, relation: 'same', singles: 5 })).toThrow(/rail's 7 is wider than the mat/);
+    expect(() => validate(five, { kind: 'compare', given: 1, relation: 'fewer', singles: 5 })).toThrow(/nothing on the mat is fewer than 1/);
+    expect(() => validate(five, { kind: 'compare', given: 0, relation: 'more', singles: 5 })).toThrow(/a partner of 1 or more/);
+    expect(at({ kind: 'compare', given: 3, relation: 'more', partners: [4, 5, 1] })).toThrow(/2 partners alone are more than 3/);
+    const pick = at({ kind: 'compare', given: 4, relation: 'fewer', partners: [2, 5, 4] })();
+    expect(() => validate(pick, { kind: 'compare', given: 3, relation: 'more', partners: [2, 5, 4] })).toThrow(/2 partners of 2, 5, 4 alone are more than 3/);
+    expect(() => validate(pick, { kind: 'compare', given: 4, relation: 'fewer', partners: [2, 5, 5] })).toThrow(/partners of different sizes/);
+    expect(at({ kind: 'compare', given: 3, relation: 'same', steps: 2, singles: 6 })).toThrow(/asked in steps is "one more"/);
+    // The rail wider than the mat.
+    expect(() => materializeNode(custom({ kind: 'compare', given: 5, relation: 'same', singles: 6 }), { cols: 4, rows: 2 }, r)).toThrow(/rail's 5 is wider than the mat|could not|does not fit/);
+    const ok = at({ kind: 'compare', given: 3, relation: 'one_more', steps: 3, singles: 6 })();
+    expect(() => validate({ ...ok, steps: [ok.steps![0]!, { kind: 'compare', given: 5, relation: 'one_more' }, ok.steps![2]!] }, { kind: 'compare', given: 3, relation: 'one_more', steps: 3, singles: 6 })).toThrow(/rail one bigger/);
+    expect(() => validate({ ...ok, steps: undefined }, { kind: 'quantity', targets: [3], extra: 1 })).toThrow(/question compare does not match spec quantity/);
+    // A reference answer too short to pass.
+    expect(() => validate({ ...ok, solution: ok.solution.slice(0, 5) }, { kind: 'compare', given: 3, relation: 'one_more', steps: 3, singles: 6 })).toThrow(/does not pass/);
+  });
+
+  test('the line-up content bugs validate refuses; the builders refuse what they cannot answer', () => {
+    expect(at({ kind: 'order', sizes: [3, 1, 4] })).toThrow(/smallest first/);
+    expect(at({ kind: 'order', sizes: [3] })).toThrow(/smallest first/);
+    expect(() => materializeNode(custom({ kind: 'order', sizes: [1, 3, 4] }), { cols: 7, rows: 3 }, r)).toThrow(/wider than the mat/);
+    const line = at({ kind: 'order', sizes: [1, 3, 4] })();
+    expect(() => validate(line, { kind: 'order', sizes: [1, 2, 4] })).toThrow(/exactly its partners/);
+    expect(() => validate(line, { kind: 'compare', given: 3, relation: 'same', singles: 5 })).toThrow(/question order does not match spec compare/);
+    expect(() => buildSolution({ kind: 'order', sizes: [1, 2] }, partnerMaterial([1, 3], bounds, 'x').state)).toThrow(/no partners of sizes 1, 2/);
+    expect(() => buildSolution({ kind: 'compare', given: 3, relation: 'more' }, partnerMaterial([1, 2, 3], bounds, 'x').state)).toThrow(/0 partners alone are more than 3/);
+    expect(() => buildSolution({ kind: 'compare', given: 5, relation: 'more' }, materializeNode(custom({ kind: 'compare', given: 2, relation: 'more', singles: 4 }), { cols: 5, rows: 2 }, r).initial)).toThrow(/4 single blocks cannot be more than 5/);
+    expect(() => buildSolution({ kind: 'compare', given: 3, relation: 'same' }, partnerMaterial([1], bounds, 'x').state, [{ kind: 'quantity', target: 3 }])).toThrow(/every step of a compare is a compare/);
+  });
+});

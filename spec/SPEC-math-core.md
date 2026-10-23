@@ -97,7 +97,10 @@ export type Question =
   | { kind: 'quantity';        target: number }
   | { kind: 'quantity_shape';  target: number; template: ShapeTemplate; symmetry: Symmetry }
   | { kind: 'addition_exact';  operands: readonly [number, number] }
-  | { kind: 'sum_composition'; sum: number; allowed: ReadonlyArray<readonly [number, number]> };
+  | { kind: 'sum_composition'; sum: number; allowed: ReadonlyArray<readonly [number, number]> }
+  | { kind: 'split';           total: number; parts: number; except?: ReadonlyArray<ReadonlyArray<number>> }   // Phase 22
+  | { kind: 'compare';         given: number; relation: CompareRelation }                                     // Phase 23c
+  | { kind: 'order';           sizes: ReadonlyArray<number> };                                                // Phase 23c
 export interface Verdict {
   readonly matched: boolean;
   readonly benchCount: number;                         // 工作台真实单位数
@@ -157,6 +160,8 @@ export interface CountRound { readonly fingerprint: string; readonly counted: Re
 | `quantity_shape` | `benchCount === target` 且工作台单位恰好组成一个簇，其格子集合与 `template` 在 `symmetry` 下等价 | 像素对齐、特定颜色（AC-43） |
 | `addition_exact [a,b]` | 存在两个**身份不同**的组 A、B，`|A|=a`、`|B|=b`（顺序无关），二者合体为一个簇，且 `benchCount === a+b` | 操作顺序；5+2 对 [3,4] 不通过（AC-45） |
 | `sum_composition n` | 存在一组组，其大小多重集属于 `allowed`，合体为一个簇，`benchCount === n` | 唯一分法（AC-45） |
+| `compare { given, relation }`（Phase 23c，D-123） | `benchCount > 0` 且 `compares(benchCount, given, relation)`：`same` 相等、`more` 大于、`fewer` 小于、`one_more` 等于 `given + 1`、`one_fewer` 等于 `given − 1`；不对是 `count-mismatch` | 摆法、是哪几个伙伴（2 + 5 也"比 3 多"）；`given` 是比较台上的伙伴，不在 `BenchState` 里 |
+| `order { sizes }`（Phase 23c，D-123） | `benchCount` 等于各尺寸之和（否则 `count-mismatch`）；工作台上恰好是这些尺寸的整组、没有散块（否则 `groups-mismatch`）；按最左列排序后列范围互不重叠、尺寸依次为 `sizes`（否则 `order-mismatch`） | 相接、同一行 |
 
 - `a = b`（如 2+2）必须由两个不同 `GroupId` 满足，同一组不能计两次（AC-44）。
 - 加法判定只考虑成员**全部在工作台**的组；还在托盘里的伙伴不参与（demo 2026-10-13 抓到的 bug：托盘伙伴被读取工作台格子）。

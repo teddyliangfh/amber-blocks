@@ -1,4 +1,4 @@
-import { DEFAULT_SYMMETRY, apply, areTouching, assertInvariants, clusters, groupSize, judge, variants } from '../core';
+import { DEFAULT_SYMMETRY, apply, areTouching, assertInvariants, clusters, compares, groupSize, judge, variants } from '../core';
 import type { BenchState, Bounds, Cell, Group, Question, ShapeTemplate, Symmetry } from '../core';
 import { holdsMaterial } from './bench';
 import { assertDistractors } from './distractors';
@@ -300,6 +300,67 @@ function assertTakeAway(spec: Extract<QuestionSpec, { kind: 'take_away' }>, puzz
   }
 }
 
+// Compare (Phase 23c, design §3.2): the partner on the rail and the row that
+// answers it each fit in one row of the mat, left-aligned; never "fewer" than
+// 1. Built from single blocks: enough of them for the last step; steps only
+// for "one more" (the rail grows to what the child just built). From
+// partners: different sizes, exactly one of them right alone (more partners
+// together may be right too: only the count is compared, design §9 #9), and
+// none wider than the mat.
+function assertCompare(spec: Extract<QuestionSpec, { kind: 'compare' }>, puzzle: Puzzle): void {
+  const { initial } = puzzle;
+  const count = spec.steps ?? 1;
+  if (!Number.isInteger(spec.given) || spec.given < 1 || !Number.isInteger(count) || count < 1) {
+    throw new Error(`content: a compare needs a partner of 1 or more on the rail, got ${spec.given}`);
+  }
+  if ((spec.relation === 'fewer' || spec.relation === 'one_fewer') && spec.given < 2) {
+    throw new Error(`content: nothing on the mat is fewer than ${spec.given}`);
+  }
+  const top = spec.given + count - 1;
+  if (top > initial.bounds.cols) {
+    throw new Error(`content: the rail's ${top} is wider than the mat`);
+  }
+  if (count > 1 && (spec.relation !== 'one_more' || spec.partners !== undefined)) {
+    throw new Error('content: a compare asked in steps is "one more", built from single blocks');
+  }
+  if ((spec.singles === undefined) === (spec.partners === undefined)) {
+    throw new Error('content: a compare deals single blocks or partners, one of them');
+  }
+  if (spec.singles !== undefined) {
+    const need = { same: top, more: top + 1, one_more: top + 1, fewer: 1, one_fewer: top - 1 }[spec.relation];
+    if (initial.groups.size > 0 || initial.units.size !== spec.singles || spec.singles < need || need > initial.bounds.cols) {
+      throw new Error(`content: ${spec.singles} single blocks cannot answer ${spec.relation} ${top} in a row of the mat`);
+    }
+    return;
+  }
+  const sizes = spec.partners!;
+  if (new Set(sizes).size !== sizes.length || initial.groups.size !== sizes.length) {
+    throw new Error(`content: a compare deals partners of different sizes, got ${sizes.join(', ')}`);
+  }
+  assertPartnersFit(initial);
+  const right = sizes.filter((n) => compares(n, spec.given, spec.relation));
+  if (right.length !== 1) {
+    throw new Error(`content: ${right.length} partners of ${sizes.join(', ')} alone are ${spec.relation} than ${spec.given}`);
+  }
+}
+
+// Line up (Phase 23c): two or more partners of different sizes, smallest
+// first, all of them side by side in one row of the mat.
+function assertOrder(spec: Extract<QuestionSpec, { kind: 'order' }>, puzzle: Puzzle): void {
+  const { initial } = puzzle;
+  const { sizes } = spec;
+  if (sizes.length < 2 || sizes.some((n, i) => !Number.isInteger(n) || n < 1 || (i > 0 && n <= sizes[i - 1]!))) {
+    throw new Error(`content: a line-up is of different sizes, smallest first, got ${sizes.join(', ')}`);
+  }
+  if (initial.groups.size !== sizes.length || initial.units.size !== sizes.reduce((a, b) => a + b, 0)) {
+    throw new Error('content: a line-up deals exactly its partners');
+  }
+  const width = [...initial.groups.values()].reduce((w, g) => w + Math.max(...g.shape.map((c) => c.x)) + 1, 0);
+  if (width > initial.bounds.cols) {
+    throw new Error(`content: ${sizes.join(', ')} side by side are wider than the mat`);
+  }
+}
+
 export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
   const { question, initial, solution } = puzzle;
   assertInvariants(initial);
@@ -311,6 +372,20 @@ export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
   }
 
   switch (question.kind) {
+    case 'compare': {
+      if (spec.kind !== 'compare') {
+        throw new Error(`content: question ${question.kind} does not match spec ${spec.kind}`);
+      }
+      assertCompare(spec, puzzle);
+      break;
+    }
+    case 'order': {
+      if (spec.kind !== 'order') {
+        throw new Error(`content: question ${question.kind} does not match spec ${spec.kind}`);
+      }
+      assertOrder(spec, puzzle);
+      break;
+    }
     case 'split': {
       if (spec.kind !== 'split') {
         throw new Error(`content: question ${question.kind} does not match spec ${spec.kind}`);
@@ -441,8 +516,13 @@ export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
         throw new Error('content: every step of a countdown is the count left');
       }
     });
+  } else if (spec.kind === 'compare' && (spec.steps ?? 1) > 1) {
+    // "One more" in steps: the rail grows by one each step.
+    if (steps.length !== spec.steps || steps.some((step, i) => step.kind !== 'compare' || step.given !== spec.given + i || step.relation !== spec.relation)) {
+      throw new Error('content: every step of a compare is the rail one bigger');
+    }
   } else if (puzzle.steps !== undefined) {
-    throw new Error('content: steps come from a sequence or countdown spec');
+    throw new Error('content: steps come from a sequence, countdown or compare spec');
   }
 
   // A sum asked several ways: each way passes once, with a pair the earlier

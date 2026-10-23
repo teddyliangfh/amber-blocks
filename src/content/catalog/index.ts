@@ -4,6 +4,7 @@ import type { Chapter, NodeSpec, PuzzleRef } from '../schema';
 import { CHAPTER_1 } from './chapter-1';
 import { CHAPTER_2 } from './chapter-2';
 import { CHAPTER_3 } from './chapter-3';
+import { CHAPTER_4 } from './chapter-4';
 import { CHAPTER_5 } from './chapter-5';
 
 // Bump whenever a stop deals different material or asks a different question
@@ -12,7 +13,7 @@ import { CHAPTER_5 } from './chapter-5';
 // refuses mismatches (AC-47). The archive format is versioned separately
 // (`schemaVersion`, progress/codec.ts). fingerprint.test.ts fails when material
 // changes without a bump.
-export const CONTENT_VERSION = 10;
+export const CONTENT_VERSION = 11;
 
 // The stops each version changed, keyed by the version that changed them. Saved
 // unfinished work on a listed stop may no longer fit its material; on every
@@ -55,6 +56,10 @@ export const CONTENT_CHANGES: Readonly<Record<number, ReadonlyArray<NodeId>>> = 
   // Island (SHAPE_ISLAND_POSITION). No old stop changed, and no archive from
   // an earlier version can hold work for the new ones, so nothing to list.
   10: [],
+  // 2026-10-23 (Phase 23c): Compare Island (ch4, eight stops), after
+  // Take-away Island. No old stop changed, and no archive from an earlier
+  // version can hold work for the new ones, so nothing to list.
+  11: [],
 };
 
 // Where Shape Island sits on the map (PRD §4.2.2, §8 #7): 'after-ch1', the
@@ -70,7 +75,13 @@ export const SHAPE_ISLAND_POSITION: 'after-ch1' | 'append' = 'after-ch1';
 // boss is done. A default for Ted (`none`); progress/unlock.ts reads SIDE_ISLANDS.
 export const SHAPE_ISLAND_GATE: 'none' | 'before-join' = 'none';
 
-export const CHAPTERS: ReadonlyArray<Chapter> = SHAPE_ISLAND_POSITION === 'after-ch1' ? [CHAPTER_1, CHAPTER_5, CHAPTER_2, CHAPTER_3] : [CHAPTER_1, CHAPTER_2, CHAPTER_3, CHAPTER_5];
+// Compare Island (Phase 23c, design §4.1) comes last, after Take-away Island,
+// on the way: its first stop opens when Take-away Island's boss is done. With
+// Shape Island appended it stays right after Take-away Island, as before, and
+// Compare Island follows it; being off the way, Shape Island is passed over
+// (openerOf), so either way ch3-n8 opens ch4-n1.
+export const CHAPTERS: ReadonlyArray<Chapter> =
+  SHAPE_ISLAND_POSITION === 'after-ch1' ? [CHAPTER_1, CHAPTER_5, CHAPTER_2, CHAPTER_3, CHAPTER_4] : [CHAPTER_1, CHAPTER_2, CHAPTER_3, CHAPTER_5, CHAPTER_4];
 
 // Islands off the way (SHAPE_ISLAND_GATE): a stop after one opens when the
 // stop before the island is finished, as if the island were not there; its

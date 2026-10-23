@@ -1,7 +1,7 @@
-import { JOIN_STEP, LOOK_AT, countPitch, createAudioSfx, createSilentSfx, notesFor } from './sfx';
+import { COMPARE_STEP, JOIN_STEP, LOOK_AT, countPitch, createAudioSfx, createSilentSfx, notesFor } from './sfx';
 import type { SfxName } from './sfx';
 
-const NAMES: ReadonlyArray<SfxName> = ['pickup', 'drop', 'return', 'blocked', 'count', 'counted', 'adjust', 'success', 'fanfare', 'arrive', 'tap', 'join', 'launch', 'look'];
+const NAMES: ReadonlyArray<SfxName> = ['pickup', 'drop', 'return', 'blocked', 'count', 'counted', 'adjust', 'success', 'fanfare', 'arrive', 'tap', 'join', 'launch', 'look', 'compare'];
 
 function fakeContext(state = 'suspended') {
   const started: { f: number; at: number }[] = [];
@@ -163,4 +163,14 @@ test('Phase 22: the launch runs up the counting scale, note after note, and ends
   }
   const last = notes[notes.length - 1]!;
   expect(last.to).toBeGreaterThan(last.f);
+});
+
+test('Phase 23c: a compare is the child\'s note then the rail\'s, a beat apart: high-low for more, low-high for fewer, one note twice for the same; a line-up its three going up', () => {
+  const more = notesFor('compare', 2, [4]);
+  expect(more.map((n) => n.f)).toEqual([countPitch(4), countPitch(2)]);
+  expect(more.map((n) => n.at)).toEqual([0, COMPARE_STEP]);
+  expect(notesFor('compare', 4, [2]).map((n) => n.f)).toEqual([countPitch(2), countPitch(4)]);
+  const same = notesFor('compare', 3, [3]);
+  expect(same[0]!.f).toBe(same[1]!.f);
+  expect(notesFor('compare', 4, [1, 3]).map((n) => n.f)).toEqual([1, 3, 4].map(countPitch));
 });

@@ -5,7 +5,7 @@ import { copyKey } from './copy';
 import { assertDistractors, partnerSizesFor } from './distractors';
 import { pickPair, pickTarget, pickTemplate } from './envelope';
 import type { CopyKey } from './ids';
-import { givenMaterial, handleMaterial, looseMaterial, onMatMaterial, partnerMaterial, partnerOrder, presetMaterial } from './material';
+import { givenMaterial, handleMaterial, looseMaterial, onMatMaterial, partnerMaterial, partnerOrder, presetMaterial, singlesMaterial } from './material';
 import { seeded } from './rng';
 import type { NodeSpec, Puzzle, PuzzleRef, QuestionSpec } from './schema';
 import { buildSolution } from './solution';
@@ -27,7 +27,29 @@ function promptFor(question: Question, spec: QuestionSpec): CopyKey {
   if (spec.kind === 'take_away') {
     return copyKey(spec.onMat === undefined ? 'prompt.take_away' : 'prompt.take_away.partner');
   }
+  // Compare (Phase 23c): build a row, or pick a partner, for the relation.
+  if (spec.kind === 'compare') {
+    return copyKey(spec.partners === undefined ? `prompt.compare.${spec.relation}` : `prompt.compare.pick.${spec.relation}`);
+  }
   return copyKey(`prompt.${question.kind}`);
+}
+
+// The big number on screen: a compare shows the partner on the rail.
+function targetOf(question: Question): number | null {
+  switch (question.kind) {
+    case 'quantity':
+    case 'quantity_shape':
+      return question.target;
+    case 'sum_composition':
+      return question.sum;
+    case 'split':
+      return question.total;
+    case 'compare':
+      return question.given;
+    case 'addition_exact':
+    case 'order':
+      return null;
+  }
 }
 
 // The puzzle for one stop, built from a node spec rather than the catalog so that
@@ -148,6 +170,27 @@ export function materializeNode(node: NodeSpec, bounds: Bounds, ref: PuzzleRef, 
       takeAway = { start: spec.start, take: spec.take };
       break;
     }
+    case 'compare': {
+      // Asked in steps, the partner on the rail grows by one each time.
+      const count = spec.steps ?? 1;
+      steps = count > 1 ? Array.from({ length: count }, (_, i): Question => ({ kind: 'compare', given: spec.given + i, relation: spec.relation })) : undefined;
+      question = steps?.[0] ?? { kind: 'compare', given: spec.given, relation: spec.relation };
+      if (spec.partners !== undefined) {
+        const material = partnerMaterial(partnerOrder(ref, spec.partners), bounds, prefix);
+        initial = material.state;
+        partnerIds = material.partnerIds;
+      } else {
+        initial = singlesMaterial(spec.singles ?? 0, bounds, prefix);
+      }
+      break;
+    }
+    case 'order': {
+      question = { kind: 'order', sizes: spec.sizes };
+      const material = partnerMaterial(partnerOrder(ref, spec.sizes), bounds, prefix);
+      initial = material.state;
+      partnerIds = material.partnerIds;
+      break;
+    }
   }
   const ways = spec.kind === 'sum_composition' || spec.kind === 'split' ? spec.ways : undefined;
   const picture = spec.kind === 'quantity_shape' ? spec.picture : undefined;
@@ -165,7 +208,7 @@ export function materializeNode(node: NodeSpec, bounds: Bounds, ref: PuzzleRef, 
     ...(shadow === undefined ? {} : { shadow }),
     initial,
     display: {
-      target: question.kind === 'quantity' || question.kind === 'quantity_shape' ? question.target : question.kind === 'sum_composition' ? question.sum : question.kind === 'split' ? question.total : null,
+      target: targetOf(question),
       operands: question.kind === 'addition_exact' ? question.operands : null,
       template: question.kind === 'quantity_shape' ? question.template : null,
       partnerIds,

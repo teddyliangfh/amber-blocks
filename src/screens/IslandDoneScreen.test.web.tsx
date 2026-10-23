@@ -51,7 +51,7 @@ afterEach(() => {
 });
 
 const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } };
-const ORDER = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n13', 'ch1-n7', 'ch1-n14', 'ch1-n8', 'ch1-n15', 'ch1-n9', 'ch1-n16', 'ch1-n10', 'ch1-n17', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n13', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8'];
+const ORDER = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n13', 'ch1-n7', 'ch1-n14', 'ch1-n8', 'ch1-n15', 'ch1-n9', 'ch1-n16', 'ch1-n10', 'ch1-n17', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n13', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8', 'ch4-n1', 'ch4-n2', 'ch4-n3', 'ch4-n4', 'ch4-n5', 'ch4-n6', 'ch4-n7', 'ch4-n8'];
 
 function finished(count: number, language: 'zh' | 'en' = 'zh'): ProgressState {
   let s = { ...createInitialState(5), language };
@@ -142,7 +142,7 @@ describe('island page (2026-10-15 review I)', () => {
     expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/', params: { from: 'ch2-n8', to: 'ch3-n1' } });
   });
 
-  test('Phase 22, the last island: every island done, back to the map; Take-away Island shows its mini boss, 5 split two ways (ISLAND_SHOWCASE), not the countdown\'s lone 1', async () => {
+  test('Phase 22: Take-away Island shows its mini boss, 5 split two ways (ISLAND_SHOWCASE), not the countdown\'s lone 1; on to Compare Island (Phase 23c)', async () => {
     await open(finished(38, 'en'), 'ch3');
     const cheers = [...container.querySelectorAll('[data-testid="island-cheer"]')];
     expect(cheers).toHaveLength(8);
@@ -151,17 +151,36 @@ describe('island page (2026-10-15 review I)', () => {
     const blocks = container.querySelectorAll('[data-testid="island-work"] [data-testid="block"]');
     expect(blocks.length).toBe(5);
     expect(container.querySelectorAll('[data-testid="island-work"] [data-testid^="partner-"]')).toHaveLength(0);
+    expect(q('island-line')?.textContent).toBe('Take-away Island is done. On to Compare Island!');
+    expect(q('island-go')?.textContent).toBe('On to Compare Island');
+    act(() => jest.advanceTimersByTime(ISLAND_SKIP_AFTER_MS));
+    await act(async () => q('island-go')!.click());
+    expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/', params: { from: 'ch3-n8', to: 'ch4-n1' } });
+    // In Chinese: 拿走岛.
+    act(() => root.unmount());
+    root = createRoot(container);
+    await open(finished(38), 'ch3');
+    expect(q('island-line')?.textContent).toBe('拿走岛完成了，去比一比岛吧');
+    expect(container.querySelector('[data-testid="island-done"]')?.textContent).toContain('★ 拿走岛 ★');
+  });
+
+  test('Phase 23c, the last island: Compare Island done, every island done, back to the map; its boss, the line-up, as three partners apart (not one 8)', async () => {
+    await open(finished(46, 'en'), 'ch4');
+    const cheers = [...container.querySelectorAll('[data-testid="island-cheer"]')];
+    expect(cheers.map((c) => c.textContent)).toEqual(['=3', '>2', '<4', '3', '=4', '>3', '<5', '134']);
+    // No album picture and no saved work: the reference answer's end, 1, 3 and 4 side by side, each its own character.
+    const labels = [...container.querySelectorAll('[data-testid="island-work"] [data-testid="partner-label"]')].map((e) => e.textContent);
+    expect(labels.sort()).toEqual(['1', '3', '4']);
     expect(q('island-line')?.textContent).toBe('Every island is done!');
     expect(q('island-go')?.textContent).toBe('Back to map');
     act(() => jest.advanceTimersByTime(ISLAND_SKIP_AFTER_MS));
     await act(async () => q('island-go')!.click());
     expect(mockRouter.replace).toHaveBeenLastCalledWith('/');
-    // In Chinese: 拿走岛.
     act(() => root.unmount());
     root = createRoot(container);
-    await open(finished(38), 'ch3');
+    await open(finished(46), 'ch4');
     expect(q('island-line')?.textContent).toBe('所有的岛都完成了！');
-    expect(container.querySelector('[data-testid="island-done"]')?.textContent).toContain('★ 拿走岛 ★');
+    expect(container.querySelector('[data-testid="island-done"]')?.textContent).toContain('★ 比一比岛 ★');
   });
 
   test('an unfinished or unknown island has no page: back to the map, nothing thrown', async () => {

@@ -135,7 +135,7 @@ function partnerOf(id: string, size: number): GroupId {
 
 function unlockedTo(upTo: string, seed = 5): ProgressState {
   let s = createInitialState(seed);
-  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n13', 'ch1-n7', 'ch1-n14', 'ch1-n8', 'ch1-n15', 'ch1-n9', 'ch1-n16', 'ch1-n10', 'ch1-n17', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n13', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8'];
+  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n13', 'ch1-n7', 'ch1-n14', 'ch1-n8', 'ch1-n15', 'ch1-n9', 'ch1-n16', 'ch1-n10', 'ch1-n17', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n13', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8', 'ch4-n1', 'ch4-n2', 'ch4-n3', 'ch4-n4', 'ch4-n5', 'ch4-n6', 'ch4-n7', 'ch4-n8'];
   for (const id of order.slice(0, order.indexOf(upTo))) {
     const e = reduce(s, { type: 'enter', nodeId: nodeId(id) });
     const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
@@ -503,6 +503,37 @@ describe('Phase 22: Take-away Island sounds', () => {
     await command({ type: 'takeGroup', groupId: four!, origin: { x: 0, y: 1 } });
     await command({ type: 'returnGroup', groupId: two! });
     expect(mockSounds).toEqual(['arrive', 'look', 'adjust', 'success']);
+  });
+});
+
+describe('Phase 23c: Compare Island sounds', () => {
+  test('a compare: the success sound, then on the second beat the child\'s number and the rail\'s; a wrong partner is the adjust sound; the line-up sounds its three, smallest first', async () => {
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch4-n2')) }), 'ch4-n2');
+    expect(mockSounds).toEqual(['arrive', 'look']);
+    const ids = [...puzzleFor('ch4-n2').initial.units.keys()];
+    for (let i = 0; i < 3; i += 1) {
+      await command({ type: 'take', unitId: ids[i]!, to: { x: i, y: 0 } });
+    }
+    expect(mockSounds.slice(2)).toEqual(['success']);
+    await beat();
+    expect(mockSounds.slice(3)).toEqual(['compare:2']);
+    expect(mockSaid).toEqual([]);
+    act(() => root.unmount());
+    root = createRoot(container);
+    mockSounds.length = 0;
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch4-n3')) }), 'ch4-n3');
+    await command({ type: 'takeGroup', groupId: partnerOf('ch4-n3', 5), origin: { x: 0, y: 0 } });
+    expect(mockSounds.slice(2)).toEqual(['adjust']);
+    act(() => root.unmount());
+    root = createRoot(container);
+    mockSounds.length = 0;
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch4-n8')) }), 'ch4-n8');
+    await command({ type: 'takeGroup', groupId: partnerOf('ch4-n8', 1), origin: { x: 0, y: 0 } });
+    await command({ type: 'takeGroup', groupId: partnerOf('ch4-n8', 3), origin: { x: 1, y: 0 } });
+    await command({ type: 'takeGroup', groupId: partnerOf('ch4-n8', 4), origin: { x: 4, y: 0 } });
+    expect(mockSounds.slice(2)).toEqual(['fanfare']);
+    await beat();
+    expect(mockSounds.slice(3)).toEqual(['compare:4']);
   });
 });
 

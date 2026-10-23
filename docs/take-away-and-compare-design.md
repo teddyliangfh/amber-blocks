@@ -2,7 +2,7 @@
 
 版本：v0.1  
 日期：2026-10-19  
-状态：设计建议，待 Ted 拍板（第 9 节）。**2026-10-19 Phase 22 已按本稿默认值实现拿走岛（D-099 – D-104，内容版本 8；偏离与待定项见 `tasks/todo.md` Phase 22）；比一比岛（Phase 23）未做。**没有改任何代码、目录或存档格式；没有写进决策日志。界面草图见 [mockups/take-away-compare.html](mockups/take-away-compare.html)（同一份已发布为可在手机上打开的页面，链接在汇报里）。
+状态：设计建议，待 Ted 拍板（第 9 节）。**2026-10-19 Phase 22 已按本稿默认值实现拿走岛（D-099 – D-104，内容版本 8；偏离与待定项见 `tasks/todo.md` Phase 22）；2026-10-23 Phase 23c 已按本稿默认值实现比一比岛（D-122 – D-128，内容版本 11，不是稿里写的 9：v9 / v10 已被 Phase 23a / 23b 用掉；偏离与待定项见 `tasks/todo.md` Phase 23c）。**没有改任何代码、目录或存档格式；没有写进决策日志。界面草图见 [mockups/take-away-compare.html](mockups/take-away-compare.html)（同一份已发布为可在手机上打开的页面，链接在汇报里）。
 
 关联：[章节地图与关卡](level-progression.md)、[第六轮产品评审](product-review-2026-10-18.md)（§2.3 难度旋钮、§2.4 方案 B、§4.1 动作表）、[第五轮试玩评审](play-review-2026-10-18.md)（§4.3 拆开岛 / 比一比岛路线）、[SPEC-content](../spec/SPEC-content.md)、[SPEC-screens](../spec/SPEC-screens.md)。
 

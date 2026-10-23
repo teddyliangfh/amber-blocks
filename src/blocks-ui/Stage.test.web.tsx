@@ -247,3 +247,44 @@ describe('Phase 20 F1: joined into one character', () => {
   });
 });
 
+
+describe('Phase 23c: the compare rail', () => {
+  test('ch4-n1: the rail\'s 3 sits right above the mat\'s first column, a cell high, a face and a badge; tapped it says its number; a spotlight can ring it', () => {
+    const puzzle = puzzleOf('ch4-n1');
+    const objects = trayObjects(puzzle.initial);
+    const geometry = computeGeometry(390, 576, puzzle.initial.bounds, objects.map((o) => o.footprint), undefined, 1);
+    expect(geometry.bench.rows).toBe(2);
+    const taps: number[] = [];
+    act(() =>
+      root.render(
+        <GestureHandlerRootView>
+          <Stage
+            state={puzzle.initial}
+            geometry={geometry}
+            trayObjects={objects}
+            enabled
+            countOrder={new Map()}
+            matched={false}
+            celebrateTick={0}
+            onCommand={() => true}
+            onPreview={() => true}
+            onTapUnit={() => undefined}
+            onTapTray={(n) => taps.push(n)}
+            rail={{ n: 3, id: 'rail' }}
+            spotlight={['rail']}
+          />
+        </GestureHandlerRootView>,
+      ),
+    );
+    const rail = container.querySelector('[data-testid="compare-rail"]') as HTMLElement;
+    expect(rail).not.toBeNull();
+    expect(rail.style.left).toBe(`${geometry.bench.x}px`);
+    expect(rail.style.top).toBe(`${geometry.bench.y - geometry.cell}px`);
+    expect(rail.style.height).toBe(`${geometry.cell}px`);
+    expect(container.querySelector('[data-testid="compare-rail-label"]')?.textContent).toBe('3');
+    // Not material: the tray still deals all five, the mat holds nothing.
+    expect(all('spotlight')).toHaveLength(1);
+    act(() => (container.querySelector('[data-testid="compare-rail-3"]') as HTMLElement).click());
+    expect(taps).toEqual([3]);
+  });
+});

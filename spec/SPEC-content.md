@@ -167,7 +167,7 @@ export const COPY: Readonly<Record<string, CopyEntry>>;   // key → 双语文�
 - **文案**：`COPY` 每个 key 都有 zh 与 en；`params` 在两种语言的占位符集合一致；`format` 缺参抛错（AC-17）。
 - **纯度**：`src/content` 不 import RN / DOM；`hue` 不参与任何算术或判定。
 
-目录（`catalog/`，内容版本 10，2026-10-23；地图顺序 ch1 → ch5 → ch2 → ch3（`SHAPE_ISLAND_POSITION = 'after-ch1'`），v10 加造型岛 ch5；版本历史见 `catalog/index.ts` 的 `CONTENT_CHANGES`：v2 10 / 12 / 17 加诱饵，v3 工作台按材料，v4 5–9 站重排，v5 5 站五块单块，v6 合体岛 5–7 改"还差谁"、新增 8 站"两种拼法"，v7 合体岛插入 n9–n12 四站、原 20 站一字不变、`CONTENT_CHANGES[7] = []`，v8 追加拿走岛 ch3 八站、原 24 站一字不变、`CONTENT_CHANGES[8] = []`，v9 在数字岛插 5 站、合体岛插 1 站新造型（ch1-n13 – n17、ch2-n13，Phase 23a，D-110）、原 32 站一字不变、`CONTENT_CHANGES[9] = []`）。新模板在 `catalog/shapes.ts`：`T_4` 蘑菇、`S_4` 闪电、`L_4` 靴子（躺着写）、`PLUS_5`、`RING_8`、`SQUARE_3X3`、`TEN_STANDING`（2 宽 5 高）、`STAIRS_10`；伙伴拼的图按横排伙伴铺得满的朝向写。`SINGLES_DRAG_CAP = 6`（`chapter-1.ts`）：单块造型站参考解拖数（含每步挪动）上限，目录测试逐站查。合体岛按地图顺序列出：
+目录（`catalog/`，内容版本 11，2026-10-23；地图顺序 ch1 → ch5 → ch2 → ch3 → ch4（`SHAPE_ISLAND_POSITION = 'after-ch1'`），v10 加造型岛 ch5，v11 在拿走岛后加比一比岛 ch4（原 46 站一字不变、`CONTENT_CHANGES[11] = []`）；版本历史见 `catalog/index.ts` 的 `CONTENT_CHANGES`：v2 10 / 12 / 17 加诱饵，v3 工作台按材料，v4 5–9 站重排，v5 5 站五块单块，v6 合体岛 5–7 改"还差谁"、新增 8 站"两种拼法"，v7 合体岛插入 n9–n12 四站、原 20 站一字不变、`CONTENT_CHANGES[7] = []`，v8 追加拿走岛 ch3 八站、原 24 站一字不变、`CONTENT_CHANGES[8] = []`，v9 在数字岛插 5 站、合体岛插 1 站新造型（ch1-n13 – n17、ch2-n13，Phase 23a，D-110）、原 32 站一字不变、`CONTENT_CHANGES[9] = []`）。新模板在 `catalog/shapes.ts`：`T_4` 蘑菇、`S_4` 闪电、`L_4` 靴子（躺着写）、`PLUS_5`、`RING_8`、`SQUARE_3X3`、`TEN_STANDING`（2 宽 5 高）、`STAIRS_10`；伙伴拼的图按横排伙伴铺得满的朝向写。`SINGLES_DRAG_CAP = 6`（`chapter-1.ts`）：单块造型站参考解拖数（含每步挪动）上限，目录测试逐站查。合体岛按地图顺序列出：
 
 | 章 | 节点 | role | spec |
 |---|---|---|---|
@@ -213,6 +213,14 @@ export const COPY: Readonly<Record<string, CopyEntry>>;   // key → 双语文�
 | ch3 | n6 | normal | take_away 6，take 2，onMat [4, 2]（只有送走 2 剩 4） |
 | ch3 | n7 | normal | take_away 7，take 3，onMat [3, 2, 2]（只有送走 3 剩 4；两个 2 是 4 块，送走剩 3） |
 | ch3 | n8 | boss | take_away 5，take 4，steps [1, 1, 1, 1]（倒数火箭：5 → 4 → 3 → 2 → 1） |
+| ch4 比一比岛 | n1 | normal | compare given 3，same，singles 5（工作台 6 × 2；内容版本 11，Phase 23c，D-122） |
+| ch4 | n2 | normal | compare given 2，more，singles 4（5 × 2） |
+| ch4 | n3 | normal | compare given 4，fewer，partners [2, 5, 4]（只有 2 单独就对；6 × 2） |
+| ch4 | n4 | boss | compare given 3，one_more，steps 3，singles 6（比较台 3 → 4 → 5；7 × 2） |
+| ch4 | n5 | normal | compare given 4，same，partners [4, 2, 5]（6 × 2） |
+| ch4 | n6 | normal | compare given 3，more，partners [1, 5, 2]（1 + 2 = 3 一样多；2 + 5 也对；6 × 2） |
+| ch4 | n7 | normal | compare given 5，one_fewer，singles 6（7 × 2） |
+| ch4 | n8 | boss | order [1, 3, 4]（托盘洗牌；9 × 3） |
 
 新站核对（catalog 测试）：n9 / n11 只用伙伴（不算单块）能铺满图形的组合只有 handles（n11 的 2 + 4 是 6 但不是楼梯；单块可以顶替一个伙伴，如 n9 的 5 + 4 + 1 块单块，与 8 砖的 4 + 3 + 1 相同）；n10 一排里能凑出 7 的只有相邻的 3 + 4；n12 的干扰都补不成 10 + ? = 13。每两三站换一种动作：合起来 ×3、造型、自由凑、送走、还差谁 ×2、造型、还差谁 ×2、两种拼法。
 
@@ -228,6 +236,8 @@ export const COPY: Readonly<Record<string, CopyEntry>>;   // key → 双语文�
 `bounds`（2026-10-15 改为 D-037）：工作台由本站材料推导（`content/bench.ts`）：放得下数字按伙伴画法的排法、形状题每个转向和同数的一行、加法两个伙伴并排与每个伙伴，各加 1 格余量、最小 3 × 3，并保证全部材料能同时放上去（放不下就加行）。章节 / 节点仍可固定 `bounds`（节点优先），目前没有站固定。拼出 1 是 3 × 3，合体岛 7 与 8 站是 8 × 3（6 站 7 × 3），8 砖与 17 是 6 × 5。"还差谁"站的 given 伙伴本来就是允许拼法的一个尺寸，`fitBench` 照常把它算在材料里。Phase 21：onMat 那一排要原样放得下、不加余量（它是"多出来的"，不是孩子要搭的），所以送走站是 9 × 3；10 + 3 站是 9 × 3（两排 5 加右边 3 格再加 1 格余量）；楼梯站 6 × 4；十（只认横放）6 × 3——若改成可转向，竖放的十要 6 行，工作台变 6 × 6，小屏块只有 34–38px。9 列工作台在 360 宽手机上块 40px，和 8 列一样用满屏宽。
 
 拿走岛核对（catalog 测试，Phase 22）：数都 ≤ 7、`start − take ≥ 1`；n6 / n7 按大小只有一组伙伴等于 take（n7 的两个 2 是 4 块）；n4 的 ways 不多于 floor(5 / 2)；每站参考解步数 1 / 1 / 1 / 2 / 2 / 1 / 1 / 4。工作台（`fitBench`，那一排加 1 格余量，与送走站的"原样放下"不同）：4×3 / 5×3 / 5×3 / 6×3 / 6×3 / 7×3 / 8×3 / 6×3。
+
+比一比岛（Phase 23c，D-122 – D-124）：`compare { given, relation, singles? | partners?, steps? }`——`given` 是比较台上的伙伴（界面画在工作台上方，不是材料、不进 `BenchState`、不进存档），`display.target = given`；`singles` 是托盘里的单块（颜色 `hueFor(1)`，`singlesMaterial`），`partners` 是一个尺寸一个伙伴（`partnerOrder` 洗牌），两者恰好给一个；`steps` 只给 `one_more` + 单块，第 i 步问 `given + i`。`order { sizes }`：一个尺寸一个伙伴（洗牌），`sizes` 从小到大。参考解：单块从第 0 行最左往右放、伙伴版把唯一单独就对的伙伴放到 (0, 0)、排队从小到大贴成一排。校验：单块够最后一步且一排放得下；伙伴尺寸互不相同、恰好一个单独就对；比较台（含长大后）不宽于工作台；`fewer` / `one_fewer` 的 given ≥ 2；排队尺寸严格递增、并排放得下。工作台：比较站 `COMPARE_ROWS = 2` 行（`bench.ts`，放不下只加宽），列 = 最长一排 + 1；排队按三个并排加 1 列。题目 key：`prompt.compare.<relation>`（搭）/ `prompt.compare.pick.<relation>`（挑，参数 `a`）/ `prompt.order`。随机题不出这两种（`challenge.ts numberOf` 接了新 kind）。
 
 造型岛（Phase 23b，D-112 – D-120）：`quantity_shape` 可带 `picture?: PictureId`（`mushroom | duck | tree | boat | house | corner | dog | rocket`）与 `shadow?: 'always' | { onHelp: 1 | 2 }`（`SHADOW_POLICY`，`catalog/chapter-5.ts`），`Puzzle` 原样带出；有 `picture` 且不是序列时开站句是 `prompt.picture.<id>`。`validate` 新规则：影子要有图、`onHelp` 只能 1 / 2、每步模板按写法放得进台、`picture` / `shadow` 只来自造型规格；所有带诱饵的造型站，只由伙伴组成、含诱饵、和 = 目标的组合铺得出图就抛错（`partnersTile`，伙伴不转）。`SHAPE_ISLAND_GATE = 'none'` → `SIDE_ISLANDS = {ch5}`（progress 的 `openerOf` 读它，旁岛不挡后面的岛）。随机题透传 `picture` / `shadow`（`CHALLENGE_SHADOW = 'as-stop'`；序列里非最后一张不带）。
 

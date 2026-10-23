@@ -50,6 +50,8 @@ src/blocks-ui/
 - 示范手反向（Phase 21，D-089）：`demoBack` 为真且 `demoPiece` 是工作台上的伙伴时，虚影从它在工作台上的位置（原大）飞回它在托盘里的轮廓（托盘比例，`DemoHand toScale`）；否则照旧从托盘飞到工作台（`demoTo` 或中间）。减少动效时虚影只在起点闪。
 - 示范手搬工作台上的单块（Phase 22，D-102 / D-103）：`demoPiece` 是工作台上的散块时，`demoBack` 为真 → 虚影从它的格子飞回它自己的床位（`plan.slotSpots`）；给了 `demoTo` → 从它的格子飞到那一格（拆开：最右一块放到隔一格）。两者都没给时工作台上的块不被搬（和伙伴一样）。虚影颜色取它所在簇的颜色。
 - 过关动作 `launch`（Phase 22，D-104，`cheer.ts cheerFor(n, { boss, countdown })`）：倒数 Boss 剩下的那块蹲一下（压扁）、拉长冲出画面顶部（`LAUNCH_HEIGHT` 900px，480ms 加速）、停一下再从上面落回原位（整段 `LAUNCH_MS` 1.7 秒）。减少动效时与其他过关动作一样不动。
+- 比较台（Phase 23c，D-126，`CompareRail.tsx`）：`Stage.rail = { n, id }` 时在工作台正上方一行画 n 格伙伴（同格子尺寸、左对齐第 0 列、calm 脸在首格、徽章、本色），垫一条沙色窄台、脚下一条虚点基线；点它（Pressable）跳一下并调 `onTapTray(n)`；`celebrateTick` 时跟着跳；聚光 `spotlight` 含 `rail.id` 时套住它；不能拖、不判题。几何由 `computeGeometry(w, h, bounds, items, gap, rail)` 留出：按多 `rail` 行排版，工作台是下面的行（格子尺寸不变，托盘位置不变）。n 变了（三连长大）时新的块出现、整排按 `BlockBody` 的变色 pop 换颜色。
+- 过关动作 `LINE_UP_CHEER`（Phase 23c，`cheerFor(n, { lineUp: true })`）：排队站用 'stack'（一个比一个跳得高）。
 - Boss 轮廓（Phase 21，D-094）：`outline = { n, lit }` 时，`bossOutlineCells` 把 n 格排成工作台中间的一行（太长才折行），画在所有积木之下：每格虚线框（`hueFor(n)` 的 edge 色），前 `lit` 格填 pale 色，第一格一张 `sleepy` 脸；整体 `useBreathe` 呼吸（减少动效时不呼吸）。`pointerEvents="none"`，不参与落点、吸附与判题。D-097：`outline.made`（已拼好、留在工作台上的那一种的格子）非空时，轮廓换到它没占的行：先找不贴着它的行，没有就找不压着它的行，离中间同样远时先下后上（第一种在 8 × 3 的中间一行 → 最下一行；在顶行 → 底行；在底行 → 顶行）。
 - 合体分开（D-097）：`apart`（几组单位）给了时，每组只在组内合体，其余照常（`mergedClusters(state, apart)`、`pictureOf(state, apart)`、`Stage apart`、`WorkPicture apart`）。两种拼法贴着摆时，关卡页、作品册、岛收尾页都传各自已拼的几种，显示两个 7，不是一个 14。
 - 单块 / 整组语义不混：伙伴整体是一个可拖对象，不能拖伙伴的单块（第二章及第一章 10 / 12 / 17 的握把）；其余第一章站只有单块。

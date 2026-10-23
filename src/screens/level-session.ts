@@ -1,5 +1,5 @@
 import { apply, areTouching, benchCount, clusters, commit, countUnit, createHistory, groupSize, judge, reconcile, startRound, undo } from '../core';
-import type { BenchState, Cell, Command, CountRound, Group, GroupId, History, RejectReason, UnitId, Verdict } from '../core';
+import type { BenchState, Cell, Command, CountRound, Group, GroupId, History, Question, RejectReason, UnitId, Verdict } from '../core';
 import { benchPair, questionAt, samePair, stepCount } from '../content';
 import type { NodeSpec, Pair, Puzzle } from '../content';
 import { SHADOW_LIT, centred, cornerOf, follow, litCells, shadowCells } from './shadow';
@@ -12,6 +12,12 @@ import type { ShadowState } from './shadow';
 export const SPLIT_EQUATION: 'whole-first' | 'none' = 'whole-first';
 // The minus sign the cloud writes (U+2212, the same width as +).
 export const MINUS = '−';
+
+// A compare once it is right (Phase 23c, design §5.4, §9 #5): the child's
+// number first, the sign, the rail's number (`4 > 2`, `2 < 4`, `3 = 3`).
+// 'child-first' is the design's default; 'rail-first' writes the rail's
+// number first (`2 < 4`). A default for Ted; one word to change.
+export const COMPARE_ORDER: 'child-first' | 'rail-first' = 'child-first';
 
 // Everything a level screen needs to know between gestures, kept pure so the
 // rules can be tested without rendering: committed history, the current verdict
@@ -198,6 +204,14 @@ function madeBeside(whole: Puzzle, state: BenchState, at: At, allowed: ReadonlyA
   });
 }
 
+// "One more" in steps (Phase 23c, the Compare Island boss): more blocks than
+// a step asks for means that step is behind us (saved work resumed: the rail
+// had grown to it). Live, blocks come one at a time, so each step passes on
+// its own.
+function grownPast(q: Question, view: BenchState): boolean {
+  return q.kind === 'compare' && q.relation === 'one_more' && view.bench.size > q.given + 1;
+}
+
 // The steps this mat has done, from `at` on. A step is done when what is left
 // to judge answers it; on a sum asked several ways also when a way it accepts
 // is made beside more blocks (madeBeside). `byJudge` false: only the second
@@ -209,7 +223,7 @@ function walk(whole: Puzzle, state: BenchState, from: At, byJudge: boolean): At 
     const q = stepView(whole, at.step, at.used).question;
     // A countdown's count only goes down (Phase 22): fewer blocks than a step
     // asks means that step is behind us (two sent at once; saved work resumed).
-    const passed = whole.takeAway !== undefined && q.kind === 'quantity' && view.bench.size < q.target;
+    const passed = (whole.takeAway !== undefined && q.kind === 'quantity' && view.bench.size < q.target) || grownPast(q, view);
     if (byJudge && (judge(view, q).matched || passed)) {
       at = advance(whole, view, at.step, at.used);
       continue;
@@ -559,11 +573,19 @@ export function sameWayAgain(session: LevelSession): boolean {
 // not one 14 (D-097). Empty for any other stop.
 export function waysApart(session: LevelSession): ReadonlyArray<ReadonlyArray<UnitId>> {
   const q = session.whole.question;
+  // A line-up (Phase 23c, design §5.3): each partner stays its own character,
+  // so 1, 3 and 4 side by side are three, never one 8.
+  if (q.kind === 'order') {
+    return benchPartners(session.history.state).map((g) => g.unitIds);
+  }
   return session.whole.ways === undefined || q.kind !== 'sum_composition' ? [] : madeWays(session.history.state, q.allowed).map((w) => [...w.units]);
 }
 
 // The same for a stop's finished work, from its catalog entry (the album, the island page).
 export function workWaysApart(node: NodeSpec, work: BenchState): ReadonlyArray<ReadonlyArray<UnitId>> {
+  if (node.spec.kind === 'order') {
+    return benchPartners(work).map((g) => g.unitIds);
+  }
   return node.spec.kind !== 'sum_composition' || node.spec.ways === undefined ? [] : madeWays(work, node.spec.allowed).map((w) => [...w.units]);
 }
 
@@ -655,6 +677,13 @@ export function demoMove(session: LevelSession): Command | undefined {
 // were made: 3 + 4 = 7 / 5 + 2 = 7.
 export function solvedEquation(session: LevelSession): string | null {
   const q = session.puzzle.question;
+  // Compare Island (Phase 23c): `4 > 2` (COMPARE_ORDER); a line-up `1 < 3 < 4`.
+  if (q.kind === 'compare') {
+    return session.verdict.matched ? compareLine(session.verdict.benchCount, q.given) : null;
+  }
+  if (q.kind === 'order') {
+    return session.verdict.matched ? lineUp(session.history.state).join(' < ') : null;
+  }
   // A take-away (Phase 22): `5 − 2 = 3`, this step's.
   const away = takeAwayAt(session);
   if (away !== null) {
@@ -679,6 +708,20 @@ export function solvedEquation(session: LevelSession): string | null {
   return [...[...made].sort((a, b) => order(a) - order(b)).map((w) => line(w.parts)), line(parts)].join('\n');
 }
 
+// Two numbers and the sign between them, in COMPARE_ORDER.
+export function compareLine(child: number, rail: number): string {
+  const [a, b] = COMPARE_ORDER === 'child-first' ? [child, rail] : [rail, child];
+  return `${a} ${a > b ? '>' : a < b ? '<' : '='} ${b}`;
+}
+
+// The sizes of the partners on the mat, left (then top) first: a line-up as it stands.
+export function lineUp(state: BenchState): ReadonlyArray<number> {
+  return benchPartners(state)
+    .map((g) => ({ size: groupSize(g), ...corner(state, g.unitIds) }))
+    .sort((a, b) => a.x - b.x || a.y - b.y)
+    .map((p) => p.size);
+}
+
 // What the cloud shows before the answer is right: the number to make, the
 // sum to put together (`3 + 4`), a split's whole, or a take-away as it reads
 // (`5 − 2`; a countdown's current step, Phase 22). solvedEquation() takes over
@@ -696,6 +739,12 @@ export function cloudTitle(session: LevelSession): string {
       return String(q.sum);
     case 'split':
       return String(q.total);
+    // Compare Island (Phase 23c, design §5.4): the rail's number; a line-up
+    // has no number, only the little picture of three bars.
+    case 'compare':
+      return String(q.given);
+    case 'order':
+      return '';
     default:
       return String(q.target);
   }
@@ -713,6 +762,12 @@ export function targetNumberOf(session: LevelSession): number {
       return q.sum;
     case 'split':
       return q.total;
+    // A compare: the rail's number until it is right, then the child's (its
+    // row makes its own number's move, design §5.3); a line-up: its biggest.
+    case 'compare':
+      return session.verdict.matched ? session.verdict.benchCount : q.given;
+    case 'order':
+      return Math.max(...q.sizes);
     default:
       return q.target;
   }

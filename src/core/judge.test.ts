@@ -233,3 +233,72 @@ describe('split (Phase 22, Take-away Island)', () => {
     expect(judge(build([[0, 0], [2, 0], [4, 0], [0, 2], [2, 2]]), five).reason).toBe('parts-mismatch');
   });
 });
+
+describe('compare and order (Phase 23c, Compare Island)', () => {
+  function partners(groups: ReadonlyArray<ReadonlyArray<readonly [number, number]>>, loose: ReadonlyArray<readonly [number, number]> = []): BenchState {
+    const total = groups.reduce((n, cells) => n + cells.length, 0) + loose.length;
+    const all = unitIds('p', total);
+    let state = createBenchState({ units: all.map((id) => ({ id, hue: 'red' })), bounds: { cols: 9, rows: 3 } });
+    let next = 0;
+    groups.forEach((cells, k) => {
+      const members = all.slice(next, next + cells.length);
+      state = run(state, cells.map(([x, y], i) => ({ type: 'take', unitId: members[i] as never, to: cell(x, y) })));
+      const r = defineGroup(state, groupId(`g${k}`), members);
+      if (!r.ok) {
+        throw new Error(r.reason);
+      }
+      state = r.value;
+      next += cells.length;
+    });
+    return run(state, loose.map(([x, y], i) => ({ type: 'take', unitId: all[next + i] as never, to: cell(x, y) })));
+  }
+  const row = (from: number, n: number, y = 0): ReadonlyArray<readonly [number, number]> => Array.from({ length: n }, (_, i) => [from + i, y] as const);
+
+  test('compare counts only how many: same, more, fewer, one more, one fewer', () => {
+    const cases = [
+      ['same', 3, [false, false, true, false, false]],
+      ['more', 2, [false, false, true, true, true]],
+      ['fewer', 4, [true, true, true, false, false]],
+      ['one_more', 3, [false, false, false, true, false]],
+      ['one_fewer', 5, [false, false, false, true, false]],
+    ] as const;
+    for (const [relation, given, expected] of cases) {
+      const got = [1, 2, 3, 4, 5].map((n) => judge(build(row(0, n)), { kind: 'compare', given, relation }).matched);
+      expect(`${relation} ${got}`).toBe(`${relation} ${expected}`);
+    }
+    // Wrong is count-mismatch, with the real count for the UI to say which way.
+    expect(judge(build(row(0, 4)), { kind: 'compare', given: 3, relation: 'same' })).toEqual({ matched: false, benchCount: 4, reason: 'count-mismatch' });
+  });
+
+  test('compare: not the shape, not which partners; an empty bench is never "fewer"', () => {
+    expect(judge(build(scattered4), { kind: 'compare', given: 4, relation: 'same' }).matched).toBe(true);
+    // 1 + 2 is the same as 3; 2 + 5 is more than 3 (design §9 #9).
+    expect(judge(partners([row(0, 1), row(1, 2)]), { kind: 'compare', given: 3, relation: 'same' }).matched).toBe(true);
+    expect(judge(partners([row(0, 2), row(2, 5)]), { kind: 'compare', given: 3, relation: 'more' }).matched).toBe(true);
+    expect(judge(build([]), { kind: 'compare', given: 4, relation: 'fewer' })).toEqual({ matched: false, benchCount: 0, reason: 'count-mismatch' });
+    expect(judge(build([]), { kind: 'compare', given: 1, relation: 'one_fewer' }).matched).toBe(false);
+  });
+
+  test('order: 1, 3, 4 left to right, touching or not, in any row', () => {
+    const q = { kind: 'order', sizes: [1, 3, 4] } as const;
+    expect(judge(partners([row(0, 1), row(1, 3), row(4, 4)]), q)).toEqual({ matched: true, benchCount: 8, reason: 'matched' });
+    expect(judge(partners([row(0, 1, 2), row(2, 3, 0), row(5, 4, 1)]), q).matched).toBe(true);
+    // Dealt in any order: which group is which does not matter, only where it stands.
+    expect(judge(partners([row(5, 4), row(0, 1), row(1, 3)]), q).matched).toBe(true);
+  });
+
+  test('order: the wrong way round, or stacked over the same columns, is order-mismatch', () => {
+    const q = { kind: 'order', sizes: [1, 3, 4] } as const;
+    expect(judge(partners([row(0, 3), row(3, 1), row(4, 4)]), q)).toEqual({ matched: false, benchCount: 8, reason: 'order-mismatch' });
+    expect(judge(partners([row(0, 4), row(4, 3), row(7, 1)]), q).reason).toBe('order-mismatch');
+    // The 1 above the 3: they share a column, so neither stands first.
+    expect(judge(partners([row(1, 1, 0), row(0, 3, 1), row(4, 4, 1)]), q).reason).toBe('order-mismatch');
+  });
+
+  test('order: one still in the tray is count-mismatch; loose blocks or other partners are groups-mismatch', () => {
+    const q = { kind: 'order', sizes: [1, 3, 4] } as const;
+    expect(judge(partners([row(0, 1), row(1, 3)]), q)).toEqual({ matched: false, benchCount: 4, reason: 'count-mismatch' });
+    expect(judge(partners([row(1, 3), row(4, 4)], [[0, 0]]), q).reason).toBe('groups-mismatch');
+    expect(judge(partners([row(0, 2), row(2, 2), row(4, 4)]), q).reason).toBe('groups-mismatch');
+  });
+});

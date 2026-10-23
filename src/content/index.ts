@@ -18,7 +18,7 @@ export { COPY, MAX_NUMBER_WORD, copyKey, format, numberWord } from './copy';
 
 export { bodyOf, handlesFor, hueFor } from './material';
 
-export { BENCH_MARGIN, MIN_BENCH, benchFor, fitBench } from './bench';
+export { BENCH_MARGIN, COMPARE_ROWS, MIN_BENCH, benchFor, fitBench } from './bench';
 
 export { SANDBOX, sandboxMaterial } from './sandbox';
 
