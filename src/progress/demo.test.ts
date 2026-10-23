@@ -56,8 +56,8 @@ describe('M2 map through progress', () => {
       state = { ...state, current: null };
     }
     expect(statusOf(state, order[order.length - 1]!.nodeId)).toBe('completed');
-    expect(chapterCompletion(state, chapterId('ch1'))).toEqual({ done: 12, total: 12 });
-    expect(chapterCompletion(state, chapterId('ch2'))).toEqual({ done: 12, total: 12 });
+    expect(chapterCompletion(state, chapterId('ch1'))).toEqual({ done: 17, total: 17 });
+    expect(chapterCompletion(state, chapterId('ch2'))).toEqual({ done: 13, total: 13 });
     expect(state.language).toBe('en');
     expect(deserialize(serialize(state))).toEqual(state);
   });

@@ -31,7 +31,11 @@ export type SfxName =
   // shimmer on top. `step` is the total, `parts` the parts.
   | 'join'
   // The countdown's last block launches (Phase 22): a run of notes going up.
-  | 'launch';
+  | 'launch'
+  // "Look up here" (Phase 23-0): a soft two-note chime as the cloud pops at a
+  // stop's opening, LOOK_AT seconds in. `step` 2: the cloud's later reminder,
+  // at once and a little quieter.
+  | 'look';
 
 export interface Sfx {
   readonly play: (name: SfxName, step?: number, parts?: ReadonlyArray<number>) => void;
@@ -64,6 +68,9 @@ export function countPitch(step: number): number {
 
 // Seconds the solve sounds wait so the drop's "clack" comes first.
 export const SOLVE_AFTER = 0.1;
+
+// Seconds into a stop's opening the cloud's chime sounds: as its pop peaks.
+export const LOOK_AT = 0.45;
 
 // Seconds between the notes of a join.
 export const JOIN_STEP = 0.11;
@@ -151,6 +158,17 @@ export function notesFor(name: SfxName, step = 1, parts: ReadonlyArray<number> =
       ];
     case 'tap':
       return [{ f: 880, to: 990, at: 0, dur: 0.04, type: 'sine', gain: 0.25 }];
+    case 'look': {
+      // Half a step under the success sound's first note and shorter: B, then
+      // the F sharp above, rising, so it never sounds like "right".
+      const at = step >= 2 ? 0 : LOOK_AT;
+      const k = step >= 2 ? 0.7 : 1;
+      return [
+        { f: 493.88, at, dur: 0.1, type: 'sine', gain: 0.4 * k },
+        { f: 739.99, at: at + 0.1, dur: 0.18, type: 'sine', gain: 0.4 * k },
+        { f: 1479.98, at: at + 0.11, dur: 0.12, type: 'sine', gain: 0.08 * k },
+      ];
+    }
   }
 }
 

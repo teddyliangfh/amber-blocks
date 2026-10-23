@@ -3,7 +3,7 @@ import { CHAPTERS, CONTENT_CHANGES, CONTENT_VERSION, materialize } from '../cont
 import type { Chapter, NodeId } from '../content';
 import { sameMaterial } from './sanitize';
 import type { NodeProgress, ProgressState } from './schema';
-import { mapOrder } from './unlock';
+import { mapOrder, openerOf } from './unlock';
 
 export function createInitialState(seed: number, contentVersion: number = CONTENT_VERSION): ProgressState {
   return {
@@ -148,7 +148,10 @@ export function onwardFrom(current: NodeId | null, completed: ReadonlySet<NodeId
   }
   const order = mapOrder(chapters);
   if (rule === 'first-open') {
-    const open = order.find((e, i) => i > 0 && !completed.has(e.nodeId) && completed.has(order[i - 1]!.nodeId));
+    const open = order.find((e) => {
+      const opener = openerOf(e.nodeId, chapters);
+      return opener !== undefined && !completed.has(e.nodeId) && completed.has(opener);
+    });
     return open?.nodeId ?? current;
   }
   const next = order[order.findIndex((e) => e.nodeId === current) + 1];

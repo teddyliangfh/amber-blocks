@@ -17,6 +17,32 @@ const NUMBER_WORDS_EN = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', '
 
 export const MAX_NUMBER_WORD = NUMBER_WORDS_ZH.length - 1;
 
+// Shape Island's pictures (Phase 23b, PRD §4.2.5): each name, and the lines
+// that say it, one key per picture so a line stays one sentence in each
+// language (the PRD's `{name}` placeholder, filled here, not at runtime).
+const PICTURES: Readonly<Record<string, readonly [string, string]>> = {
+  mushroom: ['蘑菇', 'mushroom'],
+  duck: ['小鸭', 'duck'],
+  tree: ['小树', 'tree'],
+  boat: ['小船', 'boat'],
+  house: ['小房子', 'house'],
+  corner: ['大转角', 'big corner'],
+  dog: ['小狗', 'dog'],
+  rocket: ['小火箭', 'rocket'],
+};
+
+function pictureEntries(): Record<string, CopyEntry> {
+  const out: Record<string, CopyEntry> = {};
+  for (const [id, [zh, en]] of Object.entries(PICTURES)) {
+    out[`picture.${id}`] = { zh, en, params: [] };
+    out[`prompt.picture.${id}`] = { zh: `用 {n} 块拼成${zh}`, en: `Build the ${en} with {n}`, params: ['n'] };
+    out[`feedback.matched.picture.${id}`] = { zh: `${zh}拼好了！`, en: `A ${en}!`, params: [] };
+    // No shadow yet (n7, n8): the little picture on the cloud is the guide.
+    out[`hint.picture.look.${id}`] = { zh: `照着小图拼${zh}`, en: `Build the ${en} like the little picture`, params: [] };
+  }
+  return out;
+}
+
 function numberEntries(): Record<string, CopyEntry> {
   const out: Record<string, CopyEntry> = {};
   for (let n = 1; n <= MAX_NUMBER_WORD; n += 1) {
@@ -29,6 +55,8 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
   'chapter.ch1.title': { zh: '数字岛', en: 'Number Island', params: [] },
   'chapter.ch2.title': { zh: '合体岛', en: 'Join Island', params: [] },
   'chapter.ch3.title': { zh: '拿走岛', en: 'Take-away Island', params: [] },
+  // Shape Island (Phase 23b). A default for Ted (PRD §8 #8): 影子岛 / Shadow Island.
+  'chapter.ch5.title': { zh: '造型岛', en: 'Shape Island', params: [] },
 
   'prompt.quantity': { zh: '拼出 {n} 块', en: 'Make {n}', params: ['n'] },
   'prompt.quantity_shape': { zh: '用 {n} 块拼成这个样子', en: 'Build this with {n}', params: ['n'] },
@@ -144,6 +172,21 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
   'hint.send.home.left': { zh: '送 {k} 块回家，剩 {r} 块', en: 'Send {k} home, {r} stay', params: ['k', 'r'] },
   'hint.call.back': { zh: '把 {a} 叫回来，送走 {b}', en: 'Bring the {a} back, send the {b}', params: ['a', 'b'] },
   'hint.call.back.one': { zh: '把 {a} 叫回来', en: 'Bring the {a} back', params: ['a'] },
+  // Shape Island's shadow (Phase 23b, PRD §4.2.5): the opening; part filled
+  // (the gap lit); a piece sticking out of it (building, not a mistake: the
+  // judge takes the picture anywhere); which piece goes in and where; the
+  // shadow coming to help. Partners are 个, the shadow's cells 这里 (P-07).
+  'hint.shadow.start': { zh: '把伙伴放进影子里', en: 'Put partners in the shadow', params: [] },
+  'feedback.shadow.gap': { zh: '影子还没填满', en: "The shadow's not full yet", params: [] },
+  'hint.shadow.here': { zh: '还差这里', en: 'This bit is missing', params: [] },
+  'feedback.shadow.out': { zh: '伸出影子了', en: 'That sticks out', params: [] },
+  'hint.shadow.move': { zh: '把它挪进影子里', en: 'Move it into the shadow', params: [] },
+  'hint.shadow.in': { zh: '把 {a} 挪进影子里', en: 'Move the {a} into the shadow', params: ['a'] },
+  'hint.shadow.piece': { zh: '把 {a} 放进影子里', en: 'Put the {a} in the shadow', params: ['a'] },
+  'hint.shadow.put': { zh: '把 {a} 放到这里', en: 'Put the {a} here', params: ['a'] },
+  'hint.shadow.reveal': { zh: '影子来帮忙啦', en: 'Here comes the shadow', params: [] },
+  // The rocket's success line (Shape Island's boss, launched).
+  'feedback.launch': { zh: '小火箭，发射！', en: 'Rocket, blast off!', params: [] },
 
   // The end of an island (2026-10-15): the button on its last stop, the line
   // on the island page (said when tapped, never on its own) and its button.
@@ -158,6 +201,7 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
   'count.progress': { zh: '已数 {k} 块', en: '{k} so far', params: ['k'] },
   'count.total': { zh: '一共 {n} 块', en: '{n} in all', params: ['n'] },
 
+  ...pictureEntries(),
   ...numberEntries(),
 };
 

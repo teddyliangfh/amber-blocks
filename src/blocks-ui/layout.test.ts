@@ -1,6 +1,7 @@
 import { cell, unitId } from '../core';
 import { CHAPTERS, CONTENT_VERSION, materialize } from '../content';
-import { LEVEL_CHROME, portraitChrome } from './chrome';
+import { CLOUD, LEVEL_CHROME, PICTURE_PAD, pictureBox, portraitChrome } from './chrome';
+import type { CloudSize } from './chrome';
 import { PHONES, isCompact, stageSizeOf } from './devices';
 import { COUNT_SLOP, MIN_CELL, TRAY_MIN_BLOCK, TRAY_PAD, TRAY_SLACK, WIDE_MAT_COLS, blockAt, cellToPx, computeGeometry, countTarget, fitTray, footprintOf, inRect, labelSpot, layoutTray, nearbyOrigins, resolveDrop, settleOrigin } from './layout';
 import type { Footprint, Rect, StageGeometry, TrayItem } from './layout';
@@ -158,20 +159,52 @@ describe('layout', () => {
   });
 });
 
+describe('the shape picture on the cloud (Phase 23-0, PRD §3.3)', () => {
+  test('every template in the catalog fits inside its cloud on every size, never bigger than a 28px cell', () => {
+    const templates = CHAPTERS.flatMap((c) => c.nodes).flatMap((n) => (n.spec.kind === 'quantity_shape' ? n.spec.templates : []));
+    expect(templates.length).toBeGreaterThan(0);
+    for (const size of Object.keys(CLOUD) as CloudSize[]) {
+      const c = CLOUD[size];
+      for (const t of templates) {
+        const cols = Math.max(...t.cells.map((x) => x.x)) + 1;
+        const rows = Math.max(...t.cells.map((x) => x.y)) + 1;
+        const box = pictureBox(cols, rows, size);
+        expect(box.cell).toBeLessThanOrEqual(c.picture.cell);
+        expect(box.width).toBeLessThanOrEqual(c.picture.width + 2 * PICTURE_PAD);
+        expect(box.height).toBeLessThanOrEqual(c.picture.height + 2 * PICTURE_PAD);
+        // The cloud keeps a rim above and below it.
+        expect(box.height).toBeLessThanOrEqual(c.height - 2 * 6);
+      }
+    }
+  });
+
+  test('the sizes the PRD worked out on a 375 × 812 phone', () => {
+    expect(pictureBox(2, 2, 'regular')).toEqual({ cell: 28, width: 64, height: 64 });
+    expect(pictureBox(4, 2, 'regular')).toEqual({ cell: 28, width: 120, height: 64 });
+    expect(pictureBox(3, 4, 'regular')).toEqual({ cell: 14, width: 50, height: 64 });
+    expect(pictureBox(5, 2, 'regular')).toEqual({ cell: 22, width: 118, height: 52 });
+    expect(pictureBox(2, 5, 'regular')).toEqual({ cell: 11, width: 30, height: 63 });
+    expect(pictureBox(2, 2, 'compact').cell).toBe(22);
+    expect(pictureBox(2, 2, 'side').cell).toBe(18);
+  });
+});
+
 describe('stage budget (review P2: the feedback card is 84 / 70px, not a 24px line)', () => {
   test('the device helper subtracts the chrome the level screen actually draws', () => {
-    expect(portraitChrome(false)).toBe(104 + 84 + 4 + 76);
+    // Phase 23-0 (A-lite): header 104 → 120, card 84 → 88, button row 76 → 68.
+    expect(portraitChrome(false)).toBe(120 + 88 + 4 + 68);
     // 2026-10-16 review #7: a short phone's card is 56 and its button row 52 (was 70 and 64).
-    expect(portraitChrome(true)).toBe(80 + 56 + 4 + 52);
+    // Phase 23-0: header 80 → 88, button row 52 → 48.
+    expect(portraitChrome(true)).toBe(88 + 56 + 4 + 48);
     const se = PHONES.find((p) => p.name === 'iPhone SE Safari portrait')!;
     expect(isCompact(se)).toBe(true);
-    // Measured in the browser on the real page (2026-10-16, Phase 18): 361px (was 335).
-    expect(stageSizeOf(se)).toEqual({ width: 375, height: 361 });
+    // Measured in the browser on the real page (2026-10-16, Phase 18): 361px (was 335); 357 since Phase 23-0.
+    expect(stageSizeOf(se)).toEqual({ width: 375, height: 357 });
     const pro = PHONES.find((p) => p.name === 'iPhone 16 Pro Safari portrait')!;
     expect(isCompact(pro)).toBe(false);
-    expect(stageSizeOf(pro)).toEqual({ width: 402, height: 714 - 268 });
+    expect(stageSizeOf(pro)).toEqual({ width: 402, height: 714 - 280 });
     const home = PHONES.find((p) => p.name === 'iPhone 16 Pro home screen portrait')!;
-    expect(stageSizeOf(home)).toEqual({ width: 402, height: 874 - 62 - 34 - 268 });
+    expect(stageSizeOf(home)).toEqual({ width: 402, height: 874 - 62 - 34 - 280 });
     const land = PHONES.find((p) => p.name === 'iPhone 16 Pro Safari landscape')!;
     expect(stageSizeOf(land)).toEqual({ width: 874 - 124 - LEVEL_CHROME.sideColumn, height: 370 - 21 });
   });
@@ -311,9 +344,15 @@ describe('layout budget (2026-10-16 review E-1 / B-1)', () => {
   // layout decision (tasks/todo.md Phase 18, "needs Ted").
   const SMALL: Readonly<Record<string, number>> = {
     'iPhone SE Safari portrait · ch1-n12': 34,
-    'Android 360x640 Chrome portrait · ch1-n12': 34,
+    // 34 → 33 in Phase 23-0 (the short phone's chrome +4, PRD §3.3: still above MIN_PLAYABLE).
+    'Android 360x640 Chrome portrait · ch1-n12': 33,
     'Android 640x360 Chrome landscape · ch1-n11': 38,
     'Android 640x360 Chrome landscape · ch1-n12': 38,
+    // Phase 23a's big stairs (four partners and a decoy 5 in the tray): 38 on
+    // the three smallest screens (PRD §3.3 expected ≥ 40; tasks/todo.md Phase 23a).
+    'Android 360x640 Chrome portrait · ch2-n13': 38,
+    'Android 640x360 Chrome landscape · ch2-n13': 38,
+    'iPhone SE Safari portrait · ch2-n13': 38,
   };
 
   test('every phone × every stop: mat cells and tray blocks ≥ 40px, except the listed few, which do not shrink', () => {

@@ -1,7 +1,7 @@
 import { copyKey } from '../copy';
 import { chapterId, nodeId } from '../ids';
 import type { Chapter } from '../schema';
-import { STAIRS_6, TEN_2X5 } from './shapes';
+import { STAIRS_10, STAIRS_6, TEN_2X5 } from './shapes';
 
 // The ten of ch2-n9 is judged lying down only (no turns). A default for Ted:
 // `{ rotation: true, mirror: false }` (the usual) accepts it standing too and
@@ -34,6 +34,9 @@ export const CHAPTER_2: Chapter = {
     { id: nodeId('ch2-n6'), role: 'normal', spec: { kind: 'sum_composition', sum: 6, given: 4, allowed: [[4, 2]], distractors: [1, 3] } },
     // Three partners: stairs of 1, 2 and 3 (a decoy 4).
     { id: nodeId('ch2-n11'), role: 'normal', spec: { kind: 'quantity_shape', target: 6, templates: [STAIRS_6], extra: 1, handles: [1, 2, 3], decoys: [4] } },
+    // Phase 23a: the big stairs, 1 + 2 + 3 + 4 = 10, four partners to put in
+    // order (a decoy 5: 5 + 4 + 1 makes 10 but no stairs).
+    { id: nodeId('ch2-n13'), role: 'normal', spec: { kind: 'quantity_shape', target: 10, templates: [STAIRS_10], extra: 1, handles: [1, 2, 3, 4], decoys: [5] } },
     { id: nodeId('ch2-n7'), role: 'normal', spec: { kind: 'sum_composition', sum: 7, given: 3, allowed: [[3, 4]], distractors: [2, 5] } },
     // A teen: a ten on the mat, which one makes 13? (2 and 4 cannot.)
     { id: nodeId('ch2-n12'), role: 'normal', spec: { kind: 'sum_composition', sum: 13, given: 10, allowed: [[10, 3]], distractors: [2, 4] } },

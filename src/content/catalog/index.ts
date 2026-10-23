@@ -4,6 +4,7 @@ import type { Chapter, NodeSpec, PuzzleRef } from '../schema';
 import { CHAPTER_1 } from './chapter-1';
 import { CHAPTER_2 } from './chapter-2';
 import { CHAPTER_3 } from './chapter-3';
+import { CHAPTER_5 } from './chapter-5';
 
 // Bump whenever a stop deals different material or asks a different question
 // for the same ref, and list the stops in CONTENT_CHANGES. Saved progress carries
@@ -11,7 +12,7 @@ import { CHAPTER_3 } from './chapter-3';
 // refuses mismatches (AC-47). The archive format is versioned separately
 // (`schemaVersion`, progress/codec.ts). fingerprint.test.ts fails when material
 // changes without a bump.
-export const CONTENT_VERSION = 8;
+export const CONTENT_VERSION = 10;
 
 // The stops each version changed, keyed by the version that changed them. Saved
 // unfinished work on a listed stop may no longer fit its material; on every
@@ -45,9 +46,36 @@ export const CONTENT_CHANGES: Readonly<Record<number, ReadonlyArray<NodeId>>> = 
   // Island. No old stop changed, and no archive from an earlier version can
   // hold work for the new ones, so nothing to list.
   8: [],
+  // 2026-10-23 (Phase 23a): six new picture stops among the old ones (Number
+  // Island 12 → 17 stops: ch1-n13 – n17; Join Island 12 → 13: ch2-n13). No old
+  // stop changed, and no archive from an earlier version can hold work for the
+  // new ones, so nothing to list.
+  9: [],
+  // 2026-10-23 (Phase 23b): Shape Island (ch5, eight stops), after Number
+  // Island (SHAPE_ISLAND_POSITION). No old stop changed, and no archive from
+  // an earlier version can hold work for the new ones, so nothing to list.
+  10: [],
 };
 
-export const CHAPTERS: ReadonlyArray<Chapter> = [CHAPTER_1, CHAPTER_2, CHAPTER_3];
+// Where Shape Island sits on the map (PRD §4.2.2, §8 #7): 'after-ch1', the
+// second island (the child loves shapes, and it needs only what Number Island
+// taught: partners, decoys, pictures); 'append', after Take-away Island. A
+// default for Ted. Either way the ids stay ch5, so moving it is one word.
+export const SHAPE_ISLAND_POSITION: 'after-ch1' | 'append' = 'after-ch1';
+
+// Whether Shape Island is on the way (PRD §4.2.2, §8 #17): 'none' leaves it a
+// side island: finishing Number Island opens both its first stop and the
+// island after it, so Join Island never waits for it; 'before-join' makes it
+// part of the way, Join Island's first stop opening only once Shape Island's
+// boss is done. A default for Ted (`none`); progress/unlock.ts reads SIDE_ISLANDS.
+export const SHAPE_ISLAND_GATE: 'none' | 'before-join' = 'none';
+
+export const CHAPTERS: ReadonlyArray<Chapter> = SHAPE_ISLAND_POSITION === 'after-ch1' ? [CHAPTER_1, CHAPTER_5, CHAPTER_2, CHAPTER_3] : [CHAPTER_1, CHAPTER_2, CHAPTER_3, CHAPTER_5];
+
+// Islands off the way (SHAPE_ISLAND_GATE): a stop after one opens when the
+// stop before the island is finished, as if the island were not there; its
+// own first stop opens the same way.
+export const SIDE_ISLANDS: ReadonlySet<ChapterId> = new Set<ChapterId>(SHAPE_ISLAND_GATE === 'none' ? [CHAPTER_5.id] : []);
 
 // Stops where, the first time they are solved, "next" waits until the child
 // has counted every block on the mat (2026-10-16 review A-1: no stop asks for

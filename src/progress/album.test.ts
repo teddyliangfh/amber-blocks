@@ -119,7 +119,7 @@ describe('album: archive format', () => {
   function withAlbum(): ProgressState {
     const { s, tall } = two();
     let state = run(s, [{ type: 'complete', nodeId: id('ch1-n2'), verdict: ok, work: tall }]);
-    for (const stop of ['ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12']) {
+    for (const stop of ['ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n13', 'ch1-n7', 'ch1-n14', 'ch1-n8', 'ch1-n15', 'ch1-n9', 'ch1-n16', 'ch1-n10', 'ch1-n17', 'ch1-n11', 'ch1-n12']) {
       state = run(state, [{ type: 'enter', nodeId: id(stop) }, { type: 'complete', nodeId: id(stop), verdict: ok }]);
     }
     state = run(state, [{ type: 'enter', nodeId: id('ch2-n1') }]);

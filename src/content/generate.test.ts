@@ -720,3 +720,33 @@ describe('Phase 22: the content bugs the builders refuse (split and take-away ma
     expect(benchPair(replay(six.initial, six.solution))).toBeNull();
   });
 });
+
+describe('Phase 23b: pictures and shadows (validate)', () => {
+  const r = ref('x', 'x-n1');
+  const at = (spec: NodeSpec['spec'], b = bounds) => () => materializeNode(custom(spec), b, r);
+  const T4 = template([cell(0, 0), cell(1, 0), cell(2, 0), cell(1, 1)]);
+  const BOAT = template([cell(0, 0), cell(2, 0), cell(0, 1), cell(1, 1), cell(2, 1)]);
+
+  test('a picture and its shadow ride on the puzzle; a decoy that makes the picture too is refused', () => {
+    const p = at({ kind: 'quantity_shape', target: 4, templates: [T4], extra: 1, handles: [3, 1], decoys: [2], picture: 'mushroom', shadow: 'always' })();
+    expect(p).toMatchObject({ picture: 'mushroom', shadow: 'always', prompt: 'prompt.picture.mushroom' });
+    // A line of four from four 1s, with a decoy 3: 3 + 1 is a line of four too.
+    expect(at({ kind: 'quantity_shape', target: 4, templates: [template([0, 1, 2, 3].map((x) => cell(x, 0)))], extra: 1, handles: [1, 1, 1, 1], decoys: [3] })).toThrow(/takes in a decoy and makes the picture too/);
+    expect(at({ kind: 'quantity_shape', target: 5, templates: [BOAT], extra: 1, handles: [3, 1, 1], decoys: [2, 4] })).not.toThrow();
+  });
+
+  test('a shadow comes with a picture, on the first or second ask, and must fit the mat as written', () => {
+    expect(at({ kind: 'quantity_shape', target: 4, templates: [T4], extra: 1, shadow: 'always' })).toThrow(/a shadow comes with a picture/);
+    expect(at({ kind: 'quantity_shape', target: 4, templates: [T4], extra: 1, picture: 'mushroom', shadow: { onHelp: 3 as 1 } })).toThrow(/first or second ask/);
+    expect(at({ kind: 'quantity_shape', target: 4, templates: [T4], extra: 1, picture: 'mushroom', shadow: { onHelp: 2 } })).not.toThrow();
+    // Turned only (never as written) the picture would fit: a 4 × 1 written across a mat 1 wide is refused.
+    const line = template([0, 1, 2, 3].map((x) => cell(x, 0)));
+    const narrow = { cols: 1, rows: 9 };
+    expect(() => validate({ ...materializeNode(custom({ kind: 'quantity_shape', target: 4, templates: [line], extra: 1 }), { cols: 4, rows: 4 }, r), initial: { ...materializeNode(custom({ kind: 'quantity_shape', target: 4, templates: [line], extra: 1 }), { cols: 4, rows: 4 }, r).initial, bounds: narrow } }, { kind: 'quantity_shape', target: 4, templates: [line], extra: 1, picture: 'mushroom', shadow: 'always' })).toThrow();
+  });
+
+  test('only a shape spec carries a picture or a shadow', () => {
+    const p = materializeNode(custom({ kind: 'quantity', targets: [3], extra: 1 }), bounds, r);
+    expect(() => validate({ ...p, picture: 'duck' }, { kind: 'quantity', targets: [3], extra: 1 })).toThrow(/come from a shape spec/);
+  });
+});

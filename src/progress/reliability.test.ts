@@ -33,7 +33,7 @@ function played(): ProgressState {
 
 function unlockedThrough(last: string): ProgressState {
   let s = createInitialState(4);
-  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3'];
+  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n13', 'ch1-n7', 'ch1-n14', 'ch1-n8', 'ch1-n15', 'ch1-n9', 'ch1-n16', 'ch1-n10', 'ch1-n17', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3'];
   for (const id of order.slice(0, order.indexOf(last))) {
     s = must(reduce(must(reduce(s, { type: 'enter', nodeId: nodeId(id) })), { type: 'complete', nodeId: nodeId(id), verdict: ok }));
   }

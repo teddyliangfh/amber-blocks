@@ -126,16 +126,18 @@ export function useWheels(tick: number) {
   return o;
 }
 
-// A quick pulse when something is acknowledged (a block counted, a number spoken).
-export function usePulse(tick: number) {
+// A quick pulse when something is acknowledged (a block counted, a number
+// spoken); `times` pulses back to back (the cloud's "look here", Phase 23-0).
+export function usePulse(tick: number, times = 1) {
   const reduced = useReducedMotion();
   const s = useSharedValue(1);
   useEffect(() => {
     if (tick === 0 || reduced) {
       return;
     }
-    s.set(withSequence(withTiming(1.16, { duration: 90, easing: EASE_OUT }), withSpring(1, { damping: 11, stiffness: 260 })));
-  }, [tick, reduced, s]);
+    const once = [withTiming(1.16, { duration: 90, easing: EASE_OUT }), withTiming(1, { duration: 160 })];
+    s.set(withSequence(...Array.from({ length: times - 1 }, () => once).flat(), withTiming(1.16, { duration: 90, easing: EASE_OUT }), withSpring(1, { damping: 11, stiffness: 260 })));
+  }, [tick, times, reduced, s]);
   return useAnimatedStyle(() => ({ transform: [{ scale: s.get() }] }));
 }
 
@@ -154,8 +156,10 @@ export function useWink(tick: number) {
   return w;
 }
 
-// A bigger pop for the one headline change on screen (the target turning green).
-export function usePop(tick: number) {
+// A bigger pop for the one headline change on screen (the target turning
+// green): up to `peak` and back. `from` below 1 makes it an entrance, the
+// cloud's at a stop's opening (0.6 → 1.4 → 1, Phase 23-0).
+export function usePop(tick: number, peak = 1.32, from = 1) {
   const reduced = useReducedMotion();
   const s = useSharedValue(1);
   const r = useSharedValue(0);
@@ -163,10 +167,45 @@ export function usePop(tick: number) {
     if (tick === 0 || reduced) {
       return;
     }
-    s.set(withSequence(withTiming(1.32, { duration: 140, easing: EASE_OUT }), withSpring(1, { damping: 7, stiffness: 200 })));
+    s.set(from);
+    s.set(withSequence(withTiming(peak, { duration: from < 1 ? 220 : 140, easing: EASE_OUT }), withSpring(1, { damping: 7, stiffness: 200 })));
     r.set(withSequence(withTiming(-6, { duration: 90 }), withTiming(6, { duration: 120 }), withSpring(0, { damping: 8, stiffness: 200 })));
-  }, [tick, reduced, s, r]);
+  }, [tick, peak, from, reduced, s, r]);
   return useAnimatedStyle(() => ({ transform: [{ scale: s.get() }, { rotate: `${r.get()}deg` }] }));
+}
+
+// "Look at me": a little rock, ±8° three times, `delay` ms after each new
+// `tick` (the shape picture at a stop's opening, Phase 23-0). Nothing with
+// reduced motion.
+export function useWobble(tick: number, delay = 0) {
+  const reduced = useReducedMotion();
+  const r = useSharedValue(0);
+  useEffect(() => {
+    if (tick === 0 || reduced) {
+      return;
+    }
+    r.set(withDelay(delay, withSequence(withTiming(-8, { duration: 80 }), withTiming(8, { duration: 85 }), withTiming(-8, { duration: 85 }), withTiming(8, { duration: 85 }), withTiming(-8, { duration: 85 }), withSpring(0, SETTLE))));
+  }, [tick, delay, reduced, r]);
+  return useAnimatedStyle(() => ({ transform: [{ rotate: `${r.get()}deg` }] }));
+}
+
+// Leaning towards something and nodding at it, `delay` ms after each new
+// `tick`: Amber has no arms to point with (Phase 23-0). (dx, dy): which way.
+export function useLean(tick: number, dx: number, dy: number, delay = 0) {
+  const reduced = useReducedMotion();
+  const x = useSharedValue(0);
+  const y = useSharedValue(0);
+  const r = useSharedValue(0);
+  useEffect(() => {
+    if (tick === 0 || reduced) {
+      return;
+    }
+    const lean = (to: number) => withDelay(delay, withSequence(withTiming(to, { duration: 160, easing: EASE_OUT }), withDelay(420, withSpring(0, SETTLE))));
+    x.set(lean(dx));
+    y.set(lean(dy));
+    r.set(withDelay(delay, withSequence(withTiming(-9, { duration: 110, easing: EASE_OUT }), withTiming(5, { duration: 150 }), withTiming(-5, { duration: 140 }), withSpring(0, SETTLE))));
+  }, [tick, dx, dy, delay, reduced, x, y, r]);
+  return useAnimatedStyle(() => ({ transform: [{ translateX: x.get() }, { translateY: y.get() }, { rotate: `${r.get()}deg` }] }));
 }
 
 // A nod, as if saying "here's a tip": a dip forward and back, once each time

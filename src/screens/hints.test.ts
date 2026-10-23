@@ -2,7 +2,7 @@ import { areTouching, groupSize } from '../core';
 import type { Command, Group } from '../core';
 import { CHAPTERS, CONTENT_VERSION, chapterId, format, materialize, materializeNode, nodeId } from '../content';
 import type { Puzzle } from '../content';
-import { GAP_TOLD_UNTIL, HELP_LADDER_STEPS, asksForHelp, biggestFirst, cardFor, feedbackFor, guidanceFor, helpAt, hintFor, promptLine, promptParams, rungOf } from './hints';
+import { GAP_TOLD_UNTIL, HELP_LADDER_STEPS, asksForHelp, biggestFirst, cardFor, covers, feedbackFor, guidanceFor, helpAt, hintFor, promptLine, promptParams, rungOf } from './hints';
 import { commitCommand, startSession } from './level-session';
 import type { LevelSession } from './level-session';
 
@@ -1212,5 +1212,42 @@ describe('Phase 22: Take-away Island cards and help', () => {
     // Everything sent: too many, bring one back.
     const none = play(p, [...p.solution, { type: 'return', unitId: units[0]! }]);
     expect(card(none)).toEqual({ tone: 'adjust', title: '送多了，叫 1 个回来', detail: '把 1 块叫回来' });
+  });
+});
+
+describe('Phase 23a: the new picture stops\' decoys (PRD §4.1)', () => {
+  // A partner as dealt: one row of up to five.
+  const bar = (n: number) => Array.from({ length: n }, (_, x) => ({ x, y: 0 }));
+
+  test('partners alone, with a decoy, making the number: never the picture (the "find the right partners" trap); the handles are, and so is a spare single in a partner\'s place', () => {
+    const cases: Record<string, { readonly traps: ReadonlyArray<string>; readonly spare: ReadonlyArray<number> }> = {
+      'ch1-n15': { traps: ['2+3+3'], spare: [3, 3, 1] },
+      'ch1-n16': { traps: [], spare: [] },
+      'ch1-n17': { traps: [], spare: [] },
+      'ch2-n13': { traps: ['1+4+5', '2+3+5'], spare: [2, 3, 4] },
+    };
+    for (const [id, { traps, spare }] of Object.entries(cases)) {
+      const p = puzzleOf(id);
+      const q = p.question;
+      const spec = CHAPTERS.flatMap((c) => c.nodes).find((n) => n.id === id)!.spec;
+      if (q.kind !== 'quantity_shape' || spec.kind !== 'quantity_shape') {
+        throw new Error(id);
+      }
+      const handles = spec.handles!;
+      const decoys = spec.decoys!;
+      const tagged = [...handles.map((n) => ({ n, decoy: false })), ...decoys.map((n) => ({ n, decoy: true }))];
+      const sets = tagged.reduce<ReadonlyArray<ReadonlyArray<{ n: number; decoy: boolean }>>>((all, t) => [...all, ...all.map((set) => [...set, t])], [[]])
+        .filter((set) => set.some((t) => t.decoy) && set.reduce((a, t) => a + t.n, 0) === q.template.cells.length);
+      const names = [...new Set(sets.map((set) => set.map((t) => t.n).sort((a, b) => a - b).join('+')))].sort();
+      expect(`${id} ${names.join(' ')}`).toBe(`${id} ${traps.join(' ')}`);
+      for (const set of sets) {
+        expect(`${id} ${covers(set.map((t) => bar(t.n)), 0, q)}`).toBe(`${id} false`);
+      }
+      expect(covers(handles.map(bar), 0, q)).toBe(true);
+      if (spare.length > 0) {
+        // One handle left in the tray, a spare single in its place: right too.
+        expect(covers(spare.map(bar), q.template.cells.length - spare.reduce((a, b) => a + b, 0), q)).toBe(true);
+      }
+    }
   });
 });

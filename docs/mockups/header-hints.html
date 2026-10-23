@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amber Blocks · 顶栏提示概念图（现在 / A / B / C）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* ---- THEME from src/blocks-ui/palette.ts ---- */
+:root{
+  --sky:#CFE9F7;--skyDeep:#A9D5EE;--sand:#F4E3B7;--sandDeep:#E3C98B;--board:#FFFBF2;--grid:#E9DCBD;
+  --amber:#FFB83D;--amberDeep:#C97F00;--ink:#2B3645;--inkSoft:#5F6D7E;--leaf:#9CD67A;--leafDeep:#4F9A3A;
+  --felt:#FFF6E4;--stitch:#EBD3A6;--wood:#EBC287;--woodDeep:#C9944F;--speck:#EAD29C;--faceInk:#3A2620;
+  --n4:#52C462;--n4edge:#2F8F3D;--n4pale:#BAE7C0;--n4deep:#2A7D36;
+  --display:"Fredoka","SF Pro Rounded","PingFang SC","Noto Sans SC",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:#E9EEF2;color:var(--ink);font-family:var(--display)}
+/* ---- concept banner + watermark ---- */
+.banner{position:fixed;top:0;left:0;right:0;z-index:100;background:#D42B2B;color:#fff;font:700 14px/36px var(--display);text-align:center;letter-spacing:.08em}
+.wm{position:fixed;inset:0;z-index:99;pointer-events:none;overflow:hidden}
+.wm div{position:absolute;left:-30%;width:160%;top:-10%;transform:rotate(-28deg);font:700 54px/110px var(--display);color:rgba(43,54,69,.055);white-space:nowrap;text-align:center}
+.intro{padding:52px 24px 0;max-width:1200px;font-size:14px;color:var(--inkSoft)}
+.intro b{color:var(--ink)}
+.row{display:flex;gap:30px;overflow-x:auto;padding:16px 24px 48px;align-items:flex-start}
+.col{flex:none;width:375px}
+.cap{margin:12px 2px 0;font-size:13px;line-height:1.5;color:var(--inkSoft)}
+.cap h3{margin:0 0 4px;font-size:16px;color:var(--ink)}
+.cap code{font:600 12px ui-monospace,Menlo,monospace;background:#fff;padding:0 4px;border-radius:4px}
+/* ---- phone frame ---- */
+.phone{position:relative;width:375px;height:812px;overflow:hidden;background:var(--sky);border-radius:34px;box-shadow:0 10px 30px rgba(43,54,69,.18),0 0 0 6px #2B3645;
+  --hdr:104px;--card:84px;--foot:76px}
+.phone.a{--hdr:120px;--card:88px;--foot:68px}
+.phone.b{--hdr:96px;--card:84px;--foot:76px}
+.skyc{position:absolute;opacity:.85;pointer-events:none}
+.skyc i{position:absolute;background:#fff;border-radius:50%}
+/* header */
+.hdr{position:absolute;left:0;right:0;top:0;height:var(--hdr);display:flex;align-items:center;justify-content:center;gap:16px}
+.menu{position:absolute;top:10px;right:12px;width:48px;height:48px;border-radius:24px;background:#fff;border:2px solid var(--sandDeep);box-shadow:0 3px 0 var(--sandDeep);display:flex;align-items:center;justify-content:center;font:700 24px var(--display);color:var(--ink)}
+/* Amber (hint girl) – placeholder for assets/images/amber-girl.png */
+.amber{position:absolute;left:12px;top:calc(var(--hdr) - 48px + 10px);width:48px;height:48px;border-radius:12px;background:var(--amber);box-shadow:inset 0 -4px 0 rgba(0,0,0,.14),0 3px 0 var(--amberDeep)}
+.amber:before{content:"";position:absolute;left:4px;right:4px;top:2px;height:18px;border-radius:12px 12px 5px 5px;background:#6B4423}
+.amber i{position:absolute;top:26px;width:5px;height:5px;border-radius:50%;background:var(--faceInk)}
+.amber i.l{left:15px}.amber i.r{left:28px}
+.amber u{position:absolute;left:19px;top:34px;width:10px;height:5px;border-bottom:2px solid var(--faceInk);border-radius:0 0 8px 8px}
+/* cloud: Cloud.tsx (k = 1) */
+.cloud{position:relative;margin-top:20px}
+.cloud:before,.cloud:after{content:"";position:absolute;background:#fff;border-radius:50%}
+.cloud:before{left:12px;top:-14px;width:44px;height:44px}
+.cloud:after{right:14px;top:-20px;width:52px;height:52px}
+.cbody{position:relative;min-width:112px;height:80px;border-radius:40px;padding:0 22px;background:#fff;box-shadow:0 5px 0 var(--skyDeep);display:flex;align-items:center;justify-content:center;gap:14px}
+.digit{font:700 62px/70px var(--display);color:var(--ink)}
+.star{position:absolute;top:-2px;left:-10px;font-size:30px;color:var(--amber);text-shadow:0 2px 0 var(--amberDeep)}
+/* template preview: LevelScreen.tsx:647-657, step 20 */
+.tpl{position:relative;width:48px;height:48px;border-radius:12px;background:rgba(255,255,255,.8);box-shadow:0 4px 0 var(--skyDeep)}
+.tpl b{position:absolute;width:18px;height:18px;border-radius:5.6px;background:var(--n4);border:1.5px solid var(--n4edge)}
+/* feedback card: AnswerFeedback.tsx */
+.card{position:absolute;left:14px;right:14px;top:var(--hdr);height:var(--card);border-radius:22px;background:#F2FAFF;box-shadow:0 4px 0 var(--skyDeep);display:flex;align-items:center;gap:8px;padding:8px 10px}
+.card:before{content:"";position:absolute;top:-7px;left:50%;margin-left:-8px;width:16px;height:16px;border-radius:3px;background:#F2FAFF;transform:rotate(45deg)}
+.disc{flex:none;width:44px;height:44px;border-radius:50%;background:#fff;border:3px solid var(--skyDeep);display:flex;align-items:center;justify-content:center;font:700 22px var(--display);color:var(--ink)}
+.txt{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0}
+.ttl{font:800 18px/22px var(--display);color:var(--ink)}
+.dtl{font:600 14px/19px var(--display);color:var(--inkSoft)}
+.spk{flex:none;width:40px;height:40px;border-radius:50%;background:#fff;border:2px solid var(--sandDeep);box-shadow:0 3px 0 var(--sandDeep);display:flex;align-items:center;justify-content:center}
+.spk svg{width:25px;height:25px;fill:none;stroke:var(--inkSoft);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+/* stage */
+.stage{position:absolute;left:0;right:0;top:calc(var(--hdr) + var(--card) + 4px);height:calc(812px - var(--hdr) - var(--card) - 4px - var(--foot))}
+.ground{position:absolute;left:-40px;right:-40px;top:216px;bottom:-80px;background:var(--sand);opacity:.9;border-radius:200px 200px 0 0}
+.wood{position:absolute;left:2px;top:2px;width:370px;height:230px;border-radius:22px;background:var(--wood);box-shadow:0 4px 0 var(--woodDeep)}
+.felt{position:absolute;inset:6px;border-radius:16px;background:var(--felt)}
+.felt:after{content:"";position:absolute;inset:6px;border:2px dashed var(--stitch);border-radius:12px}
+.dot{position:absolute;width:4px;height:4px;border-radius:50%;background:var(--grid);margin:-2px 0 0 -2px}
+.tray{position:absolute;left:12px;top:234px;width:351px;height:188px;border-radius:20px;background:var(--sand);box-shadow:0 4px 0 var(--sandDeep)}
+.slot{position:absolute;width:62px;height:62px;border-radius:17px;background:var(--speck)}
+/* blocks: Block.tsx (cell 70 → side 62, radius .28) */
+.blk{position:absolute;width:62px;height:62px;border-radius:17px;background:var(--n4);border:3px solid var(--n4edge);box-shadow:inset 0 -5px 0 rgba(0,0,0,.16),inset 0 3px 0 rgba(255,255,255,.35),0 4px 0 var(--n4edge)}
+.blk:before{content:"";position:absolute;left:7px;top:5px;width:16px;height:7px;border-radius:4px;background:rgba(255,255,255,.45)}
+.blk i{position:absolute;top:24px;width:6px;height:6px;border-radius:50%;background:var(--faceInk)}
+.blk i.l{left:16px}.blk i.r{left:36px}
+.blk u{position:absolute;left:23px;top:33px;width:12px;height:6px;border-bottom:2.5px solid var(--faceInk);border-radius:0 0 8px 8px}
+.blk s{position:absolute;top:33px;width:9px;height:5px;border-radius:50%;background:rgba(255,126,149,.5)}
+.blk s.l{left:7px}.blk s.r{left:42px}
+.blk.zz i{height:2.5px;border-radius:2px;top:27px;width:9px}
+.blk.zz i.l{left:14px}.blk.zz i.r{left:35px}
+.blk.zz u{width:8px;height:4px;left:25px;top:34px}
+/* ghost outline (plan B): BossOutline.tsx generalised */
+.ghost{position:absolute;width:58px;height:58px;border-radius:18px;border:2.5px dashed var(--n4edge);opacity:.85}
+.ghost.face i{position:absolute;top:24px;width:9px;height:2.5px;border-radius:2px;background:var(--faceInk);opacity:.6}
+.ghost.face i.l{left:13px}.ghost.face i.r{left:33px}
+.ghost.face u{position:absolute;left:24px;top:32px;width:8px;height:4px;border-bottom:2px solid var(--faceInk);border-radius:0 0 8px 8px;opacity:.6}
+.ghost.face s{position:absolute;top:30px;width:9px;height:5px;border-radius:50%;background:var(--n4pale)}
+.ghost.face s.l{left:5px}.ghost.face s.r{left:42px}
+.ghost.lit{background:var(--n4pale)}
+.foot{position:absolute;left:0;right:0;bottom:0;height:var(--foot)}
+.note{position:absolute;font:600 11px/14px var(--display);color:#B3261E;background:rgba(255,255,255,.85);border:1px dashed #B3261E;border-radius:6px;padding:2px 5px;z-index:5}
+/* ---- plan A: one sign ---- */
+.a .cbody{height:100px;min-width:180px;border-radius:50px;padding:0 24px;box-shadow:0 6px 0 #8FC3E3}
+.a .cloud:before{left:16px;top:-16px;width:50px;height:50px}
+.a .cloud:after{right:18px;top:-24px;width:60px;height:60px}
+.a .digit{font-size:72px;line-height:80px}
+.a .tpl{width:64px;height:64px;background:none;box-shadow:none;border-radius:0}
+.a .tpl b{width:26px;height:26px;border-radius:7px;border-width:2px;box-shadow:inset 0 -3px 0 rgba(0,0,0,.14),0 2px 0 var(--n4edge)}
+.a .tpl b.hd i{position:absolute;top:8px;width:3px;height:3px;border-radius:50%;background:var(--faceInk)}
+.a .tpl b.hd i.l{left:6px}.a .tpl b.hd i.r{left:14px}
+.a .tpl b.hd u{position:absolute;left:8px;top:12px;width:6px;height:3px;border-bottom:1.5px solid var(--faceInk);border-radius:0 0 4px 4px}
+.a .disc{width:48px;height:48px;border-color:var(--amber);padding:0;overflow:hidden}
+.a .disc .mini{width:30px;height:30px;border-radius:7px;background:var(--amber);position:relative}
+.a .disc .mini:before{content:"";position:absolute;left:2px;right:2px;top:1px;height:11px;border-radius:7px 7px 3px 3px;background:#6B4423}
+.a .disc .mini i{position:absolute;top:16px;width:3px;height:3px;border-radius:50%;background:var(--faceInk)}
+.a .disc .mini i.l{left:9px}.a .disc .mini i.r{left:18px}
+.a .disc .mini u{position:absolute;left:11px;top:21px;width:7px;height:3px;border-bottom:1.5px solid var(--faceInk);border-radius:0 0 4px 4px}
+.a .ttl{font-size:20px;line-height:24px}
+.a .spk{width:44px;height:44px}
+/* ---- plan C: opening beat (CSS loop stands in for Reanimated) ---- */
+@keyframes popin{0%{transform:scale(.6);opacity:0}6%{transform:scale(1.4);opacity:1}10%{transform:scale(.94)}13%{transform:scale(1.03)}16%{transform:scale(1)}
+  55%{transform:scale(1)}58%{transform:scale(1.16)}61%{transform:scale(1)}64%{transform:scale(1.16)}67%{transform:scale(1)}100%{transform:scale(1)}}
+@keyframes shade{0%,20%{box-shadow:0 5px 0 #8FC3E3}30%,100%{box-shadow:0 5px 0 var(--skyDeep)}}
+@keyframes wig{0%,7%{transform:rotate(0)}9%{transform:rotate(-8deg)}11%{transform:rotate(8deg)}13%{transform:rotate(-8deg)}15%{transform:rotate(6deg)}17%,100%{transform:rotate(0)}}
+@keyframes lean{0%,8%{transform:translate(0) rotate(0)}11%{transform:translate(6px,3px) rotate(-9deg)}14%{transform:translate(4px,0) rotate(5deg)}17%{transform:translate(0) rotate(0)}100%{transform:translate(0) rotate(0)}}
+@keyframes chime{0%,9%{opacity:0;transform:translateY(0)}11%{opacity:1}20%{opacity:0;transform:translateY(-14px)}100%{opacity:0}}
+@keyframes bar{0%{width:0}100%{width:100%}}
+.c .cloud{animation:popin 6s cubic-bezier(.23,1,.32,1) infinite;transform-origin:50% 60%}
+.c .cbody{animation:shade 6s linear infinite}
+.c .tpl{animation:wig 6s ease-in-out infinite}
+.c .amber{animation:lean 6s ease-out infinite;transform-origin:50% 100%}
+.c .ch{position:absolute;left:236px;top:22px;font:700 20px var(--display);color:var(--amberDeep);animation:chime 6s ease-out infinite}
+.c .tl{position:absolute;left:14px;right:14px;bottom:12px;height:6px;border-radius:3px;background:rgba(43,54,69,.12);overflow:hidden}
+.c .tl i{display:block;height:100%;background:var(--amberDeep);animation:bar 6s linear infinite}
+.c .tlx{position:absolute;left:14px;right:14px;bottom:20px;font:600 10px/12px var(--display);color:var(--inkSoft);display:flex;justify-content:space-between}
+@media (prefers-reduced-motion:reduce){
+  .c .cloud,.c .cbody,.c .tpl,.c .amber,.c .ch,.c .tl i{animation:none}
+  .c .cbody{box-shadow:0 5px 0 #8FC3E3}
+  .c .tpl b{border-width:3px}
+}
+</style>
+</head>
+<body>
+<div class="banner">CONCEPT — NOT FOR HANDOFF · 2026-10-22</div>
+<div class="wm"><div>CONCEPT · NOT FOR HANDOFF · CONCEPT · NOT FOR HANDOFF<br>CONCEPT · NOT FOR HANDOFF · CONCEPT · NOT FOR HANDOFF<br>CONCEPT · NOT FOR HANDOFF · CONCEPT · NOT FOR HANDOFF<br>CONCEPT · NOT FOR HANDOFF · CONCEPT · NOT FOR HANDOFF<br>CONCEPT · NOT FOR HANDOFF · CONCEPT · NOT FOR HANDOFF<br>CONCEPT · NOT FOR HANDOFF · CONCEPT · NOT FOR HANDOFF<br>CONCEPT · NOT FOR HANDOFF · CONCEPT · NOT FOR HANDOFF<br>CONCEPT · NOT FOR HANDOFF · CONCEPT · NOT FOR HANDOFF</div></div>
+
+<p class="intro"><b>Amber Blocks · 顶栏提示概念图</b> — 四个 375×812 框，ch1-n3「拼 4 个成方阵」开站状态。颜色取自 <code>palette.ts</code>（THEME、n4 绿），尺寸取自 <code>chrome.ts</code> / <code>LevelScreen.tsx</code> / <code>Cloud.tsx</code> / <code>AnswerFeedback.tsx</code>；工作台 5×3 格、格 70px、积木 62px 是 <code>layout.ts</code> 在 375×812 上的实算。Amber 用占位画法代替 PNG。窄屏横向滚动。</p>
+
+<div class="row">
+
+<!-- ================= NOW ================= -->
+<div class="col">
+<div class="phone now">
+  <div class="skyc" style="left:10px;top:58px;width:60px;height:34px"><i style="left:10px;top:0;width:22px;height:22px"></i><i style="left:25px;top:4px;width:18px;height:18px"></i><i style="left:0;top:12px;width:60px;height:22px;border-radius:11px"></i></div>
+  <div class="skyc" style="left:247px;top:74px;width:46px;height:26px"><i style="left:7px;top:0;width:17px;height:17px"></i><i style="left:19px;top:3px;width:14px;height:14px"></i><i style="left:0;top:9px;width:46px;height:17px;border-radius:9px"></i></div>
+  <div class="hdr">
+    <div class="cloud"><div class="cbody"><span class="digit">4</span></div></div>
+    <div class="tpl"><b style="left:4px;top:4px"></b><b style="left:24px;top:4px"></b><b style="left:4px;top:24px"></b><b style="left:24px;top:24px"></b></div>
+  </div>
+  <div class="menu">≡</div>
+  <div class="amber"><i class="l"></i><i class="r"></i><u></u></div>
+  <div class="card">
+    <div class="disc">✦</div>
+    <div class="txt"><div class="ttl">动手试试看</div><div class="dtl">拼一个 4，照着小图摆</div></div>
+    <div class="spk"><svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4z"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6M18 6.8a7.5 7.5 0 0 1 0 10.4"/></svg></div>
+  </div>
+  <div class="stage">
+    <div class="ground"></div>
+    <div class="wood"><div class="felt"></div></div>
+    <span class="dot" style="left:82px;top:82px"></span><span class="dot" style="left:152px;top:82px"></span><span class="dot" style="left:222px;top:82px"></span><span class="dot" style="left:292px;top:82px"></span>
+    <span class="dot" style="left:82px;top:152px"></span><span class="dot" style="left:152px;top:152px"></span><span class="dot" style="left:222px;top:152px"></span><span class="dot" style="left:292px;top:152px"></span>
+    <div class="tray"></div>
+    <div class="blk" style="left:39px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:117px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:195px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:273px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:118px;top:324px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:196px;top:324px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="note" style="left:132px;top:110px">目标 48px &lt; 一块积木 62px</div>
+  </div>
+  <div class="foot"></div>
+</div>
+<div class="cap"><h3>现在</h3>顶栏 104 · 云 112×80，阴影 #A9D5EE（对天 1.24:1）· 数字 62 · 小图 20px/格 盒 48 · 卡 84，盘 44，字 18/14 · 页脚 76 · 工作台格 70。<br>开站时顶栏不动；云白对天空 1.26:1。</div>
+</div>
+
+<!-- ================= A ================= -->
+<div class="col">
+<div class="phone a">
+  <div class="skyc" style="left:10px;top:66px;width:60px;height:34px"><i style="left:10px;top:0;width:22px;height:22px"></i><i style="left:25px;top:4px;width:18px;height:18px"></i><i style="left:0;top:12px;width:60px;height:22px;border-radius:11px"></i></div>
+  <div class="hdr">
+    <div class="cloud"><div class="cbody"><span class="digit">4</span>
+      <div class="tpl"><b class="hd" style="left:4px;top:4px"><i class="l"></i><i class="r"></i><u></u></b><b style="left:32px;top:4px"></b><b style="left:4px;top:32px"></b><b style="left:32px;top:32px"></b></div>
+    </div></div>
+  </div>
+  <div class="menu">≡</div>
+  <div class="amber"><i class="l"></i><i class="r"></i><u></u></div>
+  <div class="card">
+    <div class="disc"><div class="mini"><i class="l"></i><i class="r"></i><u></u></div></div>
+    <div class="txt"><div class="ttl">动手试试看</div><div class="dtl">拼一个 4，照着小图摆</div></div>
+    <div class="spk"><svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4z"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6M18 6.8a7.5 7.5 0 0 1 0 10.4"/></svg></div>
+  </div>
+  <div class="stage">
+    <div class="ground"></div>
+    <div class="wood"><div class="felt"></div></div>
+    <span class="dot" style="left:82px;top:82px"></span><span class="dot" style="left:152px;top:82px"></span><span class="dot" style="left:222px;top:82px"></span><span class="dot" style="left:292px;top:82px"></span>
+    <span class="dot" style="left:82px;top:152px"></span><span class="dot" style="left:152px;top:152px"></span><span class="dot" style="left:222px;top:152px"></span><span class="dot" style="left:292px;top:152px"></span>
+    <div class="tray"></div>
+    <div class="blk" style="left:39px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:117px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:195px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:273px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:118px;top:324px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:196px;top:324px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="note" style="left:118px;top:110px">格 70 不变（宽度定格）</div>
+  </div>
+  <div class="foot"></div>
+</div>
+<div class="cap"><h3>A · 放大 + 合一</h3>顶栏 120（+16）· 一朵云 ≥180×100，阴影 #8FC3E3 · 数字 72 · 小图进云：28px/格、目标色、头格有脸 · 卡 88：盘 48 换 Amber 头像、标题 20 · 页脚 68（−8）。<br>375×812 全部代表站积木 0 代价；紧凑屏 +8/−4。</div>
+</div>
+
+<!-- ================= B ================= -->
+<div class="col">
+<div class="phone b">
+  <div class="skyc" style="left:10px;top:52px;width:60px;height:34px"><i style="left:10px;top:0;width:22px;height:22px"></i><i style="left:25px;top:4px;width:18px;height:18px"></i><i style="left:0;top:12px;width:60px;height:22px;border-radius:11px"></i></div>
+  <div class="skyc" style="left:247px;top:66px;width:46px;height:26px"><i style="left:7px;top:0;width:17px;height:17px"></i><i style="left:19px;top:3px;width:14px;height:14px"></i><i style="left:0;top:9px;width:46px;height:17px;border-radius:9px"></i></div>
+  <div class="hdr" style="padding-top:0">
+    <div class="cloud" style="margin-top:16px"><div class="cbody"><span class="digit">4</span></div></div>
+  </div>
+  <div class="menu">≡</div>
+  <div class="amber"><i class="l"></i><i class="r"></i><u></u></div>
+  <div class="card">
+    <div class="disc">✦</div>
+    <div class="txt"><div class="ttl">动手试试看</div><div class="dtl">把 4 个伙伴放进虚线里</div></div>
+    <div class="spk"><svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4z"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6M18 6.8a7.5 7.5 0 0 1 0 10.4"/></svg></div>
+  </div>
+  <div class="stage">
+    <div class="ground"></div>
+    <div class="wood"><div class="felt"></div></div>
+    <span class="dot" style="left:82px;top:82px"></span><span class="dot" style="left:152px;top:82px"></span><span class="dot" style="left:222px;top:82px"></span><span class="dot" style="left:292px;top:82px"></span>
+    <span class="dot" style="left:82px;top:152px"></span><span class="dot" style="left:152px;top:152px"></span><span class="dot" style="left:222px;top:152px"></span><span class="dot" style="left:292px;top:152px"></span>
+    <!-- ghost: template 2x2 anchored like bossOutlineCells → cells (1,0)(2,0)(1,1)(2,1); inset 6 of 70 -->
+    <div class="ghost lit" style="left:88px;top:18px"></div>
+    <div class="ghost face" style="left:158px;top:18px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="ghost" style="left:88px;top:88px"></div>
+    <div class="ghost" style="left:158px;top:88px"></div>
+    <div class="blk" style="left:86px;top:16px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="note" style="left:232px;top:24px;width:120px">放对一块 → 该格淡绿点亮（画在积木下）；放在虚线外 → 不亮</div>
+    <div class="tray"></div>
+    <div class="slot" style="left:39px;top:246px"></div>
+    <div class="blk zz" style="left:117px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:195px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:273px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:118px;top:324px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:196px;top:324px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+  </div>
+  <div class="foot"></div>
+</div>
+<div class="cap"><h3>B · 目标搬到工作台</h3>顶栏 96（−8），云只留数字，小图盒去掉 · 工作台上 <code>TargetOutline</code>（泛化 <code>BossOutline</code>）：2.5px 目标色虚线、头格睡脸、盖住的格淡绿 · 幽灵只是建议，judge 不看它、不吸附；孩子第一块落在别处时幽灵平移跟过去。<br>17 站托盘积木 46→48。</div>
+</div>
+
+<!-- ================= C ================= -->
+<div class="col">
+<div class="phone c">
+  <div class="skyc" style="left:10px;top:58px;width:60px;height:34px"><i style="left:10px;top:0;width:22px;height:22px"></i><i style="left:25px;top:4px;width:18px;height:18px"></i><i style="left:0;top:12px;width:60px;height:22px;border-radius:11px"></i></div>
+  <div class="skyc" style="left:247px;top:74px;width:46px;height:26px"><i style="left:7px;top:0;width:17px;height:17px"></i><i style="left:19px;top:3px;width:14px;height:14px"></i><i style="left:0;top:9px;width:46px;height:17px;border-radius:9px"></i></div>
+  <div class="hdr">
+    <div class="cloud"><div class="cbody"><span class="digit">4</span></div></div>
+    <div class="tpl"><b style="left:4px;top:4px"></b><b style="left:24px;top:4px"></b><b style="left:4px;top:24px"></b><b style="left:24px;top:24px"></b></div>
+  </div>
+  <div class="ch">♪♪</div>
+  <div class="menu">≡</div>
+  <div class="amber"><i class="l"></i><i class="r"></i><u></u></div>
+  <div class="card">
+    <div class="disc">✦</div>
+    <div class="txt"><div class="ttl">动手试试看</div><div class="dtl">拼一个 4，照着小图摆</div></div>
+    <div class="spk"><svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4z"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6M18 6.8a7.5 7.5 0 0 1 0 10.4"/></svg></div>
+  </div>
+  <div class="stage">
+    <div class="ground"></div>
+    <div class="wood"><div class="felt"></div></div>
+    <span class="dot" style="left:82px;top:82px"></span><span class="dot" style="left:152px;top:82px"></span><span class="dot" style="left:222px;top:82px"></span><span class="dot" style="left:292px;top:82px"></span>
+    <span class="dot" style="left:82px;top:152px"></span><span class="dot" style="left:152px;top:152px"></span><span class="dot" style="left:222px;top:152px"></span><span class="dot" style="left:292px;top:152px"></span>
+    <div class="tray"></div>
+    <div class="blk" style="left:39px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:117px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:195px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:273px;top:246px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:118px;top:324px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+    <div class="blk zz" style="left:196px;top:324px"><i class="l"></i><i class="r"></i><u></u><s class="l"></s><s class="r"></s></div>
+  </div>
+  <div class="foot"></div>
+  <div class="tlx"><span>0 s 开站：云 0.6→1.4→1，小图抖，Amber 探身，chime</span><span>≈5 s 没碰：云弹两下</span></div>
+  <div class="tl"><i></i></div>
+</div>
+<div class="cap"><h3>C · 开场仪式 + 再唤起（chrome 0）</h3>每站开站一拍（约 1 s）；5 s 无触摸再弹一次，每站最多 2 次。这里用 6 s CSS 循环示意，真实实现用 <code>usePop</code>/<code>useNod</code>（Reanimated）。<br><code>prefers-reduced-motion</code>：不缩放不旋转，改云阴影加深 + 小图边框 3px，chime 保留。</div>
+</div>
+
+</div>
+</body>
+</html>

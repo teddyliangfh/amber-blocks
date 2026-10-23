@@ -1,4 +1,4 @@
-import type { ShapeTemplate } from '../core';
+import type { Bounds, ShapeTemplate } from '../core';
 import { fitBench } from './bench';
 import { CHAPTERS, CONTENT_VERSION } from './catalog';
 import { materializeNode } from './generate';
@@ -46,6 +46,11 @@ export const CHALLENGE_RULES = {
   spares: [1, 2, 3, 4, 5],
 } as const;
 
+// A random puzzle from a Shape Island stop has the shadow the stop had (PRD
+// §4.2.6): 'as-stop'; 'never' leaves every random picture without one. A
+// default for Ted.
+export const CHALLENGE_SHADOW: 'as-stop' | 'never' = 'as-stop';
+
 // The number a stop is about.
 function numberOf(spec: QuestionSpec): number {
   switch (spec.kind) {
@@ -80,6 +85,9 @@ interface Candidate {
   readonly n: number;
   // The spec, given the rng for any decoy or distractor still to pick.
   readonly spec: (rng: Rng) => QuestionSpec;
+  // The stop's own mat where it fixes one (Phase 23a: the standing ten's
+  // 6 × 5, which fitted would be 6 × 6); else the fitted one.
+  readonly bounds?: Bounds;
 }
 
 function numbers(cap: number): ReadonlyArray<Candidate> {
@@ -109,6 +117,7 @@ function shapes(done: ReadonlySet<NodeId>, cap: number): ReadonlyArray<Candidate
     }
     for (const template of s.templates.filter((t) => !seen.has(t))) {
       seen.add(template);
+      const picture = s.sequence === true && template !== s.templates[s.templates.length - 1] ? undefined : s.picture;
       const spec: QuestionSpec = {
         kind: 'quantity_shape',
         target: s.target,
@@ -116,8 +125,14 @@ function shapes(done: ReadonlySet<NodeId>, cap: number): ReadonlyArray<Candidate
         extra: s.extra,
         ...(s.symmetry === undefined ? {} : { symmetry: s.symmetry }),
         ...(s.handles === undefined ? {} : { handles: s.handles, decoys: s.decoys ?? [] }),
+        // A Shape Island picture keeps its name, its move and its shadow
+        // (Phase 23b, PRD §4.2.6, CHALLENGE_SHADOW). Of a picture in steps,
+        // only the last picture is the stop's: the corner before the boat is
+        // a plain shape here, as the three faces of 4 are.
+        ...(picture === undefined ? {} : { picture }),
+        ...(picture === undefined || s.shadow === undefined || CHALLENGE_SHADOW === 'never' ? {} : { shadow: s.shadow }),
       };
-      out.push({ kind: 'quantity_shape', n: s.target, spec: () => spec });
+      out.push({ kind: 'quantity_shape', n: s.target, spec: () => spec, ...(node.bounds === undefined ? {} : { bounds: node.bounds }) });
     }
   }
   return out;
@@ -153,6 +168,6 @@ export function nextChallenge(done: ReadonlySet<NodeId>, seed: number, previous:
   const pick = rng.pick(rng.pick(kinds));
   const spec = pick.spec(rng);
   const id = nodeId(`challenge-${pick.kind}-${pick.n}`);
-  const puzzle = materializeNode({ id, role: 'normal', spec }, fitBench(spec), { contentVersion: CONTENT_VERSION, chapterId: chapterId('challenge'), nodeId: id, attemptVariant: 0, seed: seed >>> 0 });
+  const puzzle = materializeNode({ id, role: 'normal', spec }, pick.bounds ?? fitBench(spec), { contentVersion: CONTENT_VERSION, chapterId: chapterId('challenge'), nodeId: id, attemptVariant: 0, seed: seed >>> 0 });
   return { kind: pick.kind, n: pick.n, spec, puzzle };
 }

@@ -1,4 +1,4 @@
-import { CHAPTERS } from '../content';
+import { CHAPTERS, SIDE_ISLANDS } from '../content';
 import type { Chapter, ChapterId, NodeId } from '../content';
 import type { NodeStatus, ProgressState } from './schema';
 
@@ -20,17 +20,32 @@ function indexOf(nodeId: NodeId, chapters: ReadonlyArray<Chapter>): number {
   return index;
 }
 
+// The stop whose finishing opens this one (undefined for the very first): the
+// stop before it in map order, passing over an island off the way (content
+// SIDE_ISLANDS, Phase 23b: Shape Island) for a stop not on that island. So
+// finishing Number Island opens both Shape Island's first stop and Join
+// Island's, and Join Island never waits for Shape Island.
+export function openerOf(nodeId: NodeId, chapters: ReadonlyArray<Chapter> = CHAPTERS): NodeId | undefined {
+  const order = mapOrder(chapters);
+  const index = indexOf(nodeId, chapters);
+  const own = order[index]!.chapterId;
+  let i = index - 1;
+  while (i >= 0 && order[i]!.chapterId !== own && SIDE_ISLANDS.has(order[i]!.chapterId)) {
+    i -= 1;
+  }
+  return order[i]?.nodeId;
+}
+
 // Unlocking looks at completed stops only. Previews, animations and half-built
 // work never open the next stop (AC-46). Two exceptions keep a parent's choice
 // playable (2026-10-15 review M): the stop play starts at (`current`) is open,
 // and a stop once entered stays open (in normal play it was open to enter).
 export function isUnlocked(state: ProgressState, nodeId: NodeId, chapters: ReadonlyArray<Chapter> = CHAPTERS): boolean {
-  const index = indexOf(nodeId, chapters);
-  if (index === 0 || state.current === nodeId || state.nodes.has(nodeId)) {
+  if (state.current === nodeId || state.nodes.has(nodeId)) {
     return true;
   }
-  const previous = mapOrder(chapters)[index - 1] as MapEntry;
-  return state.completedNodeIds.has(previous.nodeId);
+  const opener = openerOf(nodeId, chapters);
+  return opener === undefined || state.completedNodeIds.has(opener);
 }
 
 export function statusOf(state: ProgressState, nodeId: NodeId, chapters: ReadonlyArray<Chapter> = CHAPTERS): NodeStatus {

@@ -2,6 +2,8 @@ import { apply, areTouching, benchCount, clusters, commit, countUnit, createHist
 import type { BenchState, Cell, Command, CountRound, Group, GroupId, History, RejectReason, UnitId, Verdict } from '../core';
 import { benchPair, questionAt, samePair, stepCount } from '../content';
 import type { NodeSpec, Pair, Puzzle } from '../content';
+import { SHADOW_LIT, centred, cornerOf, follow, litCells, shadowCells } from './shadow';
+import type { ShadowState } from './shadow';
 
 // How a split's cloud reads once it is right (Phase 22, design §9 #4):
 // 'whole-first' writes `3 = 1 + 2` (Numberblocks and ACARA say "3 is 1 and
@@ -30,6 +32,10 @@ export interface LevelSession {
   // Empty for every other stop. Screen state only: the judge never sees it, and
   // nothing new is saved (a reload works it out again from the saved mat).
   readonly used: ReadonlyArray<Pair>;
+  // A Shape Island picture's shadow (Phase 23b): where it lies and whether it
+  // is drawn; null on every other stop. Screen state only, like `used`: a
+  // reload lays it again from the saved mat.
+  readonly shadow: ShadowState | null;
 }
 
 function lastStep(whole: Puzzle): number {
@@ -227,7 +233,63 @@ export function startSession(whole: Puzzle, work: BenchState | null, finished = 
   const walked = walk(whole, history.state, { step: 0, used: [] }, !finished);
   const at = finished ? { step: lastStep(whole), used: walked.used } : walked;
   const puzzle = stepView(whole, at.step, at.used);
-  return { puzzle, history, verdict: judge(judgedMat(history.state, at.used), puzzle.question), round: startRound(history.state), step: at.step, whole, used: at.used };
+  return { puzzle, history, verdict: judge(judgedMat(history.state, at.used), puzzle.question), round: startRound(history.state), step: at.step, whole, used: at.used, shadow: shadowAtStart(puzzle, history.state, at.step) };
+}
+
+// Where a picture's shadow lies when the stop opens: in the middle of the
+// mat; on saved work, taking in what is there (follow), or past the first
+// picture of a stop in steps, on its corner. Drawn from the start if its
+// spec says 'always'.
+function shadowAtStart(puzzle: Puzzle, state: BenchState, step: number): ShadowState | null {
+  const spec = puzzle.shadow;
+  const q = puzzle.question;
+  if (spec === undefined || q.kind !== 'quantity_shape') {
+    return null;
+  }
+  const middle = centred(state.bounds, q.template);
+  const origin = state.bench.size === 0 ? middle : step > 0 ? (cornerOf(state) ?? middle) : follow(state.bounds, q.template, middle, [...state.bench.values()]);
+  return { origin, shown: spec === 'always' };
+}
+
+// The shadow after a move (PRD §4.2.3): the first piece on an empty mat
+// brings it over if it went down outside; a step done lays the next picture's
+// on the corner of what was built; otherwise it stays.
+function shadowAfter(session: LevelSession, state: BenchState, puzzle: Puzzle, stepDone: boolean): ShadowState | null {
+  const shadow = session.shadow;
+  const q = puzzle.question;
+  if (shadow === null || q.kind !== 'quantity_shape') {
+    return shadow;
+  }
+  if (stepDone) {
+    return { ...shadow, origin: cornerOf(state) ?? shadow.origin };
+  }
+  if (session.history.state.bench.size === 0 && state.bench.size > 0) {
+    return { ...shadow, origin: follow(state.bounds, q.template, shadow.origin, [...state.bench.values()]) };
+  }
+  return shadow;
+}
+
+// The shadow comes to help (its spec's ask on the empty mat): drawn from now on this visit.
+export function revealShadow(session: LevelSession): LevelSession {
+  return session.shadow === null || session.shadow.shown ? session : { ...session, shadow: { ...session.shadow, shown: true } };
+}
+
+// The shadow as drawn now: its cells and which are lit (SHADOW_LIT); null
+// when there is none, or it has not come yet.
+export function shadowView(session: LevelSession): { readonly cells: ReadonlyArray<Cell>; readonly lit: ReadonlyArray<boolean> } | null {
+  const q = session.puzzle.question;
+  if (session.shadow === null || !session.shadow.shown || q.kind !== 'quantity_shape') {
+    return null;
+  }
+  const cells = shadowCells(q.template, session.shadow.origin);
+  const state = session.history.state;
+  if (SHADOW_LIT === 'covered') {
+    return { cells, lit: litCells(cells, state) };
+  }
+  // 'solution': a single block, or a partner the reference answer takes.
+  const used = new Set(session.whole.solution.flatMap((c) => (c.type === 'takeGroup' ? [c.groupId as string] : [])));
+  const partnerOf = new Map([...state.groups.values()].flatMap((g) => g.unitIds.map((u) => [u as string, g.id as string] as const)));
+  return { cells, lit: litCells(cells, state, (u) => !partnerOf.has(u) || used.has(partnerOf.get(u)!)) };
 }
 
 // `solvedNow` is the one success event: a committed move that turns a wrong
@@ -251,7 +313,7 @@ export function commitCommand(session: LevelSession, cmd: Command): CommitOutcom
   const step = at.step;
   return {
     ok: true,
-    session: { puzzle, history: r.value, verdict, round: reconcile(session.round, state), step, whole: session.whole, used: at.used },
+    session: { puzzle, history: r.value, verdict, round: reconcile(session.round, state), step, whole: session.whole, used: at.used, shadow: shadowAfter(session, state, puzzle, step !== session.step) },
     solvedNow: verdict.matched && !session.verdict.matched,
     stepDone: step !== session.step,
   };

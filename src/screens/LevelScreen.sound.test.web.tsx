@@ -15,7 +15,7 @@ import type { GroupId } from '../core';
 import { STORAGE_KEY, createInitialState, deserialize, memoryStorage, reduce, serialize } from '../progress';
 import type { ProgressState, ProgressStorage } from '../progress';
 import { CORRECTION_QUIET_MS } from './correction-voice';
-import { LevelScreen, NUDGE_AFTER_MS, SOLVE_SETTLE_MS } from './LevelScreen';
+import { CLOUD_NUDGE_MAX, CLOUD_NUDGE_MS, LevelScreen, NUDGE_AFTER_MS, SOLVE_SETTLE_MS } from './LevelScreen';
 import { ParentScreen } from './ParentScreen';
 import { ProgressProvider } from './progress-store';
 
@@ -135,7 +135,7 @@ function partnerOf(id: string, size: number): GroupId {
 
 function unlockedTo(upTo: string, seed = 5): ProgressState {
   let s = createInitialState(seed);
-  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8'];
+  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n13', 'ch1-n7', 'ch1-n14', 'ch1-n8', 'ch1-n15', 'ch1-n9', 'ch1-n16', 'ch1-n10', 'ch1-n17', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n13', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8'];
   for (const id of order.slice(0, order.indexOf(upTo))) {
     const e = reduce(s, { type: 'enter', nodeId: nodeId(id) });
     const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
@@ -159,7 +159,7 @@ async function command(cmd: Parameters<StageProps['onCommand']>[0]): Promise<boo
 describe('LevelScreen sounds (D-036: sounds first, speech when asked)', () => {
   test('a stop opens with a sound, not a sentence; tapping the number says the task', async () => {
     await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n2')) }), 'ch1-n2');
-    expect(mockSounds).toEqual(['arrive']);
+    expect(mockSounds).toEqual(['arrive', 'look']);
     expect(mockSaid).toEqual([]);
     await press('prompt');
     expect(mockSaid).toEqual(['拼出 2 块']);
@@ -168,12 +168,12 @@ describe('LevelScreen sounds (D-036: sounds first, speech when asked)', () => {
   test("Phase 19: who's missing and two ways add no automatic speech; their new lines are said only when asked", async () => {
     const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch2-n8')) });
     await open(storage, 'ch2-n5');
-    expect(mockSounds).toEqual(['arrive']);
+    expect(mockSounds).toEqual(['arrive', 'look']);
     expect(mockSaid).toEqual([]);
     const four = partnerOf('ch2-n5', 4);
     const y = [...mockStage.current!.state.bench.values()][0]!.y;
     await command({ type: 'takeGroup', groupId: four, origin: { x: 2, y } });
-    expect(mockSounds).toEqual(['arrive', 'adjust']);
+    expect(mockSounds).toEqual(['arrive', 'look', 'adjust']);
     await command({ type: 'returnGroup', groupId: four });
     mockSounds.length = 0;
     await command(puzzleFor('ch2-n5').solution[0]!);
@@ -190,11 +190,11 @@ describe('LevelScreen sounds (D-036: sounds first, speech when asked)', () => {
     await command({ type: 'takeGroup', groupId: partnerOf('ch2-n8', 3), origin: { x: 0, y: 0 } });
     await command({ type: 'takeGroup', groupId: partnerOf('ch2-n8', 4), origin: { x: 3, y: 0 } });
     // One way made: the success sound, the card says "another way", nothing spoken.
-    expect(mockSounds).toEqual(['arrive', 'success']);
+    expect(mockSounds).toEqual(['arrive', 'look', 'success']);
     expect(text('feedback-title')).toBe('换一种拼法！');
     // Sending the first way back is no mistake: no "hmm".
     await command({ type: 'returnGroup', groupId: partnerOf('ch2-n8', 3) });
-    expect(mockSounds).toEqual(['arrive', 'success']);
+    expect(mockSounds).toEqual(['arrive', 'look', 'success']);
     expect(mockSaid).toEqual([]);
     // The help ladder (Phase 20 Q3): the card's line first, then what to send back.
     await press('answer-feedback');
@@ -208,14 +208,14 @@ describe('LevelScreen sounds (D-036: sounds first, speech when asked)', () => {
     await open(storage, 'ch2-n10');
     const p = puzzleFor('ch2-n10');
     const [, four, two] = p.onMat!;
-    expect(mockSounds).toEqual(['arrive']);
+    expect(mockSounds).toEqual(['arrive', 'look']);
     expect(mockSaid).toEqual([]);
     // Moving the 2 about on the mat is still the opening.
     await command({ type: 'moveGroup', groupId: two!, delta: { x: 0, y: -1 } });
-    expect(mockSounds).toEqual(['arrive']);
+    expect(mockSounds).toEqual(['arrive', 'look']);
     await command({ type: 'moveGroup', groupId: two!, delta: { x: 0, y: 1 } });
     await command({ type: 'returnGroup', groupId: four! });
-    expect(mockSounds).toEqual(['arrive', 'adjust']);
+    expect(mockSounds).toEqual(['arrive', 'look', 'adjust']);
     await command({ type: 'takeGroup', groupId: four!, origin: { x: 3, y: 1 } });
     mockSounds.length = 0;
     await command({ type: 'returnGroup', groupId: two! });
@@ -461,7 +461,7 @@ describe('LevelScreen sounds (D-036: sounds first, speech when asked)', () => {
     mockSounds.length = 0;
     mockSaid.length = 0;
     await press('again');
-    expect(mockSounds).toEqual(['arrive']);
+    expect(mockSounds).toEqual(['arrive', 'look']);
     expect(mockSaid).toEqual([]);
   });
 });
@@ -471,10 +471,10 @@ describe('Phase 22: Take-away Island sounds', () => {
 
   test('a split opens quietly; pulled apart is the success sound; the countdown sounds the count left at each step, the fanfare at the last and the launch on the second beat', async () => {
     await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch3-n1')) }), 'ch3-n1');
-    expect(mockSounds).toEqual(['arrive']);
+    expect(mockSounds).toEqual(['arrive', 'look']);
     const three = row('ch3-n1');
     await command({ type: 'move', unitId: three[2]!, to: { x: 3, y: 1 } });
-    expect(mockSounds).toEqual(['arrive', 'success']);
+    expect(mockSounds).toEqual(['arrive', 'look', 'success']);
     expect(mockSaid).toEqual([]);
     act(() => root.unmount());
     root = createRoot(container);
@@ -484,24 +484,98 @@ describe('Phase 22: Take-away Island sounds', () => {
     for (const u of [five[4], five[3], five[2]]) {
       await command({ type: 'return', unitId: u! });
     }
-    expect(mockSounds).toEqual(['arrive', 'count:4', 'count:3', 'count:2']);
+    expect(mockSounds).toEqual(['arrive', 'look', 'count:4', 'count:3', 'count:2']);
     await command({ type: 'return', unitId: five[1]! });
-    expect(mockSounds.slice(4)).toEqual(['fanfare']);
+    expect(mockSounds.slice(5)).toEqual(['fanfare']);
     await beat();
-    expect(mockSounds.slice(5)).toEqual(['launch']);
+    expect(mockSounds.slice(6)).toEqual(['launch']);
     expect(mockSaid).toEqual([]);
   });
 
   test('a take-away from partners: the wrong one sent home is the adjust sound once; the right one is success', async () => {
     await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch3-n6')) }), 'ch3-n6');
     const [four, two] = puzzleFor('ch3-n6').onMat!;
-    expect(mockSounds).toEqual(['arrive']);
+    expect(mockSounds).toEqual(['arrive', 'look']);
     await command({ type: 'moveGroup', groupId: two!, delta: { x: 0, y: -1 } });
-    expect(mockSounds).toEqual(['arrive']);
+    expect(mockSounds).toEqual(['arrive', 'look']);
     await command({ type: 'returnGroup', groupId: four! });
-    expect(mockSounds).toEqual(['arrive', 'adjust']);
+    expect(mockSounds).toEqual(['arrive', 'look', 'adjust']);
     await command({ type: 'takeGroup', groupId: four!, origin: { x: 0, y: 1 } });
     await command({ type: 'returnGroup', groupId: two! });
-    expect(mockSounds).toEqual(['arrive', 'adjust', 'success']);
+    expect(mockSounds).toEqual(['arrive', 'look', 'adjust', 'success']);
+  });
+});
+
+describe('Phase 23-0: the cloud says "look here"', () => {
+  const nudgeMs = CLOUD_NUDGE_MS!;
+  const reminders = () => mockSounds.filter((x) => x === 'look:2').length;
+  const looksAt = () => container.querySelector('[data-testid^="cloud-look-"]')!.getAttribute('data-testid');
+  const wait = async (ms: number) => {
+    act(() => jest.advanceTimersByTime(ms));
+    await settle();
+  };
+
+  test('each opening pops the cloud with the chime, once; untouched, it reminds before the hand and never with it, at most twice a visit', async () => {
+    expect(nudgeMs).toBeLessThan(5000);
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n3')) }), 'ch1-n3');
+    expect(mockSounds).toEqual(['arrive', 'look']);
+    expect(looksAt()).toBe('cloud-look-1-0');
+    await wait(nudgeMs - 100);
+    expect(reminders()).toBe(0);
+    await wait(100);
+    expect(reminders()).toBe(1);
+    expect(looksAt()).toBe('cloud-look-1-1');
+    expect(mockStage.current!.demo).toBe(0);
+    // The hand comes at 5 s; the next reminder (due at 7 s) waits while it shows.
+    await wait(5000 - nudgeMs);
+    expect(mockStage.current!.demo).toBeGreaterThan(0);
+    await wait(3000);
+    expect(reminders()).toBe(1);
+    // The hand gone, the wait starts again; then no more this visit.
+    await wait(5000);
+    expect(mockStage.current!.demo).toBe(0);
+    await wait(nudgeMs);
+    expect(reminders()).toBe(CLOUD_NUDGE_MAX);
+    await wait(10 * nudgeMs);
+    expect(reminders()).toBe(CLOUD_NUDGE_MAX);
+    expect(mockSounds.filter((x) => x === 'look')).toEqual(['look']);
+    expect(mockSaid).toEqual([]);
+  });
+
+  test('the first touch ends the reminders: a block put down, a drag begun, the cloud or the card tapped', async () => {
+    const touches: ReadonlyArray<() => Promise<unknown>> = [
+      () => command({ type: 'take', unitId: [...puzzleFor('ch1-n3').initial.units.keys()][0]!, to: { x: 1, y: 1 } }),
+      async () => act(() => mockStage.current!.onDragActive!(true)),
+      () => press('prompt'),
+      () => press('answer-feedback'),
+    ];
+    for (const touch of touches) {
+      act(() => root.unmount());
+      root = createRoot(container);
+      mockSounds.length = 0;
+      await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n3')) }), 'ch1-n3');
+      await wait(1000);
+      await touch();
+      await wait(20 * nudgeMs);
+      expect(reminders()).toBe(0);
+      expect(looksAt()).toMatch(/-0$/);
+    }
+  });
+
+  test('play again is a new opening: the chime again and the reminders start over; a stop opened already right reminds nothing', async () => {
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n3')) }), 'ch1-n1');
+    for (const cmd of puzzleFor('ch1-n1').solution) {
+      await command(cmd);
+    }
+    await beat();
+    // Right now: nothing to point at.
+    await wait(3 * nudgeMs);
+    expect(reminders()).toBe(0);
+    mockSounds.length = 0;
+    await press('again');
+    expect(mockSounds).toEqual(['arrive', 'look']);
+    expect(looksAt()).toBe('cloud-look-2-0');
+    await wait(nudgeMs);
+    expect(reminders()).toBe(1);
   });
 });

@@ -1747,3 +1747,181 @@ brief 第 4 节列出、本轮按要求没做的：三个伙伴合体、凑到 1
 - 倒数的下行 count 音与发射音在手机扬声器上听不听得出"往下走 / 往上冲"。
 - 4 × 3 工作台上 84px 的块"拉开一格"手指会不会碰到旁边的块；拆开站第二种拆法要把一块放到另一块下面（示范手演的那一步）。
 - iOS Safari 的音频解锁与语音（同前几个 Phase）。
+
+---
+
+# Phase 23-0：顶栏开场仪式 + A-lite（2026-10-23，D-105 – D-109，内容版本不变）
+
+依据 [shape-island-and-header-prd.md](../docs/shape-island-and-header-prd.md) §3、[brief-phase-23-0.md](brief-phase-23-0.md)；PRD §8 全按默认。顺序：23-0-1 → 门禁 → 23-0-2 → 门禁 + 三视口走查 → 冻结 v8 种子存档 → 23a。没有 git 操作、没加依赖、存档格式不变。
+
+## 23-0-1 开场仪式 C（D-105、D-106）
+
+- [x] `juice.ts`：`usePop(tick, peak = 1.32, from = 1)` 参数化；`usePulse(tick, times = 1)`；新 `useWobble(tick, delay)`（±8° 三下）、`useLean(tick, dx, dy, delay)`（探身 + 点头）。
+- [x] `sfx.ts`：新音效 `look`（B4 → F♯5，音符晚 `LOOK_AT` 0.45 s；`step` 2 = 再唤起，不延迟、×0.7）。
+- [x] `LevelScreen.tsx`：`looks` 计数（开站、再玩一次、随机题换题各 +1）→ 云朵 0.6 → 1.4 → 1、阴影闪深 450ms、小图 300ms 起摇、Amber 400ms 探身；`CLOUD_NUDGE_MS = 3500`、`CLOUD_NUDGE_MAX = 2`；触摸（拖起 / 点托盘 / 计数 / 落子 / 点云朵 / 点卡片 / 开菜单）后停；示范手显示期间不计，手收后重等；开站已拼对不提醒。序列换步只让小图 `useNod`。减少动效：阴影加深 + 小图边框 3px 1 秒（`LOOK_STILL_MS`）。
+- [x] `AmberGuide.tsx`：`lean` 属性（只在仪式那 450ms 给 tick，转屏 / 计数后回来不重做）；`Cloud.tsx`：`flash`。
+- [x] 测试：`LevelScreen.sound.test.web.tsx` 开站音 `['arrive', 'look']`（7 处）、倒数 slice 下标 +1；`ChallengeScreen.test.web.tsx` 1 处；新 describe "Phase 23-0: the cloud says look here"（fake timers：3.5 s 前不响、3.5 s 第一次、示范手期间不发、手收后第二次、不超过 2 次；四种触摸各自取消；再玩一次重新开始、拼对的站不提醒）；`sfx.test.ts` 加 `look`。
+- [x] 门禁：lint 0、typecheck 过、purity 0、test:gate 58 suite / 1103、build:web 过。
+
+## 23-0-2 A-lite（D-107 – D-109）
+
+- [x] `chrome.ts`：`LEVEL_CHROME` regular 120 / 88 / 4 / 68、compact 88 / 56 / 4 / 48；新 `CLOUD`、`PICTURE_PAD`、`pictureBox()`。
+- [x] `Cloud.tsx`：新 `TargetCloud`（尺寸取 `CLOUD`、阴影 `#8FC3E3`、`flash` `#6AAAD4`、`spotlight` 套整朵云）；旧 `Cloud` 不动（作品册在用）。
+- [x] `LevelScreen.tsx`：小图进云、目标色 + 2px edge + 首格 calm 脸（`PICTURE_FACE_MIN = 10`）+ 没拼对时 `useBreathe`；云朵不是纯数字时不画；数字 72 / 52 档；旧的独立小图盒删掉。
+- [x] `AnswerFeedback.tsx`：图标盘 44 → 48、开始态 Amber 脸（`START_SYMBOL`）、喇叭 40 → 44。
+- [x] 测试：`layout.test.ts` chrome 常量（280 / 196、SE 357）、`SMALL` 的 Android 360 × 640 · 17 34 → 33；新 describe "the shape picture on the cloud"（所有目录模板 × 三种尺寸的小图盒 ≤ 云内框、PRD 表里的五个尺寸）；`LevelScreen.test.web.tsx` 两处 spotlight 选择器改成 `prompt` 下；新 describe "Phase 23-0: the shape picture rides on the cloud"（小图是云的子节点、目标色、一张脸、Amber 头像；拿走 / 加法 / 数量站没有小图）。
+- [x] 门禁：lint 0、typecheck 过、purity 0、test:gate 58 suite / 1107、build:web 过。
+
+## 浏览器走查（Checkpoint 23-0）
+
+内建浏览器面板这次导航 localhost 一直被拒（"navigation denied"，`curl` 200），改用 Playwright（Chromium，dev 模式 `expo-web`）；存档先用 v7 全通夹具（删掉 ch1-n3 / n7 / n8 / ch2-n11 的完成），后来换成 v8 全通夹具。截图 `docs/review-assets/p23-*.jpg`。没有听声音（chime 只在 jsdom 里验证派发）。
+
+- [x] 375 × 812 ch1-n3 再玩一次：云朵 bounding 0 ms 265 × 165 → 327 ms 163 × 94 → 静止 180 × 100（弹大再回）（`p23-01`）；3.5 s 云朵 testID 变 `cloud-look-1-1`（第一次脉冲）（`p23-03`）；5.3 s 示范手 + ghost 出现（`p23-04`）；卡片开始态是 Amber 的脸。
+- [x] 375 × 812 实测：顶栏 0–120、云 180 × 100、小图 2 × 2 = 64（呼吸中量到 61–75）、卡 120–208、盘 48、舞台 212–744、底栏 744–812；ch1-n3 工作台 / 托盘积木 70（格不变）；**17 托盘积木 44**（PRD 预期 46 → 44 ✓）；ch1-n8 小图 4 × 2 格 28；ch2-n9 十 5 × 2 格 22；ch2-n11 楼梯 3 × 3 格 18；加法站 `1 + 1 = 2` 无小图（`p23-375-*`）。
+- [x] 360 × 640：云 140 × 76，ch1-n3 小图格 22、托盘 67；17 托盘 41（视口内量；`layout.test` 里带浏览器栏的 Android 360 × 640 是 33）；ch1-n8 托盘 44；"下一站"下沿 637 / 640（`p23-360-*`）。
+- [x] 667 × 331：**按 PRD"数字上、小图下"排时，答对后"下一站"下沿 373 > 331（ch1-n8 / ch2-n9 / ch2-n11 都出界）→ 改成并排**；改后 ch1-n8 下一站 267–327、ch2-n9 268–326、ch2-n11 269–327，都在屏内；17 托盘 40（`p23-667-*`）。
+- [x] 减少动效（`emulateMedia reducedMotion: reduce`）：开站 200ms 小图边框 3px、阴影加深、云宽 180 不缩放；1.4 s 后边框 2px、阴影复原（`p23-05`）。
+- [x] 控制台 0 error。
+
+---
+
+# Phase 23a：内容 v9 六站造型快赢（2026-10-23，D-110 – D-111，内容版本 9）
+
+## 种子存档（先于题库）
+
+- [x] 用 v8 代码（23-0 完成后、题库没动前）生成三份，临时 jest 测试写文件、用完删除：`src/progress/__fixtures__/archive-v8-phase22-{all-finished,ch1-half,ch2-half}.json`（种子 4242；v7 三份种子经 v8 的 `migrate` 读入，全通那份再把拿走岛 8 站按参考解打完：32 站、地图停 ch3-n8、自由玩三块；数字岛一半停 ch1-n7、三块在工作台；合体岛一半停 ch2-n5）。
+
+## 题库（D-110）
+
+- [x] `catalog/shapes.ts` 八个模板；`chapter-1.ts` 插 ch1-n13 – n17、`SINGLES_DRAG_CAP`、`MIRROR_FOR_CHIRAL`、`TEN_UPRIGHT`；`chapter-2.ts` 插 ch2-n13；`CONTENT_VERSION = 9`、`CONTENT_CHANGES[9] = []`。工作台（拟合）：n13 5 × 4、n14 6 × 4、n15 6 × 4、n16 6 × 4、n17 6 × 5（写死）、ch2-n13 6 × 5，与 PRD 表一致。
+- [x] `challenge.ts`：随机题沿用站自己的 `bounds`（D-111）。
+- [x] `hints.ts`：`covers` 导出（只为测试，逻辑没改）。
+- [x] 测试：目录（38 站 / 13 造型站、新站规格、三副面孔 4 take + 2 move、诱饵口径、拖数上限）、`bench.test` 允许站上写死的 `bounds`、指纹（旧 32 站不变，加 6 个，`FINGERPRINT_VERSION = 9`）、`demo.test` 38 站、`challenge.test`（新图都进骰子、站着的十随机题仍 6 × 5 且不转）、`hints.test` 用 `covers()` 验诱饵（甜甜圈 3+3+2、大楼梯 5+4+1 / 5+3+2 判假；带备用单块顶替算对）。
+- [x] 升级：新 describe v8 → v9（三份存档什么都不丢、全通 → ch1-n13 且六站都开、打完六站全通且每站作品按自己的题判对、数字岛一半不动只开 ch1-n13、合体岛一半不动开数字岛五站、经 `loadArchive` 不报升级不备份）；`migrate.ts` 没改。
+- [x] 改了期望的旧测试（都是"新站插在中间"的连带）：各测试文件里写死的地图顺序加新 id（store / reliability / album / unlock / Challenge / Level / sound / Album / Map / IslandDone）；站数 12 → 17 / 13、32 → 38；旧版本升级测试里"全通存档停在新站"的期望从 ch2-n9 / ch3-n1 改成 ch1-n13（v9 起 'first-open' 先找到它；`V9_FIRST`），`V5_CHAPTERS` 去掉 v9 新站；家长区"作品收起"的站号按地图位置 第 10 / 12 站 → 第 14 / 17 站、"从哪里开始"→ 数字岛第 7 站；地图标签加 ch2 的 10；`layout.test SMALL` 加大楼梯三项 38。
+- [x] 门禁：lint 0、typecheck 过、purity 0、test:gate 58 suite / **1202**（23-0 前 1099）、build:web 过；覆盖率 97.64 / 93.68（语句 / 分支），content 98.32 / 95.78。
+
+## 浏览器走查（Checkpoint 23a，Playwright）
+
+- [x] 375 × 812：注入 v8 全通存档 → 地图标记停在 ch1-n13（4，醒着），ch1 五个新站 available、旧站 completed（`p23-10`）；本地存档在第一次改动前仍写着 v8（同 Phase 22）。
+- [x] ch1-n13 拖完：蘑菇 4 块 → "变个样子！"、光圈套云、小图换成闪电（`p23-11`）；挪一块 → 小图换成靴子（`p23-12`）；再挪一块 → "拼对啦！"（`p23-13`）。
+- [x] 站着的十 / 大楼梯 / 甜甜圈的工作台与托盘：375 下 n17 格 58、托盘 58，ch2-n13 托盘 54；360 × 640 n17 托盘 42、ch2-n13 40；667 × 331 都 40–41（`p23-360-ch1-n17` 等）。
+
+## 需要 Ted 决定（都有一处常量或一行）
+
+1. `CLOUD_NUDGE_MS = 3500` / `CLOUD_NUDGE_MAX = 2`（`LevelScreen.tsx`）；第二次脉冲放在"示范手收起后再等 3.5 秒"（≈12.7 s）是我的落法，PRD 没写第二次什么时候。
+2. 横屏小图和数字**并排**而不是 PRD 的"上下"（上下会把"下一站"挤出 331 高的屏）——看 `p23-667-ch2-n9.jpg`。
+3. 站着的十在云里的小图格只有 11px（短屏 8px）、没有脸：PRD 的格公式按高度卡死。可选：`PICTURE_FACE_MIN` 调低，或给竖长图单独放宽高度（会超 100 高的云）。
+4. 大楼梯（ch2-n13）在 SE / Android 360 × 640 / 640 × 360 托盘积木 38px（PRD 估 ≥ 40）；改法是减诱饵或缩 extra（会改题，另开版本）。
+5. `START_SYMBOL = 'amber'`、`SINGLES_DRAG_CAP = 6`、`MIRROR_FOR_CHIRAL`、`TEN_UPRIGHT`、六站清单与位置、伙伴站 extra 1：按 PRD 默认。
+6. 开站 chime 的音高（B4 → F♯5）只在代码里定，没在手机上听过。
+
+## 与 PRD 的出入
+
+- 横屏云朵：PRD §3.3"侧栏内数字上、小图下"→ 并排（见上）。
+- 17 在 Android 360 × 640（带浏览器栏）托盘积木 34 → 33（PRD 只写了格 43 → 42）；大楼梯 38（PRD 说新站都 ≥ 40）。
+- PRD §3.2 的阴影闪"`#A9D5EE` → `#8FC3E3` → 回"：A-lite 已把静止阴影改成 `#8FC3E3`，所以闪的是再深一档 `#6AAAD4`。
+- 诱饵口径：大楼梯除了 PRD 写的 5 + 4 + 1，还有 5 + 3 + 2，也铺不出（测试里两条都列了）。
+
+## 只能真机确认
+
+- 开站一拍（弹大 1.4 倍时云朵会短暂盖住菜单按钮与屏顶）在真机上是"看这里"还是"吓一跳"；chime 在手机扬声器上和 `arrive` 叠在一起听不听得清。
+- 3.5 s 脉冲 + 5 s 示范手的节奏孩子会不会觉得"一直在动"（PRD H1 / H3）。
+- Amber 头像在 48px 盘里的辨识度；彩色带脸小图在户外光下的显著性。
+- iOS Safari 的音频解锁（同前）。
+
+## 已知遗留 / 没做
+
+- 方案 B（影子）、造型岛、`MAP_SHAPE_LABEL`：下一个 Phase。
+- 随机题里三副面孔是三道单图题，不是三步序列（`challenge.ts` 不透传 `sequence`，Phase 21 起如此）。
+- 地图上 4 4 / 8 8 / 9 9 / 10 10 相邻同号（PRD §8 #13 已接受）。
+
+---
+
+# Phase 23b：造型岛 Shape Island（2026-10-23，D-112 – D-120，内容版本 10）
+
+依据 [shape-island-and-header-prd.md](../docs/shape-island-and-header-prd.md) §4.2、§8 默认、§9 边界。顺序：冻结 v9 种子存档 → content → progress → blocks-ui → screens → 升级测试 → 三视口走查。没有 git 操作、没加依赖、`schemaVersion` 不变、旧 38 站指纹不变、`lint:purity` 零命中。
+
+## 种子存档（先于题库）
+
+- [x] v9 代码（23a 完成、题库没动前）生成，临时 jest 测试写文件、用完删除：`src/progress/__fixtures__/archive-v9-phase23a-{all-finished,ch1-half,ch2-half}.json`（v8 三份经 v9 `migrate`；全通那份按参考解打完 v9 六站，38 站，地图回到 ch3-n8；合体岛一半那份先打完数字岛五个新站（数字岛 17 / 17），地图回到 ch2-n5、作品保留；数字岛一半原样，停 ch1-n7、三块在台上）。
+
+## content（D-112、D-115、D-117、D-120）
+
+- [x] `shapes.ts`：`CORNER_5 BOAT_5 BOAT_5_C DUCK_5 TREE_5 HOUSE_7 DOG_6 ROCKET_6`。`schema.ts`：`PictureId`、`ShadowSpec`，`quantity_shape.picture / shadow`，`Puzzle.picture / shadow`。`catalog/chapter-5.ts`（`SHADOW_POLICY`、`PICTURE_SYMMETRY`）；`catalog/index.ts`：`SHAPE_ISLAND_POSITION`、`SHAPE_ISLAND_GATE`、`SIDE_ISLANDS`、`CONTENT_VERSION = 10`、`CONTENT_CHANGES[10] = []`。`generate.ts` 透传与 `prompt.picture.<id>`；`challenge.ts` 透传（`CHALLENGE_SHADOW`）；`validate.ts`（影子规则、`assertDecoysMiss`）；`copy.ts`（岛名、图名四组 key、影子九个 key、`feedback.launch`）。
+- [x] 测试：catalog（地图四岛、ch5 规格 / 影子 / 对称 / 工作台、开站句、参考解拖数 2 2 3 3 3 6 4 4、诱饵口径、鸭狗镜像对转 180° 错、n6 一步）、generate（validate 拒绝）、challenge（新图入池、透传）、fingerprint（v10，8 个新指纹）、demo（46 站 / 9 Boss）。
+
+## progress（D-113、D-120）
+
+- [x] `unlock.ts openerOf`（旁岛跳过），`isUnlocked` 与 `migrate.onwardFrom('first-open')` 都用它。测试：unlock（ch1-n12 → ch5-n1、ch5-n8 → ch2-n1、两岛同开、`openerOf`）；upgrade 新 describe v9 → v10（什么都不丢、全通 → ch5-n1 且其余锁着、打完 8 站全通且每站按自己的图判对、合体岛一半不动且 ch5-n1 同开、继续合体岛不受影响、停在已完成站 → ch5-n1、数字岛一半不动、经 store 不报升级不备份、v8 全通仍落 ch1-n13）。
+
+## blocks-ui（D-114、D-118）
+
+- [x] `ShadowOutline.tsx`（`SHADOW_SNAP: 0`、`shadowHead`）；`BossOutline` 改为一排的 ShadowOutline（testID 不变）；`Stage.shadow`；`cheer.ts` `picture`、`BOSS_PICTURE_CHEER`。测试 cheer +1。
+
+## screens（D-114、D-116 – D-119）
+
+- [x] `shadow.ts`（`SHADOW_LIT`、`centred / follow / cornerOf / litCells / fill`）；`level-session.ts`（`LevelSession.shadow`、`revealShadow`、`shadowView`）；`hints.ts`（开站句、`feedback.shadow.gap / out` 卡、`shadowHelp` 阶梯、`shadowNext`、`shadowDemo`、图名成功句、`partsLine`）；`LevelScreen.tsx`（`Stage.shadow`、求助浮现与示范手、`shadowDemo` 优先、火箭发射音、点卡片念 parts、`SHAPE_CLOUD_ON_PASS`）；`MapScreen.tsx`（`MAP_SHAPE_LABEL`、`mapPictureOf`、迷你图）。
+- [x] 测试：`shadow.test.ts` 新（11）、`LevelScreen.test.web.tsx` +3、`MapScreen.test.web.tsx` +2、`IslandDoneScreen.test.web.tsx` +1。
+
+### 改了期望的旧测试
+
+- `catalog.test.ts`：`CHAPTERS[i]` 改成按 id 取岛；地图三岛 → 四岛；工作台表加 ch5；23a 那条"38 站 / 13 造型站"只数 ch5 以外。
+- `unlock.test.ts`：地图 38 → 46；ch1-n12 的下一站是 ch5-n1；打完数字岛 `defaultCurrent` 是 ch5-n1（原 ch2-n1）；打完合体岛 / 拿走岛但没玩造型岛时停 ch5-n1；`CHAPTERS` 3 → 4。
+- `upgrade.test.ts`：`V5_CHAPTERS` 去掉 ch5；`beforeV9` 去掉 ch5；v8 → v9 组里写死的版本 9 改为 `CONTENT_VERSION`，"全部完成"改为"v9 及以前的站全部完成"。
+- `challenge.test.ts`：全通后的图集合加 8 张。
+- `demo.test.ts`：38 → 46 站，7 → 9 Boss。
+- `fingerprint.test.ts`：版本 10，描述对带图的站追加 `picture / shadow`。
+- `IslandDoneScreen.test.web.tsx`：数字岛收尾"去合体岛"→"去造型岛"，按钮去 ch5-n1。
+- `MapScreen.test.web.tsx`：奖杯要造型岛也打完；标签测试按 id 取岛。
+
+## 门禁（最终）
+
+- [x] `pnpm lint` 0；`pnpm typecheck` 过；`pnpm lint:purity` 零命中；`pnpm test:gate` 59 suite / **1337**（基线 1202）；覆盖率全部 97.47 / 93.42（语句 / 分支），content 98.33 / 95.78、core 100 / 99.13、progress 99.06 / 97.71、blocks-ui 98.09 / 92.15、screens 95.97 / 90.93；`pnpm build:web` 过。
+
+## 浏览器走查（Checkpoint 23b，Playwright）
+
+内建浏览器面板导航 localhost 仍被拒（"navigation denied or failed"），改用 Playwright（Chromium）对 `static-dist`（`pnpm build:web` 产物，8787）。存档注入 v9 全通夹具（临时拷进 `dist/` 用 fetch 读，走查后删掉）。没有听声音。截图 `docs/review-assets/p23b-*.jpg`。
+
+- [x] 375 × 812 地图：v9 全通存档打开即迁移，造型岛在数字岛下面、"造型岛 0/8"，ch5-n1 醒着、其余睡着，8 站都是迷你图（`p23b-01`）。
+- [x] ch5-n1：云朵 `4` + 绿色蘑菇小图；卡片"动手试试看 / 把伙伴放进影子里"；工作台 5 × 4，格 70，影子在 (1,1) 起、4 格 62px 虚线、首格睡脸；托盘伙伴 70（`p23b-02`）。把 3 拖到左上角（影子外）→ 影子挪到 (0,0) 接住它、三格亮，卡片"影子还没填满 / 还差这里"（`p23b-03`）；点卡片两下 → "把 1 放到这里"，托盘的 1 有光圈、影子空格琥珀实线（`p23b-04`）；把 1 拖进去 → "拼对啦！"、影子消失、"下一站"、云朵仍是 `4`（`p23b-05`）。
+- [x] ch5-n8（375）：开站没有影子，"照着小图拼小火箭"；第 2 下"影子来帮忙啦"、影子 6 格出现（`p23b-06`）；第 3 下"把 3 放进影子里"、尾翼 3 格发亮、示范手搬 3 进影子（`p23b-07`）。
+- [x] 各视口开站（工作台格 / 托盘积木 px）：375 × 812 n2–n8 格 58、托盘 58（n1 70 / 70）；360 × 640 格 56，托盘 n2 / n3 / n5–n7 56、n4 50、n8 52（n1 托盘 58–67）；667 × 331 托盘 40–42（n4 工作台格 47、托盘 41；n8 格 54、托盘 41）。全部 ≥ 40（`TRAY_MIN_BLOCK`），托盘下沿都在屏内（`p23b-375/360/667-n5/n8-opening`）。
+- [x] 控制台 0 error。
+- [ ] n6 变身（大转角 → 小船、影子换形、"把 1 挪进影子里"示范手）只在 jsdom / 单元测试里走过，浏览器没拖。
+
+## 需要 Ted 决定（都有一处常量或一行）
+
+1. 8 站数字、图、顺序、岛名（`catalog/chapter-5.ts`、`copy.ts chapter.ch5.title`）；伙伴站 extra 1。
+2. `SHAPE_ISLAND_POSITION = 'after-ch1'`、`SHAPE_ISLAND_GATE = 'none'`（`catalog/index.ts`）。注意 'none' 靠新加的旁岛解锁规则实现（`progress/unlock.ts openerOf`）；新孩子打完数字岛会看到两个岛同时开，地图标记和岛收尾页都先指向造型岛。
+3. `SHADOW_POLICY`（n7 第 1 下、n8 第 2 下）、`PICTURE_SYMMETRY`（鸭狗转关镜开）。
+4. `SHADOW_LIT = 'covered'`（`'solution'` 已实现，一词切换）、`SHADOW_SNAP = 0`（0.5 没做）。
+5. `SHAPE_CLOUD_ON_PASS = 'count'`（`'parts'` 已实现）、`BOSS_PICTURE_CHEER = true`、`CHALLENGE_SHADOW = 'as-stop'`、`MAP_SHAPE_LABEL = 'picture'`。
+6. 影子跟随规则（见"出入"）：包得住第一块就挪，包不住只试首格对首格。
+7. 火箭 Boss 在 360 × 640 的云里小图只有约 11px 一格（3 × 4 图按高度卡），而 n7 / n8 没影子时它就是唯一参考——PRD 的前提"A-lite 小图就是参考"在紧凑屏偏弱。可选：n8 改 `{ onHelp: 1 }`，或紧凑屏放宽小图高度。
+8. 地图迷你图格 ≤ 16px（四宽的小鸭只有约 11px，没画脸）。
+
+## 与 PRD 的出入
+
+- 小鸭工作台 6 × 3（拟合），PRD 表写 6 × 5（按转开估的）。
+- 文案：PRD 的 `prompt.picture` 等用 `{name}` 占位；`Line.params` 只有数字，改成一图一组 key 在建表时填名（同句同义）。另加了 PRD 没列的 `hint.shadow.start`（开站"把伙伴放进影子里"）、`hint.shadow.move`（伸出卡正文"把它挪进影子里"）、`hint.shadow.put`（"把 1 放到这里"）、`hint.picture.look.<id>`（"照着小图拼小火箭"）。n6 序列开站句用旧的"用 5 块拼成这个样子"。
+- 影子跟随：PRD 写"以那块为头格"；实现先找能把整块包进影子的平移（取首格对上影子最靠前格的），找不到才首格对首格；横放的 3 落在影子外时这样能整块进影子。
+- n7 的阶梯：PRD 只写"第 1 下浮现"；实现第 2 下点名、第 3 下示范手（和常显站同节奏）。n8 照 PRD（1 小图、2 浮现、3 点名 + 示范手）。浮现只在空台上发生；台上已有块又没影子时走数字岛的造型求助。
+- 伸出影子的第 3 下没有示范手（示范手只会搬托盘里的伙伴、台上的单块）。
+- 点名"把 3 放进影子里"取一种铺法里最大的一件（PRD 例句也是 3），不是阅读顺序第一件（那样火箭会先点 1）。
+- `SHAPE_ISLAND_GATE = 'none'` 需要改解锁（旁岛），PRD 没写；`SIDE_ISLANDS` 是 content 导出的新常量。
+- 测试数 +135（PRD 估 +60–90）。
+
+## 只能真机确认
+
+- 影子虚线（2.5px dashed、0.85 透明）在户外光下够不够显眼；亮格淡色与伙伴本色的区分。
+- 第一块放在影子外时影子"跳过去"会不会让孩子以为自己做错了（S1）。
+- 示范手搬进影子的落点：截图里 ghost 是动画中途，略低于发亮格，真机看最后落点。
+- 火箭过关发射 + 发射音；地图迷你图在 68px 站点里认不认得出（"狗那站"）。
+- iOS Safari 音频解锁（同前）。
+
+## 已知遗留 / 没做
+
+- `SANDBOX_DAILY_SHADOW`（沙盒今日造型，默认关）没做，也没留常量；旧形状站 `SHADOW_ON_OLD_SHAPE_STOPS` 没做（PRD §8 #14 默认"求助浮现"，需要给旧站加 `shadow`，会改指纹 → 另开版本）。
+- `PICTURE_PLACEMENT = 'fixed'` 判定分支没做（'anywhere' 是唯一实现，没加常量）。
+- 比一比岛（23c）。

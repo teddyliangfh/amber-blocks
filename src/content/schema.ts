@@ -53,6 +53,11 @@ export type QuestionSpec =
       // random: "the same 4, a new shape" (2026-10-15). Each step must be built;
       // the stop is solved when the last one is.
       readonly sequence?: boolean;
+      // Shape Island (Phase 23b, PRD §4.2): what the picture is (its name in
+      // the task and the success line, its own move when solved) and its
+      // shadow on the mat (ShadowSpec). Old shape stops have neither.
+      readonly picture?: PictureId;
+      readonly shadow?: ShadowSpec;
     }
   | {
       readonly kind: 'addition_exact';
@@ -107,6 +112,14 @@ export type QuestionSpec =
       readonly steps?: ReadonlyArray<number>;
     };
 
+// The pictures Shape Island names (copy `picture.<id>`).
+export type PictureId = 'mushroom' | 'duck' | 'tree' | 'boat' | 'house' | 'corner' | 'dog' | 'rocket';
+
+// A picture's shadow on the mat (PRD §4.2.3, SHADOW_POLICY): there from the
+// start ('always'), or only once help is asked for that many times on the
+// empty mat. Scenery: never judged, nothing snaps to it.
+export type ShadowSpec = 'always' | { readonly onHelp: 1 | 2 };
+
 export interface PuzzleRef {
   readonly contentVersion: number;
   readonly chapterId: ChapterId;
@@ -147,6 +160,9 @@ export interface Puzzle {
   // many go home in all. The question itself is the count left; a countdown's
   // steps are the counts left after each block goes.
   readonly takeAway?: { readonly start: number; readonly take: number };
+  // A Shape Island picture and its shadow (Phase 23b), from the spec.
+  readonly picture?: PictureId;
+  readonly shadow?: ShadowSpec;
   // All material, in the tray except a given partner, the partners on the mat
   // or a take-away / split stop's blocks (all on the mat); partners already defined with their shapes.
   readonly initial: BenchState;

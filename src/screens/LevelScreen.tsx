@@ -3,23 +3,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { LayoutChangeEvent } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Confetti, FONT, LEVEL_CHROME, MERGE_ON, Spotlight, Stage, THEME, cheerFor, colorsFor, computeGeometry, trayObjects, useBreathe, usePop } from '../blocks-ui';
+import { Confetti, FONT, Face, LEVEL_CHROME, MERGE_ON, PICTURE_PAD, Stage, THEME, cheerFor, colorsFor, computeGeometry, pictureBox, trayObjects, useBreathe, useNod, usePop, usePulse, useWobble } from '../blocks-ui';
+import type { CloudSize } from '../blocks-ui';
 import { BOSS_ENTRANCE, COUNT_TO_PASS, copyKey, format, hueFor, materialize, nodeId as makeNodeId } from '../content';
 import type { Lang, NodeId, Puzzle } from '../content';
 import type { BenchState, Command, UnitId } from '../core';
 import { chapterOf, nextNodeOf, statusOf } from '../progress';
 import { createCorrectionVoice } from './correction-voice';
-import { asksForHelp, biggestFirst, cardFor, feedbackFor, guidanceFor, helpAt, matchedFeedback, promptLine as taskLine, promptParams } from './hints';
+import { asksForHelp, biggestFirst, cardFor, feedbackFor, guidanceFor, helpAt, matchedFeedback, partsLine, partsOf, promptLine as taskLine, promptParams, shadowDemo } from './hints';
 import type { AskedHelp, Line } from './hints';
 import { AmberGuide } from './AmberGuide';
 import { AnswerFeedback } from './AnswerFeedback';
-import { Cloud, SkyCloud } from './Cloud';
+import { SkyCloud, TargetCloud } from './Cloud';
 import { Icon } from './icons';
 import type { IconName } from './icons';
-import { asideCells, atStart, cloudTitle, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, matOf, previewCommand, recount, solvedEquation, startSession, targetNumberOf, undoCommand, waysApart } from './level-session';
+import { asideCells, atStart, cloudTitle, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, matOf, previewCommand, recount, revealShadow, shadowView, solvedEquation, startSession, targetNumberOf, undoCommand, waysApart } from './level-session';
 import type { LevelSession } from './level-session';
 import { LevelRecovery } from './LevelRecovery';
 import { useProgress } from './progress-store';
@@ -54,6 +55,32 @@ export const SOLVE_SETTLE_MS = 600;
 // The first ask for help when the count is off numbers the blocks on the mat,
 // one this often, with the counting sound and no words (Phase 20 Q3).
 export const COUNT_UP_STEP_MS = 320;
+// "Look up here" (Phase 23-0, PRD §3.2): each opening of a stop (a new stop,
+// "play again", a new random puzzle) the cloud pops in from small, the shape
+// picture rocks, Amber leans towards it and a soft chime sounds, about a
+// second in all, once. Then, if nothing is touched for CLOUD_NUDGE_MS, the
+// cloud pulses twice with the chime a little quieter, at most CLOUD_NUDGE_MAX
+// times a visit; the first touch ends it, and the "like this" hand puts off
+// the one not yet due (the two never come together: 3.5 s, then the hand at
+// 5 s). A default for Ted (PRD §8 #20): 3500, or null for no reminder.
+export const CLOUD_NUDGE_MS: number | null = 3500;
+export const CLOUD_NUDGE_MAX = 2;
+// The opening's beats, ms in: the picture rocks, Amber leans.
+const LOOK_WOBBLE_AT = 300;
+const LOOK_LEAN_AT = 400;
+// How long the cloud's shadow stays deeper at the opening: through the pop,
+// or a whole second when motion is reduced (then nothing moves and this, with
+// the picture's thicker edge, is the whole "look here").
+const LOOK_FLASH_MS = 450;
+const LOOK_STILL_MS = 1000;
+// The shape picture's first block wears a face (a block's inner side, px) from
+// this size up: a standing ten's 11px cells are too small for one.
+const PICTURE_FACE_MIN = 10;
+// What the cloud shows once a Shape Island picture is right (PRD §4.2.6, §8
+// #12): 'count', the number (with its little picture), the parts said when
+// the card is tapped; 'parts', the parts written out (`3 + 1 + 1 + 1 = 6`).
+// A default for Ted: with the island before Join Island, no plus yet.
+export const SHAPE_CLOUD_ON_PASS: 'count' | 'parts' = 'count';
 
 function isBossStop(nodeId: NodeId): boolean {
   return chapterOf(nodeId).nodes.find((n) => n.id === nodeId)?.role === 'boss';
@@ -175,6 +202,32 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
   );
   useEffect(() => () => corrections.dispose(), [corrections]);
 
+  // The opening's "look here" (CLOUD_NUDGE_MS): one tick per opening.
+  const reduced = useReducedMotion();
+  const [looks, setLooks] = useState(0);
+  const entrance = usePop(looks, 1.4, 0.6);
+  const wobble = useWobble(looks, LOOK_WOBBLE_AT);
+  const [flash, setFlash] = useState(false);
+  useEffect(() => {
+    if (!flash) {
+      return;
+    }
+    const t = setTimeout(() => setFlash(false), reduced ? LOOK_STILL_MS : LOOK_FLASH_MS);
+    return () => clearTimeout(t);
+  }, [flash, looks, reduced]);
+  // Whether anything was touched since this opening; the reminders so far.
+  const [looked, setLooked] = useState(false);
+  const [cloudNudge, setCloudNudge] = useState(0);
+  const cloudNudges = useRef(0);
+  const nudgeCloud = usePulse(cloudNudge, 2);
+  const lookHere = useCallback(() => {
+    setLooks((n) => n + 1);
+    setFlash(true);
+    setLooked(false);
+    cloudNudges.current = 0;
+    play('look');
+  }, []);
+
   useEffect(() => {
     if (sessionRef.current?.whole === puzzle) {
       return;
@@ -188,6 +241,7 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
     // celebration (the host keeps it: a stop's album picture).
     onOpen(s);
     play('arrive');
+    lookHere();
     if (AUTO_SPEECH.prompt) {
       say(lang, puzzle.prompt, promptParams(puzzle));
     }
@@ -247,11 +301,33 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
 
   // Anything the child does puts the demo away and starts its wait again.
   const [demo, setDemo] = useState(0);
+  // The hand asked for at the top of a Shape Island picture's help (Phase 23b):
+  // shown for as long as the timed one, put away by any move.
+  const helpDemoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showHelpDemo = useCallback((asked: number) => {
+    if (helpDemoTimer.current !== null) {
+      clearTimeout(helpDemoTimer.current);
+    }
+    setDemo(DEMO_MAX + asked);
+    helpDemoTimer.current = setTimeout(() => {
+      helpDemoTimer.current = null;
+      setDemo(0);
+    }, DEMO_SHOWN_MS);
+  }, []);
+  useEffect(
+    () => () => {
+      if (helpDemoTimer.current !== null) {
+        clearTimeout(helpDemoTimer.current);
+      }
+    },
+    [],
+  );
   const [stirred, setStirred] = useState(0);
   const demos = useRef(0);
   const stir = useCallback(() => {
     setDemo(0);
     setStirred((n) => n + 1);
+    setLooked(true);
   }, []);
   // A "who's missing?" stop opens with a partner on the mat: that counts as empty here (Phase 19).
   const emptyMat = session !== null && atStart(session) && !session.verdict.matched;
@@ -287,6 +363,21 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
       clearTimeout(hide);
     };
   }, [emptyMat, menuOpen, stirred, firstStop]);
+  // The cloud's reminder: only while nothing has been touched, never while the
+  // hand shows (it waits again once the hand has gone) or the menu is open.
+  const openedRight = session?.verdict.matched ?? false;
+  useEffect(() => {
+    if (CLOUD_NUDGE_MS === null || looks === 0 || looked || openedRight || demo > 0 || menuOpen || cloudNudges.current >= CLOUD_NUDGE_MAX) {
+      return;
+    }
+    const wait = CLOUD_NUDGE_MS;
+    const t = setTimeout(() => {
+      cloudNudges.current += 1;
+      setCloudNudge((n) => n + 1);
+      play('look', 2);
+    }, wait);
+    return () => clearTimeout(t);
+  }, [looks, looked, openedRight, demo, menuOpen, cloudNudge]);
 
 
   // History (completedNodeIds) only unlocks the map. What the screen shows as
@@ -296,6 +387,7 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
       const before = sessionRef.current;
       sessionRef.current = next;
       setSession(next);
+      setLooked(true);
       // Blocks on or off mid-count: the numbers still queued are for another mat.
       if (before !== null && countWordsStale(before, next)) {
         voice.stop();
@@ -490,10 +582,11 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
     clearHelp();
     corrections.answer(null);
     play('arrive');
+    lookHere();
     if (AUTO_SPEECH.prompt) {
       say(lang, puzzle.prompt, promptParams(puzzle));
     }
-  }, [onReplay, puzzle, lang, corrections, dropSettle, clearHelp]);
+  }, [onReplay, puzzle, lang, corrections, dropSettle, clearHelp, lookHere]);
 
   // The help button and the feedback card ask for help. Help that has
   // something to correct climbs a rung each time it is asked on the same answer
@@ -508,6 +601,7 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
     }
     const f = feedbackFor(current);
     corrections.heard(f.detail);
+    setLooked(true);
     // Found the help on its own: no need to point at it any more this visit.
     nudged.current = true;
     const n = asksRef.current + 1;
@@ -515,6 +609,16 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
     if (asksForHelp(current, f)) {
       const help = helpAt(current, n);
       say(lang, help.line.key, help.line.params);
+      // Shape Island (Phase 23b): the shadow comes to help, drawn from now on;
+      // the hand shows the piece the line names.
+      if (help.reveal === true) {
+        const shown = revealShadow(current);
+        sessionRef.current = shown;
+        setSession(shown);
+      }
+      if (help.demo === true) {
+        showHelpDemo(n);
+      }
       if (help.countUp) {
         const bench = current.history.state.bench;
         setCountUp({ units: [...bench.keys()].sort((a, b) => bench.get(a)!.y - bench.get(b)!.y || bench.get(a)!.x - bench.get(b)!.x), shown: 0 });
@@ -525,6 +629,11 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
       const built = matchedFeedback(current);
       const card = nextLine(current);
       say(lang, built.key, built.params);
+      // A picture says what it is made of too: "3, 1, 1 and 1, 6 in all" (Phase 23b).
+      const parts = current.whole.picture === undefined ? null : partsLine(current);
+      if (parts !== null) {
+        say(lang, parts.key, parts.params, false);
+      }
       // (A card that already says what was built says it once.)
       if (card.key !== built.key || JSON.stringify(card.params) !== JSON.stringify(built.params)) {
         say(lang, card.key, card.params, false);
@@ -537,7 +646,7 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
     if (big !== null) {
       say(lang, big.line.key, big.line.params, false);
     }
-  }, [lang, corrections, boss, nextLine, setAskCount]);
+  }, [lang, corrections, boss, nextLine, setAskCount, showHelpDemo]);
 
   const onDragActive = useCallback(
     (active: boolean) => {
@@ -556,6 +665,7 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
 
   const onPrompt = useCallback(() => {
     corrections.activity();
+    setLooked(true);
     // A countdown's cloud says its current step (Phase 22); every other stop its own task.
     const current = sessionRef.current;
     const task = current === null ? { key: puzzle.prompt, params: promptParams(puzzle) } : taskLine(current);
@@ -590,11 +700,20 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
   const breathe = useBreathe(session?.verdict.matched ?? false);
   // The countdown's rocket (Phase 22): the launch sound goes with the second beat.
   const countdown = puzzle.takeAway !== undefined && puzzle.steps !== undefined;
+  // Shape Island's rocket launches too (Phase 23b).
+  const launches = (boss && countdown) || puzzle.picture === 'rocket';
   useEffect(() => {
-    if (celebration > 0 && boss && countdown) {
+    if (celebration > 0 && launches) {
       play('launch');
     }
-  }, [celebration, boss, countdown]);
+  }, [celebration, launches]);
+
+  // A stop asked in steps: the new picture nods as it comes up (no chime: the
+  // stop has not opened again).
+  const shown = session?.puzzle.display.template ?? null;
+  const pictureNod = useNod(shown === null ? null : shown.cells.map((c) => `${c.x},${c.y}`).join(' '));
+  // The picture is a partner-to-be: it breathes while there is still something to build.
+  const pictureBreathe = useBreathe(!(session?.verdict.matched ?? true), 300);
 
   if (session === null) {
     return <View style={[styles.root, { paddingTop: insets.top }]} />;
@@ -604,7 +723,8 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
   const card = cardFor(session, asks > 0 ? 2 : 0, true, guide?.line);
   const feedback = card.tone === 'success' ? { ...card, detail: host.next(session) } : card;
   // The stop as asked right now (the current step's picture on a stop in steps).
-  const title = solvedEquation(session) ?? cloudTitle(session);
+  const pictureParts = SHAPE_CLOUD_ON_PASS === 'parts' && session.verdict.matched && session.whole.picture !== undefined ? partsOf(session.history.state) : [];
+  const title = solvedEquation(session) ?? (pictureParts.length >= 2 ? `${pictureParts.join(' + ')} = ${targetNumberOf(session)}` : cloudTitle(session));
   const counting = countProgress(session);
   // The hand shows the first move of the reference answer: on a partner stop a
   // whole partner (never a decoy), on a loose stop one block. Past the first way
@@ -613,9 +733,13 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
   // "send the extra away" stop the extra, from the mat back to the tray (Phase 21).
   // On Take-away Island (Phase 22) the hand pulls a block of the row aside
   // (`move`, to its cell) or carries one home (`return`, demoBack).
-  const first = demoMove(session);
+  // At a Shape Island picture with its shadow drawn (Phase 23b) the hand puts
+  // the next piece into the shadow, where it goes.
+  const intoShadow = shadowDemo(session);
+  const first = intoShadow ?? demoMove(session);
   const demoPiece = first === undefined ? undefined : first.type === 'takeGroup' || first.type === 'returnGroup' ? (first.groupId as string) : first.type === 'take' || first.type === 'move' || first.type === 'return' ? (first.unitId as string) : undefined;
-  const demoTo = puzzle.given !== undefined && first?.type === 'takeGroup' ? first.origin : first?.type === 'move' ? first.to : undefined;
+  const demoTo =
+    intoShadow?.type === 'takeGroup' ? intoShadow.origin : intoShadow?.type === 'take' ? intoShadow.to : puzzle.given !== undefined && first?.type === 'takeGroup' ? first.origin : first?.type === 'move' ? first.to : undefined;
   const template = session.puzzle.display.template;
   const isBoss = boss;
   const solved = session.verdict.matched;
@@ -626,36 +750,59 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
   // Each number celebrates its own way; the 8 brick drives off, 17 stands and
   // waves, the countdown's last block launches (cheer.ts).
   const picture = session.puzzle.display.template;
-  const cheer = cheerFor(targetNumber, { boss: isBoss, countdown, shape: picture === null ? null : { w: Math.max(...picture.cells.map((c) => c.x)) + 1, h: Math.max(...picture.cells.map((c) => c.y)) + 1 } });
+  const cheer = cheerFor(targetNumber, { boss: isBoss, countdown, shape: picture === null ? null : { w: Math.max(...picture.cells.map((c) => c.x)) + 1, h: Math.max(...picture.cells.map((c) => c.y)) + 1 }, picture: session.whole.picture ?? null });
+  // A picture's shadow (Phase 23b): drawn while it is not right; help's cells glow in it.
+  const shadow = solved ? null : shadowView(session);
   // The number to make sits on a cloud; a boss cloud wears a star.
   // The whole cloud says the task again, not just the number on it (2026-10-16
   // review B-2: only the digit, 24px wide, answered a tap).
+  // The shape to build rides on the cloud beside the number (Phase 23-0, PRD
+  // §3.3), in the number's own colour with a face on its first block: the
+  // partner the child is to make, not an icon. A stop whose cloud shows an
+  // equation (or two) has no picture. Beside the number in landscape too: under
+  // it (PRD §3.3) the side column ran 42px past a 331px-high phone once solved.
+  const cloudSize: CloudSize = landscape ? 'side' : compact ? 'compact' : 'regular';
+  const showPicture = template !== null && /^\d+$/.test(title);
+  const box = template === null ? null : pictureBox(Math.max(...template.cells.map((c) => c.x)) + 1, Math.max(...template.cells.map((c) => c.y)) + 1, cloudSize);
+  const head = template === null ? null : [...template.cells].sort((a, b) => a.y - b.y || a.x - b.x)[0]!;
+  const templatePreview =
+    showPicture && box !== null ? (
+      <Animated.View style={wobble}>
+        <Animated.View style={pictureNod}>
+          <Animated.View style={pictureBreathe}>
+            <View style={[styles.templateBox, { width: box.width, height: box.height }]} testID="template-preview">
+              {template.cells.map((c) => (
+                <View
+                  key={`${c.x},${c.y}`}
+                  style={[styles.templateCell, { left: PICTURE_PAD + c.x * box.cell, top: PICTURE_PAD + c.y * box.cell, width: box.cell - 2, height: box.cell - 2, borderRadius: box.cell * 0.28, backgroundColor: targetColors.fill, borderColor: targetColors.edge }, flash && reduced ? styles.templateCellLook : null]}>
+                  {c === head && box.cell - 6 >= PICTURE_FACE_MIN ? <Face size={box.cell - 6} mood="calm" blush={targetColors.blush} /> : null}
+                </View>
+              ))}
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Animated.View>
+    ) : null;
+  // Three layers of motion: the opening's entrance, the reminder's pulse, the solve's pop.
   const badge = (
-    <Animated.View style={[styles.badgeWrap, small ? styles.badgeWrapCompact : null, pop]}>
-      <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPrompt} testID="prompt">
-        <Cloud small={small} tone={solved ? 'solved' : isBoss ? 'boss' : 'plain'}>
-          <Text
-            style={[styles.target, small ? styles.targetCompact : null, title.length > 2 ? (small ? styles.targetWideCompact : styles.targetWide) : null, title.length > 5 ? (small ? styles.targetEquationCompact : styles.targetEquation) : null, title.includes('\n') ? (small ? styles.targetTwoCompact : styles.targetTwo) : null]}>
-            {title}
-          </Text>
-        </Cloud>
-      </Pressable>
+    <Animated.View style={[styles.badgeWrap, entrance]} testID={`cloud-look-${looks}-${cloudNudge}`}>
+      <Animated.View style={nudgeCloud}>
+        <Animated.View style={pop}>
+          <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPrompt} testID="prompt">
+            {/* "Build it like the little picture": the cloud it rides on lights up. */}
+            <TargetCloud size={cloudSize} tone={solved ? 'solved' : isBoss ? 'boss' : 'plain'} flash={flash} spotlight={guide?.focus.template === true && templatePreview !== null}>
+              <Text
+                style={[styles.target, small ? styles.targetCompact : null, title.length > 2 ? (small ? styles.targetWideCompact : styles.targetWide) : null, title.length > 5 ? (small ? styles.targetEquationCompact : styles.targetEquation) : null, title.includes('\n') ? (small ? styles.targetTwoCompact : styles.targetTwo) : null]}>
+                {title}
+              </Text>
+              {templatePreview}
+            </TargetCloud>
+          </Pressable>
+        </Animated.View>
+      </Animated.View>
       {isBoss ? <Text pointerEvents="none" style={[styles.bossStar, small ? styles.bossStarCompact : null]}>★</Text> : null}
     </Animated.View>
   );
-  // The shape to build, drawn big enough to read at a glance (it was 11px a cell).
-  const step = landscape ? 15 : compact ? 16 : 20;
-  const templateSize = template === null ? null : { width: (Math.max(...template.cells.map((c) => c.x)) + 1) * step + 8, height: (Math.max(...template.cells.map((c) => c.y)) + 1) * step + 8 };
-  const templatePreview =
-    template !== null && templateSize !== null ? (
-      <View style={[styles.templateBox, templateSize]} testID="template-preview">
-        {template.cells.map((c) => (
-          <View key={`${c.x},${c.y}`} style={[styles.templateCell, { left: 4 + c.x * step, top: 4 + c.y * step, width: step - 2, height: step - 2, borderRadius: step * 0.28, backgroundColor: targetColors.fill, borderColor: targetColors.edge }]} />
-        ))}
-        {/* "Build it like the little picture": the picture the line means lights up. */}
-        {guide?.focus.template ? <Spotlight rect={{ x: 0, y: 0, ...templateSize }} radius={12} /> : null}
-      </View>
-    ) : null;
   // A COUNT_TO_PASS stop solved for the first time: the way on appears once
   // every block is counted (empty by default, see content/catalog).
   const countFirst = host.countToPass && !finishedBefore && solved && !counting.complete;
@@ -686,7 +833,10 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
   // Amber, whose words the card's tips are (D-098): she nods at each new tip
   // and at the card's nudge. The count's corner is hers only while nothing is counted.
   const tipCue = feedback.tone === 'adjust' ? `${JSON.stringify(feedback.title)}${JSON.stringify(feedback.detail)}#${nudge}` : null;
-  const guideOf = (size: number) => (countChip === null ? <AmberGuide size={size} cue={tipCue} /> : null);
+  // At the opening she leans towards the cloud: right of her in portrait, below her in landscape.
+  // Only while the opening lasts, so she does not lean again when she comes back (a count put away, the phone turned).
+  const lean = { tick: flash ? looks : 0, dx: landscape ? 0 : 6, dy: landscape ? 6 : 0, delay: LOOK_LEAN_AT };
+  const guideOf = (size: number) => (countChip === null ? <AmberGuide size={size} cue={tipCue} lean={lean} /> : null);
   const guideAt = compact ? LEVEL_CHROME.guide.compact : LEVEL_CHROME.guide.regular;
   const stage = (
     <View style={styles.stageArea} onLayout={onStageLayout} testID="stage">
@@ -725,6 +875,7 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
           // a cell lit for each block on the part of the mat being judged; past
           // a first way, off the way made (D-097).
           outline={host.entrance && !solved ? { n: targetNumber, lit: matOf(session).bench.size, made: asideCells(session) } : undefined}
+          shadow={shadow === null ? undefined : { n: targetNumber, cells: shadow.cells, lit: shadow.lit, glow: guide?.focus.cells ?? [] }}
           wink={counting.complete ? counts : 0}
         />
       ) : null}
@@ -740,7 +891,7 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
       ) : null}
     </View>
   );
-  const menuButton = <RoundButton label={<Icon name="menu" size={26} />} accessibilityLabel={text.menu} testID="menu" onPress={() => setMenuOpen(true)} />;
+  const menuButton = <RoundButton label={<Icon name="menu" size={26} />} accessibilityLabel={text.menu} testID="menu" onPress={() => { setLooked(true); setMenuOpen(true); }} />;
   const promptLine = (
     <AnswerFeedback feedback={feedback} lang={lang} onReplay={onAskHelp} narrow={landscape} compact={compact} nudge={nudge} />
   );
@@ -754,10 +905,7 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
             {menuButton}
           </View>
           {/* Side by side: the column has to fit a short landscape screen with the success buttons. */}
-          <View style={styles.sideTarget}>
-            {badge}
-            {templatePreview}
-          </View>
+          <View style={styles.sideTarget}>{badge}</View>
           {promptLine}
           <View style={styles.sideFill} />
           {actions}
@@ -768,7 +916,6 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
           <SkyCloud x={win.width - insets.right - (compact ? 112 : 128)} y={insets.top + (compact ? 56 : 74)} width={compact ? 38 : 46} flip />
           <View style={[styles.header, compact ? styles.headerCompact : null]} testID="level-header">
             {badge}
-            {templatePreview}
           </View>
           {promptLine}
         </>
@@ -1001,20 +1148,23 @@ const styles = StyleSheet.create({
   sideFill: { flex: 1 },
   sideTarget: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   badgeWrap: { alignItems: 'center' },
-  badgeWrapCompact: {},
   bossStar: { position: 'absolute', top: -2, left: -10, fontSize: 30, color: THEME.amber, textShadowColor: THEME.amberDeep, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   bossStarCompact: { top: 2, left: -8, fontSize: 24 },
-  target: { fontSize: 62, fontFamily: FONT.display, color: THEME.ink, lineHeight: 70 },
-  targetCompact: { fontSize: 48, lineHeight: 56 },
-  targetWide: { fontSize: 44, lineHeight: 52 },
-  targetWideCompact: { fontSize: 32, lineHeight: 40 },
-  targetEquation: { fontSize: 30, lineHeight: 38 },
-  targetEquationCompact: { fontSize: 22, lineHeight: 30 },
+  // Phase 23-0 (PRD §3.3): 62 → 72 on the bigger cloud (CLOUD.regular.number),
+  // 48 → 52 on a short phone and in landscape; equations and two ways grow with it.
+  target: { fontSize: 72, fontFamily: FONT.display, color: THEME.ink, lineHeight: 80 },
+  targetCompact: { fontSize: 52, lineHeight: 60 },
+  targetWide: { fontSize: 50, lineHeight: 58 },
+  targetWideCompact: { fontSize: 36, lineHeight: 44 },
+  targetEquation: { fontSize: 34, lineHeight: 42 },
+  targetEquationCompact: { fontSize: 25, lineHeight: 32 },
   // Two ways side by side, one a line (Phase 20 Q1): both inside the cloud.
-  targetTwo: { fontSize: 25, lineHeight: 32, textAlign: 'center' },
-  targetTwoCompact: { fontSize: 19, lineHeight: 25, textAlign: 'center' },
-  templateBox: { position: 'relative', borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.8)', boxShadow: `0 4px 0 ${THEME.skyDeep}` },
-  templateCell: { position: 'absolute', borderWidth: 1.5 },
+  targetTwo: { fontSize: 28, lineHeight: 36, textAlign: 'center' },
+  targetTwoCompact: { fontSize: 21, lineHeight: 27, textAlign: 'center' },
+  templateBox: { position: 'relative' },
+  templateCell: { position: 'absolute', borderWidth: 2 },
+  // The opening's "look here" with reduced motion: a thicker edge for a second.
+  templateCellLook: { borderWidth: 3 },
   cornerMenu: { position: 'absolute' },
   cornerGuide: { position: 'absolute' },
   cornerCount: { position: 'absolute', width: 76, alignItems: 'center' },

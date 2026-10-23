@@ -9,7 +9,8 @@ import type { Root } from 'react-dom/client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import type { StageProps } from '../blocks-ui';
-import { CONTENT_VERSION, chapterId, materialize, nodeId } from '../content';
+import { colorsFor } from '../blocks-ui';
+import { CONTENT_VERSION, chapterId, hueFor, materialize, nodeId } from '../content';
 import type { Command, GroupId } from '../core';
 import { STORAGE_KEY, UPGRADE_BACKUP_KEY, createInitialState, deserialize, memoryStorage, reduce, serialize } from '../progress';
 import n10Unfinished from '../progress/__fixtures__/archive-v1-phase11-n10-unfinished.json';
@@ -179,7 +180,7 @@ function badge(): string {
 // Every stop up to (not including) `upTo` is finished; the stop itself not yet entered.
 function unlockedTo(upTo: string, seed = 5): ProgressState {
   let s = createInitialState(seed);
-  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8'];
+  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n13', 'ch1-n7', 'ch1-n14', 'ch1-n8', 'ch1-n15', 'ch1-n9', 'ch1-n16', 'ch1-n10', 'ch1-n17', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n13', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8'];
   for (const id of order.slice(0, order.indexOf(upTo))) {
     const e = reduce(s, { type: 'enter', nodeId: nodeId(id) });
     const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
@@ -431,7 +432,7 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
     expect(has('next')).toBe(false);
     expect(container.querySelector('[data-testid="feedback-title"]')?.textContent).toBe('变个样子！');
     expect(previewWidth()).not.toBe(squareWidth);
-    expect(container.querySelector('[data-testid="template-preview"] [data-testid="spotlight"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="prompt"] [data-testid="spotlight"]')).not.toBeNull();
     expect(deserialize((await storage.getItem(STORAGE_KEY))!)!.completedNodeIds.has(nodeId('ch1-n6'))).toBe(false);
     for (const cmd of p.solution.slice(4)) {
       expect(await command(cmd)).toBe(true);
@@ -785,7 +786,7 @@ describe('LevelScreen integration (review P2 / teaching feedback)', () => {
     const storage = memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n3')) });
     await open(storage, 'ch1-n3');
     const units = [...puzzleFor('ch1-n3').initial.units.keys()];
-    const picture = () => container.querySelector('[data-testid="template-preview"] [data-testid="spotlight"]');
+    const picture = () => container.querySelector('[data-testid="prompt"] [data-testid="spotlight"]');
     jest.useFakeTimers();
     try {
       for (let i = 0; i < 4; i += 1) {
@@ -1516,6 +1517,136 @@ describe('Phase 22: Take-away Island on the level screen', () => {
     expect(nextText()).toBe('拿走岛完成了');
     await press('next');
     expect(mockRouter.replace).toHaveBeenLastCalledWith({ pathname: '/island/[chapterId]', params: { chapterId: 'ch3' } });
+    await flushSaves();
+  });
+});
+
+describe('Phase 23-0: the shape picture rides on the cloud', () => {
+  test('a shape stop: the picture is inside the cloud, in the number\'s colour, one face on its top-left block; the start card shows Amber', async () => {
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n3')) }), 'ch1-n3');
+    const cloud = container.querySelector('[data-testid="prompt"]')!;
+    const picture = cloud.querySelector('[data-testid="template-preview"]') as HTMLElement | null;
+    expect(picture).not.toBeNull();
+    // 28, 22 or 18px a cell, whichever cloud this window gets (CLOUD).
+    expect(['64px', '52px', '44px']).toContain(picture!.style.width);
+    const cells = [...picture!.children] as HTMLElement[];
+    expect(cells).toHaveLength(4);
+    const fill = colorsFor(hueFor(4)).fill;
+    for (const c of cells) {
+      expect(c.style.backgroundColor.replace(/\s/g, '')).toBe(hexToRgb(fill));
+    }
+    expect(picture!.querySelectorAll('[data-testid="face-calm"]')).toHaveLength(1);
+    expect(cells[0]!.querySelector('[data-testid="face-calm"]')).not.toBeNull();
+    expect(has('feedback-amber')).toBe(true);
+  });
+
+  test('a stop whose cloud is an equation has no picture, and neither has a quantity stop', async () => {
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch3-n2')) }), 'ch3-n2');
+    expect(has('template-preview')).toBe(false);
+    act(() => root.unmount());
+    root = createRoot(container);
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n2')) }), 'ch1-n2');
+    expect(has('template-preview')).toBe(false);
+    expect(badge()).toBe('2');
+  });
+});
+
+function hexToRgb(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgb(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255})`;
+}
+
+describe('Phase 23b: Shape Island on the level screen', () => {
+  const title = () => container.querySelector('[data-testid="feedback-title"]')?.textContent ?? '';
+  const detailText = () => container.querySelector('[data-testid="feedback-detail"]')?.textContent ?? '';
+  const at = (cells: ReadonlyArray<{ x: number; y: number }> | undefined) => (cells ?? []).map((c) => `${c.x},${c.y}`).join(' ');
+  // Number Island finished opens Shape Island (off the way: Join Island's stops are not needed).
+  const shapesTo = (upTo: string): ProgressState => {
+    let s = unlockedTo('ch2-n1');
+    for (const id of ['ch5-n1', 'ch5-n2', 'ch5-n3', 'ch5-n4', 'ch5-n5', 'ch5-n6', 'ch5-n7'].slice(0, Number(upTo.slice(5)) - 1)) {
+      const e = reduce(s, { type: 'enter', nodeId: nodeId(id) });
+      const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
+      if (!c.ok) {
+        throw new Error(c.reason);
+      }
+      s = c.value;
+    }
+    return { ...s, current: null };
+  };
+
+  test('ch5-n1: the mushroom\'s shadow in the middle of the mat; the task names it; help climbs to the 3 and the hand into the shadow', async () => {
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(shapesTo('ch5-n1')) }), 'ch5-n1');
+    expect(badge()).toBe('4');
+    expect(has('template-preview')).toBe(true);
+    expect(mockSaid).toEqual(['用 4 块拼成蘑菇']);
+    expect(title()).toBe('动手试试看');
+    expect(detailText()).toBe('把伙伴放进影子里');
+    expect(at(mockStage.current!.shadow?.cells)).toBe('1,1 2,1 3,1 2,2');
+    expect(mockStage.current!.shadow?.lit).toEqual([false, false, false, false]);
+    expect(mockStage.current!.shadow?.n).toBe(4);
+    expect(mockStage.current!.outline).toBeUndefined();
+    // The "like this" hand carries the 3 into the shadow.
+    expect(mockStage.current!.demoPiece).toBe(partnerOf('ch5-n1', 3));
+    expect(mockStage.current!.demoTo).toEqual({ x: 1, y: 1 });
+    mockSaid.length = 0;
+    await press('answer-feedback');
+    expect(at(mockStage.current!.shadow?.glow)).toBe('1,1 2,1 3,1 2,2');
+    await press('answer-feedback');
+    expect(mockStage.current!.spotlight).toEqual([partnerOf('ch5-n1', 3)]);
+    expect(at(mockStage.current!.shadow?.glow)).toBe('1,1 2,1 3,1');
+    expect(detailText()).toBe('把 3 放进影子里');
+    expect(mockStage.current!.demo ?? 0).toBe(0);
+    await press('answer-feedback');
+    expect(mockStage.current!.demo).toBeGreaterThan(0);
+    expect(mockSaid).toEqual(['把伙伴放进影子里', '把 3 放进影子里', '把 3 放进影子里']);
+    await flushSaves();
+  });
+
+  test('ch5-n1: the 3 put down beside the shadow brings it over; "the shadow is not full"; the 1 makes the mushroom: its name, its hop, its parts when the card is tapped', async () => {
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(shapesTo('ch5-n1')) }), 'ch5-n1');
+    expect(await command({ type: 'takeGroup', groupId: partnerOf('ch5-n1', 3), origin: { x: 0, y: 0 } })).toBe(true);
+    expect(at(mockStage.current!.shadow?.cells)).toBe('0,0 1,0 2,0 1,1');
+    expect(mockStage.current!.shadow?.lit).toEqual([true, true, true, false]);
+    expect(title()).toBe('影子还没填满');
+    expect(detailText()).toBe('还差这里');
+    expect(mockStage.current!.mood).toBe('calm');
+    mockSaid.length = 0;
+    expect(await command({ type: 'takeGroup', groupId: partnerOf('ch5-n1', 1), origin: { x: 1, y: 1 } })).toBe(true);
+    expect(title()).toBe('拼对啦！');
+    expect(mockSaid).toEqual(['蘑菇拼好了！']);
+    expect(mockStage.current!.shadow).toBeUndefined();
+    await beat();
+    expect(mockStage.current!.cheer).toBe('hop');
+    expect(badge()).toBe('4');
+    mockSaid.length = 0;
+    await press('answer-feedback');
+    expect(mockSaid).toEqual(['蘑菇拼好了！', '3 和 1，一共 4 块', '可以去下一站啦']);
+    await flushSaves();
+  });
+
+  test('ch5-n8 (boss): no shadow at first; the second ask brings it; the third names the 3 with the hand; the rocket blasts off', async () => {
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(shapesTo('ch5-n8')) }), 'ch5-n8');
+    expect(mockStage.current!.shadow).toBeUndefined();
+    expect(detailText()).toBe('照着小图拼小火箭');
+    mockSaid.length = 0;
+    await press('answer-feedback');
+    expect(mockStage.current!.shadow).toBeUndefined();
+    await press('answer-feedback');
+    expect(mockStage.current!.shadow?.cells).toHaveLength(6);
+    expect(detailText()).toBe('影子来帮忙啦');
+    await press('answer-feedback');
+    expect(mockSaid).toEqual(['照着小图拼小火箭', '影子来帮忙啦', '把 3 放进影子里']);
+    expect(mockStage.current!.demo).toBeGreaterThan(0);
+    expect(mockStage.current!.demoPiece).toBe(partnerOf('ch5-n8', 3));
+    // Once come, the shadow stays (the card's opening line is the shadow's now).
+    const p = puzzleFor('ch5-n8');
+    mockSaid.length = 0;
+    for (const cmd of p.solution) {
+      await command(cmd);
+    }
+    expect(mockSaid).toContain('小火箭，发射！');
+    await beat();
+    expect(mockStage.current!.cheer).toBe('launch');
     await flushSaves();
   });
 });

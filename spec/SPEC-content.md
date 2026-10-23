@@ -167,7 +167,7 @@ export const COPY: Readonly<Record<string, CopyEntry>>;   // key → 双语文�
 - **文案**：`COPY` 每个 key 都有 zh 与 en；`params` 在两种语言的占位符集合一致；`format` 缺参抛错（AC-17）。
 - **纯度**：`src/content` 不 import RN / DOM；`hue` 不参与任何算术或判定。
 
-目录（`catalog/`，内容版本 8，2026-10-19；版本历史见 `catalog/index.ts` 的 `CONTENT_CHANGES`：v2 10 / 12 / 17 加诱饵，v3 工作台按材料，v4 5–9 站重排，v5 5 站五块单块，v6 合体岛 5–7 改"还差谁"、新增 8 站"两种拼法"，v7 合体岛插入 n9–n12 四站、原 20 站一字不变、`CONTENT_CHANGES[7] = []`，v8 追加拿走岛 ch3 八站、原 24 站一字不变、`CONTENT_CHANGES[8] = []`）。合体岛按地图顺序列出：
+目录（`catalog/`，内容版本 10，2026-10-23；地图顺序 ch1 → ch5 → ch2 → ch3（`SHAPE_ISLAND_POSITION = 'after-ch1'`），v10 加造型岛 ch5；版本历史见 `catalog/index.ts` 的 `CONTENT_CHANGES`：v2 10 / 12 / 17 加诱饵，v3 工作台按材料，v4 5–9 站重排，v5 5 站五块单块，v6 合体岛 5–7 改"还差谁"、新增 8 站"两种拼法"，v7 合体岛插入 n9–n12 四站、原 20 站一字不变、`CONTENT_CHANGES[7] = []`，v8 追加拿走岛 ch3 八站、原 24 站一字不变、`CONTENT_CHANGES[8] = []`，v9 在数字岛插 5 站、合体岛插 1 站新造型（ch1-n13 – n17、ch2-n13，Phase 23a，D-110）、原 32 站一字不变、`CONTENT_CHANGES[9] = []`）。新模板在 `catalog/shapes.ts`：`T_4` 蘑菇、`S_4` 闪电、`L_4` 靴子（躺着写）、`PLUS_5`、`RING_8`、`SQUARE_3X3`、`TEN_STANDING`（2 宽 5 高）、`STAIRS_10`；伙伴拼的图按横排伙伴铺得满的朝向写。`SINGLES_DRAG_CAP = 6`（`chapter-1.ts`）：单块造型站参考解拖数（含每步挪动）上限，目录测试逐站查。合体岛按地图顺序列出：
 
 | 章 | 节点 | role | spec |
 |---|---|---|---|
@@ -176,12 +176,25 @@ export const COPY: Readonly<Record<string, CopyEntry>>;   // key → 双语文�
 | ch1 | n4 | boss | quantity_shape 3，转角 |
 | ch1 | n5 | normal | quantity 5，handles [3]，extra 3（握把 3 + 五块单块，数单块也能拼到 5；内容版本 5，2026-10-16 测评 A-6） |
 | ch1 | n6 | normal | quantity_shape 4，先 2×2 再 1×4（sequence，同一站两步，D-044） |
+| ch1 | n13 | normal | quantity_shape 4，`T_4` → `S_4` → `L_4`（sequence 三步，每步挪一块），symmetry 转开镜开（`MIRROR_FOR_CHIRAL`），extra 2（"4 的三副面孔"，内容版本 9，D-110） |
 | ch1 | n7 | normal | quantity_shape 6，2×3 塔 |
+| ch1 | n14 | normal | quantity_shape 5，`PLUS_5`，单块，extra 2（内容版本 9） |
 | ch1 | n8 | boss | quantity_shape 8，2×4 砖，handles [4, 4]，decoys [3]，extra 1（D-044） |
+| ch1 | n15 | normal | quantity_shape 8，`RING_8`，handles [3, 3, 1, 1]，decoys [2]，extra 1（甜甜圈；3 + 3 + 2 凑得出 8 但铺不出，内容版本 9） |
 | ch1 | n9 | normal | quantity 9，handles [5, 4]，decoys [3]（D-044） |
+| ch1 | n16 | normal | quantity_shape 9，`SQUARE_3X3`，handles [3, 3, 3]，decoys [4]，extra 1（大方块，内容版本 9） |
 | ch1 | n10 | normal | quantity 10，handles [5, 5]，decoys [4] |
+| ch1 | n17 | normal | quantity_shape 10，`TEN_STANDING`，symmetry 不转不镜（`TEN_UPRIGHT`），handles [2, 2, 2, 2, 2]，decoys [3]，extra 1，**`bounds` 6 × 5 写在站上**（拟合会给 6 × 6，内容版本 9） |
 | ch1 | n11 | normal | quantity 12，handles [10, 2]，decoys [3] |
 | ch1 | n12 | boss | quantity 17，handles [10, 5, 2]，decoys [4] |
+| ch5 造型岛 | n1 | normal | quantity_shape 4，`T_4` 蘑菇，handles [3, 1]，decoys [2]，extra 1，`picture: 'mushroom'`，`shadow: 'always'`（内容版本 10，Phase 23b，D-112） |
+| ch5 | n2 | normal | quantity_shape 5，`DUCK_5` 小鸭，`PICTURE_SYMMETRY` 转关镜开，handles [4, 1]，decoys [2]，extra 1，影子常显（拟合 6 × 3） |
+| ch5 | n3 | normal | quantity_shape 5，`TREE_5` 小树，handles [3, 1, 1]，decoys [2]（3 + 2 铺不出），影子常显 |
+| ch5 | n4 | boss | quantity_shape 5，`BOAT_5` 小船，handles [3, 1, 1]，decoys [2, 4]（3 + 2、4 + 1 都铺不出），影子常显 |
+| ch5 | n5 | normal | quantity_shape 7，`HOUSE_7` 小房子，handles [1, 3, 3]，decoys [2]，影子常显 |
+| ch5 | n6 | normal | quantity_shape 5，`CORNER_5` → `BOAT_5_C`（sequence，单块 5 + extra 1，挪一块），`picture: 'boat'`，影子常显（第二步影子以第一步的块的左上角为原点） |
+| ch5 | n7 | normal | quantity_shape 6，`DOG_6` 小狗，转关镜开，handles [3, 1, 1, 1]，decoys [2]（3 + 2 + 1 铺不出），`shadow: { onHelp: 1 }` |
+| ch5 | n8 | boss | quantity_shape 6，`ROCKET_6` 小火箭，handles [3, 1, 1, 1]，decoys [2]，`shadow: { onHelp: 2 }` |
 | ch2 合体岛 | n1 / n2 / n3 | normal | addition_exact 1+1 / 2+1 / 2+2，干扰 [3] / [4] / [3, 1] |
 | ch2 | n9 | normal | quantity_shape 10，`TEN_2X5`，symmetry 不转向（`TEN_LYING`），handles [5, 5]，decoys [4]，extra 1（两个 5 叠成十，内容版本 7） |
 | ch2 | n4 | boss | sum_composition 5，allowed [[2,3],[4,1]]，干扰 [5] |
@@ -189,6 +202,7 @@ export const COPY: Readonly<Record<string, CopyEntry>>;   // key → 双语文�
 | ch2 | n5 | normal | sum_composition 5，given 2，allowed [[2,3]]，干扰 [1, 4]（还差谁，内容版本 6） |
 | ch2 | n6 | normal | sum_composition 6，given 4，allowed [[4,2]]，干扰 [1, 3]（还差谁） |
 | ch2 | n11 | normal | quantity_shape 6，`STAIRS_6`，handles [1, 2, 3]，decoys [4]，extra 1（三个伙伴搭楼梯，内容版本 7） |
+| ch2 | n13 | normal | quantity_shape 10，`STAIRS_10`，handles [1, 2, 3, 4]，decoys [5]，extra 1（大楼梯；5 + 4 + 1、5 + 3 + 2 凑得出 10 但铺不出，内容版本 9） |
 | ch2 | n7 | normal | sum_composition 7，given 3，allowed [[3,4]]，干扰 [2, 5]（还差谁） |
 | ch2 | n12 | normal | sum_composition 13，given 10，allowed [[10,3]]，干扰 [2, 4]（十几，内容版本 7） |
 | ch2 | n8 | boss | sum_composition 7，allowed [[3,4],[5,2]]，ways 2，干扰 [1]（两种拼法；托盘 3、4、5、2、1 里能凑出 7 的恰好这两对） |
@@ -215,11 +229,13 @@ export const COPY: Readonly<Record<string, CopyEntry>>;   // key → 双语文�
 
 拿走岛核对（catalog 测试，Phase 22）：数都 ≤ 7、`start − take ≥ 1`；n6 / n7 按大小只有一组伙伴等于 take（n7 的两个 2 是 4 块）；n4 的 ways 不多于 floor(5 / 2)；每站参考解步数 1 / 1 / 1 / 2 / 2 / 1 / 1 / 4。工作台（`fitBench`，那一排加 1 格余量，与送走站的"原样放下"不同）：4×3 / 5×3 / 5×3 / 6×3 / 6×3 / 7×3 / 8×3 / 6×3。
 
+造型岛（Phase 23b，D-112 – D-120）：`quantity_shape` 可带 `picture?: PictureId`（`mushroom | duck | tree | boat | house | corner | dog | rocket`）与 `shadow?: 'always' | { onHelp: 1 | 2 }`（`SHADOW_POLICY`，`catalog/chapter-5.ts`），`Puzzle` 原样带出；有 `picture` 且不是序列时开站句是 `prompt.picture.<id>`。`validate` 新规则：影子要有图、`onHelp` 只能 1 / 2、每步模板按写法放得进台、`picture` / `shadow` 只来自造型规格；所有带诱饵的造型站，只由伙伴组成、含诱饵、和 = 目标的组合铺得出图就抛错（`partnersTile`，伙伴不转）。`SHAPE_ISLAND_GATE = 'none'` → `SIDE_ISLANDS = {ch5}`（progress 的 `openerOf` 读它，旁岛不挡后面的岛）。随机题透传 `picture` / `shadow`（`CHALLENGE_SHADOW = 'as-stop'`；序列里非最后一张不带）。
+
 `ISLAND_SHOWCASE`（2026-10-19，`catalog/index.ts`，D-099）：岛收尾页展示的站（没列的岛展示最后一个 Boss）；默认拿走岛展示 n4（5 的两种拆法），不展示倒数剩下的一个 1。只是展示，由岛收尾页读。
 
 `BOSS_ENTRANCE`（2026-10-18，`catalog/index.ts`，D-094）：Boss 登场的站，默认合体岛两个 Boss（ch2-n4、ch2-n8）。只是展示（虚线轮廓、睡脸、亮格），由关卡页读，判题、存档都不看它。
 
-自由玩随机题（Phase 21，`challenge.ts`，D-095）：`nextChallenge(已完成的站, 种子, 上一题?)` → `{ kind, n, spec, puzzle }`。纯函数：随机数只来自界面传入的种子（`mulberry32(fnv1a('challenge|' + seed))`），content 里不用 `Math.random`。规则集中在 `CHALLENGE_RULES`（待 Ted 拍板）：上限 = 已完成站里最大的数（数量站目标、造型站块数、加法 / 自由和的和），不小于 3（一站没完成时就是 3）；数字题总是有，目标 1 到上限，超过 6 用 `handlesFor` 握把 + 一个 2–5 的诱饵（不与握把同尺寸），extra 2；图形题在 ch1-n3 完成后才有，只出已完成造型站里的模板（每个模板一题，沿用那一站的 extra / symmetry / handles / decoys），块数不超过上限；加法题在 ch2-n1 完成后才有，a、b ≥ 1，a + b ≤ min(上限, 10)，再加一个 1–5、与 a、b 都不同的干扰伙伴。先等概率选题型，再在题型里等概率选题；与上一题同题型同数的题先剔除。生成用 `materializeNode(合成节点, fitBench(spec), ref)`，ref 的章是 `challenge`、站是 `challenge-<题型>-<数>`、版本是当前 `CONTENT_VERSION`；每道题照常过 `validate`。
+自由玩随机题（Phase 21，`challenge.ts`，D-095）：`nextChallenge(已完成的站, 种子, 上一题?)` → `{ kind, n, spec, puzzle }`。纯函数：随机数只来自界面传入的种子（`mulberry32(fnv1a('challenge|' + seed))`），content 里不用 `Math.random`。规则集中在 `CHALLENGE_RULES`（待 Ted 拍板）：上限 = 已完成站里最大的数（数量站目标、造型站块数、加法 / 自由和的和），不小于 3（一站没完成时就是 3）；数字题总是有，目标 1 到上限，超过 6 用 `handlesFor` 握把 + 一个 2–5 的诱饵（不与握把同尺寸），extra 2；图形题在 ch1-n3 完成后才有，只出已完成造型站里的模板（每个模板一题，沿用那一站的 extra / symmetry / handles / decoys），块数不超过上限；加法题在 ch2-n1 完成后才有，a、b ≥ 1，a + b ≤ min(上限, 10)，再加一个 1–5、与 a、b 都不同的干扰伙伴。先等概率选题型，再在题型里等概率选题；与上一题同题型同数的题先剔除。生成用 `materializeNode(合成节点, fitBench(spec), ref)`，ref 的章是 `challenge`、站是 `challenge-<题型>-<数>`、版本是当前 `CONTENT_VERSION`；每道题照常过 `validate`。站上写了 `bounds` 的（ch1-n17 站着的十）随机题沿用它，不用 `fitBench`（D-111）。
 
 `COUNT_TO_PASS`（2026-10-16，`catalog/index.ts`，D-062）：一组站，第一次拼对后要把工作台上的块都数一遍才出现"下一站"。**默认是空集**，要不要启用、哪些站由 Ted 决定；候选是 5 个 Boss（ch1-n4、n8、n12，ch2-n4、n8；内容版本 6 起合体岛 Boss 是 ch2-n8）。
 

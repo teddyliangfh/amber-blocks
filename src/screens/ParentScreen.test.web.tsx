@@ -60,7 +60,8 @@ describe('parent area after a content upgrade', () => {
   test('names the stops that start fresh and says finished stops are kept', async () => {
     await open(JSON.stringify(ch1Finished));
     expect(text('storage-status')).toBe('题库更新过，存档已自动升级，完成记录和语言都保留。');
-    expect(text('storage-upgraded')).toBe('这些站更新过，之前摆的作品放不下了，已收起（完成记录还在），下次进去从头摆：数字岛 第 10 站、数字岛 第 12 站');
+    expect(text('storage-upgraded')).toBe('这些站更新过，之前摆的作品放不下了，已收起（完成记录还在），下次进去从头摆：数字岛 第 14 站、数字岛 第 17 站');
+    // (ch1-n10 and ch1-n12, counted in map order: 14th and 17th since Phase 23a.)
   });
 
   test('a save already on the current puzzles says nothing about upgrades', async () => {
@@ -73,10 +74,12 @@ describe('parent area after a content upgrade', () => {
     await open(JSON.stringify(v6AllFinished));
     expect(text('storage-status')).toBe('进度会自动保存在这台设备的浏览器里。');
     expect(text('storage-upgraded')).toBeNull();
-    // Twelve Join Island chips, each with its number; play rests on the first new stop, 4th on the island.
+    // Join Island chips (thirteen since Phase 23a), each with its number; play
+    // rests on the first new stop: ch2-n9, 4th on the island, before version 9;
+    // Phase 23a's ch1-n13, 7th on Number Island, since.
     const chips = [...container.querySelectorAll('[data-testid^="start-ch2-n"]')].map((c) => c.textContent);
-    expect(chips).toEqual(['1+1', '2+1', '2+2', '10', '5', '7', '5', '6', '6', '7', '13', '7']);
-    expect(text('start-chosen')).toBe('现在从 合体岛 第 4 站 开始');
+    expect(chips).toEqual(['1+1', '2+1', '2+2', '10', '5', '7', '5', '6', '6', '10', '7', '13', '7']);
+    expect(text('start-chosen')).toBe('现在从 数字岛 第 7 站 开始');
   });
 
   test('review K: the map is reached from here, not from the child menu', async () => {

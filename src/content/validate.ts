@@ -1,5 +1,5 @@
 import { DEFAULT_SYMMETRY, apply, areTouching, assertInvariants, clusters, groupSize, judge, variants } from '../core';
-import type { BenchState, Bounds, Cell, Group } from '../core';
+import type { BenchState, Bounds, Cell, Group, Question, ShapeTemplate, Symmetry } from '../core';
 import { holdsMaterial } from './bench';
 import { assertDistractors } from './distractors';
 import type { Puzzle, QuestionSpec } from './schema';
@@ -29,6 +29,72 @@ function assertDistinctPartners(groups: ReadonlyArray<Group>, sizes: ReadonlyArr
       throw new Error(`content: no distinct partner of size ${size} for the answer`);
     }
     pool.splice(index, 1);
+  }
+}
+
+// Can these partners, all of them, each moved but never turned (a partner is
+// rigid), cover an accepted turn of the picture exactly? (screens/hints.ts
+// `covers` asks the same with single blocks too.)
+function partnersTile(shapes: ReadonlyArray<ReadonlyArray<Cell>>, template: ShapeTemplate, symmetry: Symmetry): boolean {
+  const key = (c: Cell) => `${c.x},${c.y}`;
+  return variants(template, symmetry).some((cells) => {
+    const inside = new Set(cells.map(key));
+    const order = [...cells].sort((a, b) => a.y - b.y || a.x - b.x);
+    const place = (left: ReadonlyArray<ReadonlyArray<Cell>>, taken: ReadonlySet<string>): boolean => {
+      const next = order.find((c) => !taken.has(key(c)));
+      if (next === undefined) {
+        return left.length === 0;
+      }
+      return left.some((shape, i) => {
+        const head = [...shape].sort((a, b) => a.y - b.y || a.x - b.x)[0]!;
+        const mine = shape.map((c) => key({ x: c.x - head.x + next.x, y: c.y - head.y + next.y }));
+        return mine.every((k) => inside.has(k) && !taken.has(k)) && place(left.filter((_, j) => j !== i), new Set([...taken, ...mine]));
+      });
+    };
+    return place(shapes, new Set());
+  });
+}
+
+// A picture built from partners with decoys (PRD §4.2.1): every set of
+// partners alone that makes the count and takes in a decoy cannot make the
+// picture, so a decoy is never a second right answer. (With a spare single
+// block standing in for a partner it may; that is a right answer too.)
+function assertDecoysMiss(spec: Extract<QuestionSpec, { kind: 'quantity_shape' }>, question: Extract<Question, { kind: 'quantity_shape' }>, groups: ReadonlyArray<Group>): void {
+  const handles = [...(spec.handles ?? [])];
+  const isDecoy = (g: Group, used: number[]): boolean => {
+    const i = used.indexOf(groupSize(g));
+    if (i === -1) {
+      return true;
+    }
+    used.splice(i, 1);
+    return false;
+  };
+  const sets = groups.reduce<ReadonlyArray<ReadonlyArray<Group>>>((all, g) => [...all, ...all.map((set) => [...set, g])], [[]]);
+  for (const set of sets) {
+    const used = [...handles];
+    const withDecoy = set.map((g) => isDecoy(g, used)).some(Boolean);
+    if (withDecoy && set.reduce((a, g) => a + groupSize(g), 0) === question.target && partnersTile(set.map((g) => g.shape), question.template, question.symmetry ?? DEFAULT_SYMMETRY)) {
+      throw new Error(`content: ${set.map(groupSize).join(' + ')} takes in a decoy and makes the picture too`);
+    }
+  }
+}
+
+// A picture's shadow (Phase 23b): on a picture, as written in the middle of
+// the mat; and a shadow on the mat from the start comes with a picture.
+function assertShadow(spec: Extract<QuestionSpec, { kind: 'quantity_shape' }>, puzzle: Puzzle): void {
+  if (spec.shadow === undefined) {
+    return;
+  }
+  if (spec.picture === undefined) {
+    throw new Error('content: a shadow comes with a picture');
+  }
+  if (spec.shadow !== 'always' && spec.shadow.onHelp !== 1 && spec.shadow.onHelp !== 2) {
+    throw new Error('content: a shadow comes on the first or second ask for help');
+  }
+  for (const step of puzzle.steps ?? [puzzle.question]) {
+    if (step.kind !== 'quantity_shape' || !fits(step.template.cells, puzzle.initial.bounds)) {
+      throw new Error('content: a shadow does not fit the bench as written');
+    }
   }
 }
 
@@ -295,6 +361,12 @@ export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
             throw new Error('content: a template variant does not fit the bench');
           }
         }
+        if (spec.kind === 'quantity_shape') {
+          if (spec.decoys !== undefined && spec.decoys.length > 0) {
+            assertDecoysMiss(spec, question, [...initial.groups.values()]);
+          }
+          assertShadow(spec, puzzle);
+        }
       }
       break;
     }
@@ -329,6 +401,9 @@ export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
   }
   if (puzzle.onMat !== undefined && spec.kind !== 'sum_composition' && spec.kind !== 'take_away') {
     throw new Error('content: partners on the mat come from a sum or take-away spec');
+  }
+  if ((puzzle.picture !== undefined || puzzle.shadow !== undefined) && spec.kind !== 'quantity_shape') {
+    throw new Error('content: a picture and its shadow come from a shape spec');
   }
   if ((puzzle.takeAway !== undefined) !== (spec.kind === 'take_away')) {
     throw new Error('content: a take-away puzzle comes from a take-away spec');

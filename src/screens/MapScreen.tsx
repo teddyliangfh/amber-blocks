@@ -58,6 +58,43 @@ const SHOAL = 8;
 // The trail starts below the island's sign, with room for the marker over the first stop.
 const TRAIL_TOP = 76;
 
+// How a Shape Island stop shows itself on the map (PRD §4.2.2, §8 #13):
+// 'picture', its picture drawn small (the last one of a stop in steps), so a
+// child who cannot read finds "the dog one"; 'number', its number as on every
+// other island. Only Shape Island's pictures: Number Island's picture stops
+// keep their numbers. A default for Ted.
+export const MAP_SHAPE_LABEL: 'picture' | 'number' = 'picture';
+
+// The picture a stop shows on the map instead of its number, if it does.
+export function mapPictureOf(node: NodeSpec): ReadonlyArray<{ readonly x: number; readonly y: number }> | null {
+  const s = node.spec;
+  if (MAP_SHAPE_LABEL !== 'picture' || s.kind !== 'quantity_shape' || s.picture === undefined) {
+    return null;
+  }
+  return s.templates[s.templates.length - 1]!.cells;
+}
+
+// A picture on a stop: its cells, as big as fit the middle of the stop (no
+// more than MAP_PICTURE_CELL), white on the stop's colour, the first one
+// wearing the stop's face.
+const MAP_PICTURE_CELL = 16;
+function MiniPicture({ cells, size, edge, blush, mood, blink }: { readonly cells: ReadonlyArray<{ readonly x: number; readonly y: number }>; readonly size: number; readonly edge: string; readonly blush: string; readonly mood: 'happy' | 'sleepy' | 'calm'; readonly blink: boolean }) {
+  const cols = Math.max(...cells.map((c) => c.x)) + 1;
+  const rows = Math.max(...cells.map((c) => c.y)) + 1;
+  const room = size * 0.66;
+  const unit = Math.min(MAP_PICTURE_CELL, Math.floor(room / cols), Math.floor(room / rows));
+  const head = [...cells].sort((a, b) => a.y - b.y || a.x - b.x)[0]!;
+  return (
+    <View pointerEvents="none" testID="stop-picture" style={{ position: 'absolute', left: (size - cols * unit) / 2 - 3, top: (size - rows * unit) / 2 - 4, width: cols * unit, height: rows * unit }}>
+      {cells.map((c) => (
+        <View key={`${c.x},${c.y}`} style={[styles.miniCell, { left: c.x * unit, top: c.y * unit, width: unit - 1, height: unit - 1, borderRadius: unit * 0.28, borderColor: edge }]}>
+          {c === head && unit >= 12 ? <Face size={unit - 3} mood={mood} blush={blush} blink={blink} /> : null}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export function labelOf(node: NodeSpec): { label: string; number: number } {
   const s = node.spec;
   switch (s.kind) {
@@ -169,6 +206,8 @@ function StopDot({
   const size = boss ? BOSS : STOP;
   const border = 3;
   const face = size * 0.62;
+  const picture = mapPictureOf(node);
+  const mood = done ? 'happy' : locked || dozing ? 'sleepy' : 'calm';
   const onLocked = () => {
     play('blocked');
     if (!reduced) {
@@ -202,10 +241,16 @@ function StopDot({
               boxShadow: `inset 0 -6px 0 rgba(0,0,0,${locked ? 0.06 : 0.14}), inset 0 4px 0 rgba(255,255,255,0.4), 0 ${pressed && !locked ? 2 : 5}px 0 rgba(27,42,58,0.18)`,
             },
           ]}>
-          <View pointerEvents="none" style={{ position: 'absolute', left: (size - 2 * border - face) / 2, top: -face * 0.04, width: face, height: face }}>
-            <Face size={face} mood={done ? 'happy' : locked || dozing ? 'sleepy' : 'calm'} blush={colors.blush} blink={!locked && !done && !dozing} />
-          </View>
-          <Text style={[styles.stopLabel, { color: locked ? colors.deep : THEME.faceInk, fontSize: label.length > 2 ? size * 0.27 : size * 0.36, lineHeight: size * 0.4, top: size * 0.47 }]}>{label}</Text>
+          {picture !== null ? (
+            <MiniPicture cells={picture} size={size} edge={colors.edge} blush={colors.blush} mood={mood} blink={!locked && !done && !dozing} />
+          ) : (
+            <>
+              <View pointerEvents="none" style={{ position: 'absolute', left: (size - 2 * border - face) / 2, top: -face * 0.04, width: face, height: face }}>
+                <Face size={face} mood={mood} blush={colors.blush} blink={!locked && !done && !dozing} />
+              </View>
+              <Text style={[styles.stopLabel, { color: locked ? colors.deep : THEME.faceInk, fontSize: label.length > 2 ? size * 0.27 : size * 0.36, lineHeight: size * 0.4, top: size * 0.47 }]}>{label}</Text>
+            </>
+          )}
         </Pressable>
       </Animated.View>
       {done ? (
@@ -507,6 +552,7 @@ const styles = StyleSheet.create({
   stone: { position: 'absolute', width: 14, height: 9, borderRadius: 4.5, backgroundColor: THEME.sandDeep, opacity: 0.75 },
   stop: { alignItems: 'center', overflow: 'hidden' },
   stopLabel: { position: 'absolute', fontFamily: FONT.display, textAlign: 'center' },
+  miniCell: { position: 'absolute', backgroundColor: THEME.white, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   check: { position: 'absolute', right: -7, top: -7, width: 26, height: 26, borderRadius: 13, backgroundColor: THEME.leafDeep, borderWidth: 2, borderColor: THEME.white, alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 0 rgba(27,42,58,0.2)' },
   checkText: { color: THEME.white, fontFamily: FONT.display, fontSize: 15, lineHeight: 18 },
   // A boss wears a star sticker on its corner (the marker owns the space above).

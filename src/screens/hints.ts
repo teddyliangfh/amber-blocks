@@ -1,9 +1,11 @@
 import { CHAPTERS, copyKey, nodeId } from '../content';
 import type { CopyKey, NodeId, Puzzle } from '../content';
 import { DEFAULT_SYMMETRY, areTouching, clusters, variants } from '../core';
-import type { BenchState, Cell, Group, Question, UnitId } from '../core';
-import { demoMove, matOf, onlyGiven, onlyOnMat, onlyPreset, roomBeside, sameWayAgain, solvedParts, takeAwayAt } from './level-session';
+import type { BenchState, Cell, Command, Group, GroupId, Question, UnitId } from '../core';
+import { demoMove, matOf, onlyGiven, onlyOnMat, onlyPreset, roomBeside, sameWayAgain, shadowView, solvedParts, takeAwayAt } from './level-session';
 import type { LevelSession } from './level-session';
+import { fill } from './shadow';
+import type { Piece, Placement } from './shadow';
 
 // On a take-away of single blocks, the card says how many more to send home
 // ("1 more to go home") up to and including this stop in map order; after it
@@ -201,11 +203,21 @@ export function feedbackFor(session: LevelSession): AnswerFeedback {
   const opening = onlyGiven(session) || onlyOnMat(session);
   if (verdict.benchCount === 0 || opening) {
     const dealt = puzzle.given !== undefined || puzzle.onMat !== undefined;
+    // A Shape Island picture (Phase 23b): into the shadow, or, with no shadow
+    // yet, like the little picture.
+    const picture = pictureOpening(session);
     return {
       tone: 'start',
       title: line('feedback.start'),
-      detail: dealt && !opening ? line('prompt.sum_composition', { n: target }) : { key: puzzle.prompt, params: promptParams(puzzle) },
+      detail: picture ?? (dealt && !opening ? line('prompt.sum_composition', { n: target }) : { key: puzzle.prompt, params: promptParams(puzzle) }),
     };
+  }
+  // A picture's shadow on the mat (Phase 23b, PRD §4.2.5): part of it still
+  // empty, or a piece sticking out of it. Building, not mistakes: the judge
+  // takes the picture anywhere, so neither sounds the "hmm".
+  const inShadow = shadowCard(session);
+  if (inShadow !== null) {
+    return inShadow;
   }
   // Two other partners joined that make the same total (3 + 1 on a 2 + 2 stop):
   // a discovery, said as one (Phase 20, play review F5), then which two to find.
@@ -265,12 +277,105 @@ export function feedbackFor(session: LevelSession): AnswerFeedback {
   return { tone: 'adjust', title: line(key), detail };
 }
 
+// The card's line on an empty mat at a Shape Island picture: into the shadow
+// while it is drawn; else build it like the little picture (n7, n8 before
+// help brings the shadow). Null on every other stop, and on a picture in steps.
+function pictureOpening(session: LevelSession): Line | null {
+  const { whole, shadow } = session;
+  if (shadow === null) {
+    return null;
+  }
+  if (shadow.shown) {
+    return { key: copyKey('hint.shadow.start'), params: {} };
+  }
+  return whole.picture === undefined ? null : { key: copyKey(`hint.picture.look.${whole.picture}`), params: {} };
+}
+
+// What is on the mat against the shadow: the pieces (partners whole, single
+// blocks one by one) with a block outside it, and how many lie inside.
+interface ShadowMat {
+  readonly cells: ReadonlyArray<Cell>;
+  readonly gap: ReadonlyArray<Cell>;
+  readonly out: ReadonlyArray<Piece>;
+  readonly inside: number;
+}
+
+function shadowMat(session: LevelSession): ShadowMat | null {
+  const view = shadowView(session);
+  if (view === null || session.verdict.matched) {
+    return null;
+  }
+  const state = matOf(session);
+  const shadow = new Set(view.cells.map((c) => `${c.x},${c.y}`));
+  const inGroup = grouped(state);
+  const pieces: Piece[] = [
+    ...benchPartners(state).map((g) => ({ id: g.id as string, shape: g.unitIds.map((u) => state.bench.get(u)!) })),
+    ...[...state.bench.entries()].filter(([u]) => !inGroup.has(u)).map(([u, c]) => ({ id: u as string, shape: [c] })),
+  ];
+  const isIn = (p: Piece) => p.shape.every((c) => shadow.has(`${c.x},${c.y}`));
+  const filled = new Set([...state.bench.values()].map((c) => `${c.x},${c.y}`));
+  return { cells: view.cells, gap: view.cells.filter((c) => !filled.has(`${c.x},${c.y}`)), out: pieces.filter((p) => !isIn(p)), inside: pieces.filter(isIn).length };
+}
+
+// The shadow's cards (PRD §4.2.5). Too many, or the right count of partners
+// that cannot make the picture, keep their own cards (a decoy to send back).
+function shadowCard(session: LevelSession): AnswerFeedback | null {
+  const mat = shadowMat(session);
+  const q = session.puzzle.question;
+  // (Past a step, the right count on the last picture's blocks is "now a new shape!".)
+  if (mat === null || q.kind !== 'quantity_shape' || session.verdict.benchCount > q.target || (session.verdict.benchCount === q.target && (!shapeInReach(session) || session.step > 0))) {
+    return null;
+  }
+  if (mat.out.length > 0 && mat.inside > 0) {
+    return { tone: 'building', title: { key: copyKey('feedback.shadow.out'), params: {} }, detail: { key: copyKey('hint.shadow.move'), params: {} } };
+  }
+  if (mat.out.length === 0 && session.verdict.benchCount < q.target) {
+    return { tone: 'building', title: { key: copyKey('feedback.shadow.gap'), params: {} }, detail: { key: copyKey('hint.shadow.here'), params: {} } };
+  }
+  return null;
+}
+
+// What is still in the tray, as pieces to fill the shadow with: each partner
+// (its shape from its top-left) and each single block.
+function trayPieces(state: BenchState): ReadonlyArray<Piece> {
+  const inGroup = grouped(state);
+  return [
+    ...trayPartners(state).map((g) => ({ id: g.id as string, shape: g.shape })),
+    ...state.tray.flatMap((t) => (t.unitId === null || inGroup.has(t.unitId) ? [] : [{ id: t.unitId as string, shape: [{ x: 0, y: 0 }] }])),
+  ];
+}
+
+// The next piece into the shadow, and where (PRD §4.2.5 "put the 3 in the
+// shadow", "put the 1 here"): the biggest piece of a way to fill what is empty
+// with what is in the tray; with a piece sticking out, that piece, back into
+// the shadow. Null when nothing fills it (a decoy in the way: its own help).
+export function shadowNext(session: LevelSession): Placement | null {
+  const mat = shadowMat(session);
+  if (mat === null) {
+    return null;
+  }
+  const state = session.history.state;
+  const [stray] = mat.out;
+  if (stray !== undefined && mat.inside > 0) {
+    const left = Math.min(...stray.shape.map((c) => c.x));
+    const top = Math.min(...stray.shape.map((c) => c.y));
+    // What is empty, and what the stray piece covers now: free once it moves.
+    const free = new Set([...mat.gap, ...stray.shape].map((c) => `${c.x},${c.y}`));
+    const gap = mat.cells.filter((c) => free.has(`${c.x},${c.y}`));
+    const plan = fill(gap, trayPieces(state), { id: stray.id, shape: stray.shape.map((c) => ({ x: c.x - left, y: c.y - top })) });
+    return plan?.[0] ?? null;
+  }
+  // The biggest piece of the way first: the rocket's fins before the 1s on top.
+  const plan = fill(mat.gap, trayPieces(state));
+  return plan === null ? null : plan.reduce((best, p) => (p.cells.length > best.cells.length ? p : best));
+}
+
 // Can these pieces cover an accepted turn of the picture exactly, moved but
 // never turned (a partner is rigid, and its shape is the one it was dealt
 // with): every partner inside, single blocks on the cells left? A shape stop
 // built from partners can have the right count and no way to the picture
 // (Phase 21: 2 + 4 is 6 blocks, and no stairs).
-function covers(shapes: ReadonlyArray<ReadonlyArray<Cell>>, loose: number, q: Extract<Question, { kind: 'quantity_shape' }>): boolean {
+export function covers(shapes: ReadonlyArray<ReadonlyArray<Cell>>, loose: number, q: Extract<Question, { kind: 'quantity_shape' }>): boolean {
   if (shapes.reduce((a, x) => a + x.length, loose) !== q.template.cells.length) {
     return false;
   }
@@ -332,6 +437,12 @@ export function matchedFeedback(session: LevelSession): Line {
     if (session.step > 0 && session.whole.steps !== undefined) {
       return { key: copyKey('feedback.matched.same'), params: { n: q.target } };
     }
+    // A Shape Island picture says what it is (Phase 23b): "A mushroom!"; the
+    // rocket blasts off. Its parts are said when the card is tapped (partsLine).
+    const picture = session.whole.picture;
+    if (picture !== undefined) {
+      return { key: copyKey(picture === 'rocket' ? 'feedback.launch' : `feedback.matched.picture.${picture}`), params: {} };
+    }
     // Made of parts (a 5, a 3 and a 1): name them, left to right (Phase 20, F5).
     const parts = partsOf(session.history.state);
     if (parts.length >= 2 && parts.length <= MAX_PARTS) {
@@ -350,12 +461,25 @@ export function matchedFeedback(session: LevelSession): Line {
     : { key: copyKey('feedback.matched.addition'), params: { a: parts[0], b: parts[1], n: total } };
 }
 
+// What a right picture is made of, said when the card is tapped (PRD §4.2.6,
+// SHAPE_CLOUD_ON_PASS 'count'): "3, 1, 1 and 1, 6 in all"; null for one piece
+// or more than MAX_PARTS.
+export function partsLine(session: LevelSession): Line | null {
+  const q = session.puzzle.question;
+  const parts = partsOf(session.history.state);
+  if (q.kind !== 'quantity_shape' || parts.length < 2 || parts.length > MAX_PARTS) {
+    return null;
+  }
+  const names = ['a', 'b', 'c', 'd', 'e'];
+  return { key: copyKey(`feedback.matched.parts.${parts.length}`), params: Object.fromEntries([...parts.map((n, i) => [names[i]!, n]), ['n', q.target]]) };
+}
+
 // The longest list of parts a success line names (feedback.matched.parts.2 … 5).
 const MAX_PARTS = 5;
 
 // The parts of a right quantity: each partner on the mat, and each group of
 // touching single blocks, left (then top) first.
-function partsOf(state: BenchState): ReadonlyArray<number> {
+export function partsOf(state: BenchState): ReadonlyArray<number> {
   const inGroup = grouped(state);
   const at = (units: ReadonlyArray<UnitId>) => {
     const cells = units.map((u) => state.bench.get(u)!);
@@ -481,6 +605,8 @@ export function hintFor(session: LevelSession): Line {
 export interface AnswerFocus {
   readonly objects: ReadonlyArray<string>;
   readonly template: boolean;
+  // Cells of a picture's shadow to glow (Phase 23b: "this bit is missing").
+  readonly cells?: ReadonlyArray<Cell>;
 }
 
 export interface Guidance {
@@ -730,7 +856,10 @@ function sameSum(session: LevelSession): Guidance | null {
 // send 2 home, 3 stay; bring the 4 back, send the 2).
 export function asksForHelp(session: LevelSession, f: AnswerFeedback = feedbackFor(session)): boolean {
   const takeAwayIsland = session.puzzle.question.kind === 'split' || session.whole.takeAway !== undefined;
+  // A Shape Island picture (Phase 23b): its opening, and its shadow's cards.
+  const shadowAsks = session.shadow !== null && f.tone !== 'success' && (f.tone === 'start' || [copyKey('feedback.shadow.gap'), copyKey('feedback.shadow.out'), copyKey('feedback.change')].includes(f.title.key));
   return (
+    shadowAsks ||
     f.tone === 'adjust' ||
     onlyOnMat(session) ||
     onlyPreset(session) ||
@@ -869,6 +998,77 @@ export interface AskedHelp extends Guidance {
   // Number the blocks on the mat one by one (with the counting sound, no words):
   // the first ask when the count is off.
   readonly countUp: boolean;
+  // Shape Island (Phase 23b): the shadow comes to help now (its spec's ask),
+  // and the "like this" hand shows the piece the line names.
+  readonly reveal?: boolean;
+  readonly demo?: boolean;
+}
+
+// The help ladder at a Shape Island picture (PRD §4.2.5). On the empty mat:
+// with no shadow yet, "build it like the little picture" (the picture lit),
+// then, on the ask the spec names, "here comes the shadow"; with the shadow,
+// "put partners in the shadow" (the shadow and the picture lit), then "put the
+// 3 in the shadow" (the 3 and its cells lit), then that again with the hand.
+// Part filled: "this bit is missing" (the empty cells lit), then "put the 1
+// here", then with the hand. A piece sticking out: the empty cells, then "move
+// the 4 into the shadow" (it and where it goes lit). Null where the shadow has
+// nothing to say: the stop's own ladder goes on.
+function shadowHelp(session: LevelSession, asks: number): AskedHelp | null {
+  const { whole, shadow, verdict } = session;
+  if (shadow === null || whole.shadow === undefined || whole.picture === undefined || verdict.matched) {
+    return null;
+  }
+  const n = Math.max(1, Math.trunc(asks));
+  const line = (name: string, params: Readonly<Record<string, number>> = {}): Line => ({ key: copyKey(name), params });
+  const help = (l: Line, focus: AnswerFocus, more: { readonly reveal?: boolean; readonly demo?: boolean } = {}): AskedHelp => ({ line: l, focus, countUp: false, ...more });
+  const named = (demo: boolean, out = false): AskedHelp | null => {
+    const next = shadowNext(session);
+    return next === null ? null : help(line(out ? 'hint.shadow.in' : session.history.state.bench.size === 0 ? 'hint.shadow.piece' : 'hint.shadow.put', { a: next.cells.length }), { objects: [next.id], template: false, cells: next.cells }, { demo });
+  };
+  if (matOf(session).bench.size === 0) {
+    // (The ask that brings it says so, also once it has come: the card shows it.)
+    const due = whole.shadow === 'always' ? 0 : whole.shadow.onHelp;
+    if (n === due || (!shadow.shown && n > due)) {
+      return help(line('hint.shadow.reveal'), { objects: [], template: false }, { reveal: true });
+    }
+    if (!shadow.shown) {
+      return help(line(`hint.picture.look.${whole.picture}`), { objects: [], template: true });
+    }
+    const view = shadowView(session)!;
+    return n === 1 ? help(line('hint.shadow.start'), { objects: [], template: true, cells: view.cells }) : named(n >= HELP_LADDER_STEPS);
+  }
+  const card = shadowCard(session);
+  const mat = shadowMat(session);
+  // The next picture of a stop in steps, on the blocks of the one before:
+  // its card says "now a new shape!", its help is the stray block's.
+  const changing = card === null && mat !== null && session.step > 0 && mat.out.length > 0 && verdict.reason === 'shape-mismatch';
+  if (mat === null || (card === null && !changing)) {
+    return null;
+  }
+  const out = changing || card?.title.key === copyKey('feedback.shadow.out');
+  if (n === 1) {
+    return help(card?.detail ?? feedbackFor(session).detail, { objects: [], template: false, cells: mat.gap });
+  }
+  return named(!out && n >= HELP_LADDER_STEPS, out);
+}
+
+// The hand's move at a picture with its shadow drawn: the next piece into the
+// shadow (shadowNext), from the tray to its place, or a single block moved
+// into it; undefined when there is none (the stop's own first move then).
+export function shadowDemo(session: LevelSession): Command | undefined {
+  if (session.shadow?.shown !== true) {
+    return undefined;
+  }
+  const next = shadowNext(session);
+  const state = session.history.state;
+  if (next === null) {
+    return undefined;
+  }
+  const group = state.groups.get(next.id as GroupId);
+  if (group !== undefined) {
+    return group.unitIds.some((u) => state.bench.has(u)) ? undefined : { type: 'takeGroup', groupId: group.id, origin: next.origin };
+  }
+  return state.bench.has(next.id as UnitId) ? { type: 'move', unitId: next.id as UnitId, to: next.origin } : { type: 'take', unitId: next.id as UnitId, to: next.origin };
 }
 
 // The middle rung: of a whole correction, only the part that sends back.
@@ -898,6 +1098,10 @@ function sendOnly(full: Guidance): Guidance | null {
 
 // Help the child asked for, the `asks`-th time on this answer (see HELP_LADDER_STEPS).
 export function helpAt(session: LevelSession, asks: number, steps: number = HELP_LADDER_STEPS): AskedHelp {
+  const inShadow = shadowHelp(session, asks);
+  if (inShadow !== null) {
+    return inShadow;
+  }
   const f = feedbackFor(session);
   if (!asksForHelp(session, f)) {
     return { ...guidanceFor(session, 1), countUp: false };

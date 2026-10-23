@@ -1,8 +1,8 @@
 import { apply, judge } from '../core';
 import type { BenchState } from '../core';
 import { CHAPTERS } from './catalog';
-import { BRICK_2X4, CORNER_3, LINE_4, SQUARE_2X2, STAIRS_6, TEN_2X5, TOWER_2X3 } from './catalog/shapes';
-import { CHALLENGE_RULES, challengeCap, nextChallenge } from './challenge';
+import { BOAT_5, BOAT_5_C, BRICK_2X4, CORNER_3, CORNER_5, DOG_6, DUCK_5, HOUSE_7, LINE_4, L_4, PLUS_5, RING_8, ROCKET_6, SQUARE_2X2, SQUARE_3X3, STAIRS_10, STAIRS_6, S_4, TEN_2X5, TEN_STANDING, TOWER_2X3, TREE_5, T_4 } from './catalog/shapes';
+import { CHALLENGE_RULES, CHALLENGE_SHADOW, challengeCap, nextChallenge } from './challenge';
 import type { Challenge } from './challenge';
 import { nodeId } from './ids';
 import type { NodeId } from './ids';
@@ -22,6 +22,22 @@ const SHAPES = new Map([
   [BRICK_2X4, 'brick'],
   [TEN_2X5, 'ten'],
   [STAIRS_6, 'stairs'],
+  [T_4, 'mushroom'],
+  [S_4, 'zigzag'],
+  [L_4, 'boot'],
+  [PLUS_5, 'plus'],
+  [RING_8, 'ring'],
+  [SQUARE_3X3, 'big square'],
+  [TEN_STANDING, 'standing ten'],
+  [STAIRS_10, 'big stairs'],
+  [DUCK_5, 'duck'],
+  [TREE_5, 'tree'],
+  [BOAT_5, 'boat'],
+  [HOUSE_7, 'house'],
+  [CORNER_5, 'big corner'],
+  [BOAT_5_C, 'boat turned'],
+  [DOG_6, 'dog'],
+  [ROCKET_6, 'rocket'],
 ]);
 const shapeOf = (c: Challenge) => (c.puzzle.question.kind === 'quantity_shape' ? SHAPES.get(c.puzzle.question.template) : undefined);
 
@@ -77,10 +93,10 @@ describe('free play random puzzles (Phase 21): they follow progress', () => {
     expect(Math.max(...got.map((c) => c.n))).toBe(4);
   });
 
-  test('Number Island finished: the five pictures it showed, numbers up to 17 carried as partners past 6, no sums yet', () => {
-    const got = many(upTo('ch1-n12'), 600);
+  test('Number Island finished: the ten pictures it showed (five since Phase 23a), numbers up to 17 carried as partners past 6, no sums yet', () => {
+    const got = many(upTo('ch1-n12'), 900);
     expect(new Set(got.map((c) => c.kind))).toEqual(new Set(['quantity', 'quantity_shape']));
-    expect(new Set(got.filter((c) => c.kind === 'quantity_shape').map(shapeOf))).toEqual(new Set(['square', 'corner', 'line', 'tower', 'brick']));
+    expect(new Set(got.filter((c) => c.kind === 'quantity_shape').map(shapeOf))).toEqual(new Set(['square', 'corner', 'line', 'tower', 'brick', 'mushroom', 'zigzag', 'boot', 'plus', 'ring', 'big square', 'standing ten']));
     expect(Math.max(...got.map((c) => c.n))).toBe(17);
     for (const c of got.filter((x) => x.kind === 'quantity')) {
       const singles = c.puzzle.solution.filter((cmd) => cmd.type === 'take').length;
@@ -116,8 +132,42 @@ describe('free play random puzzles (Phase 21): they follow progress', () => {
   });
 
   test('everything finished: the ten and the stairs join the pictures', () => {
-    const got = many(all, 600);
-    expect(new Set(got.filter((c) => c.kind === 'quantity_shape').map(shapeOf))).toEqual(new Set(['square', 'corner', 'line', 'tower', 'brick', 'ten', 'stairs']));
+    const got = many(all, 1500);
+    expect(new Set(got.filter((c) => c.kind === 'quantity_shape').map(shapeOf))).toEqual(
+      new Set(['square', 'corner', 'line', 'tower', 'brick', 'ten', 'stairs', 'mushroom', 'zigzag', 'boot', 'plus', 'ring', 'big square', 'standing ten', 'big stairs', 'duck', 'tree', 'boat', 'house', 'big corner', 'boat turned', 'dog', 'rocket']),
+    );
+  });
+
+  test('Phase 23b: a Shape Island picture keeps its name, its shadow and its turning (CHALLENGE_SHADOW); the mushroom comes once, as Number Island dealt it first', () => {
+    expect(CHALLENGE_SHADOW).toBe('as-stop');
+    const got = many(all, 1500).filter((c) => c.kind === 'quantity_shape');
+    const rocket = got.find((c) => shapeOf(c) === 'rocket')!;
+    expect(rocket.puzzle.picture).toBe('rocket');
+    expect(rocket.puzzle.shadow).toEqual({ onHelp: 2 });
+    expect(rocket.puzzle.prompt).toBe('prompt.picture.rocket');
+    const dog = got.find((c) => shapeOf(c) === 'dog')!;
+    expect(dog.spec).toMatchObject({ symmetry: { rotation: false, mirror: true }, picture: 'dog', shadow: { onHelp: 1 } });
+    const duck = got.find((c) => shapeOf(c) === 'duck')!;
+    expect(duck.puzzle.shadow).toBe('always');
+    // The corner before the boat is a plain shape (no name, no shadow); the boat after it is the stop's picture.
+    const corner = got.find((c) => shapeOf(c) === 'big corner')!;
+    expect(corner.puzzle.picture).toBeUndefined();
+    expect(corner.puzzle.shadow).toBeUndefined();
+    expect(corner.puzzle.prompt).toBe('prompt.quantity_shape');
+    expect(got.find((c) => shapeOf(c) === 'boat turned')!.puzzle).toMatchObject({ picture: 'boat', shadow: 'always' });
+    const mushroom = got.find((c) => shapeOf(c) === 'mushroom')!;
+    expect(mushroom.puzzle.picture).toBeUndefined();
+    expect(mushroom.spec).toMatchObject({ symmetry: { rotation: true, mirror: true } });
+  });
+
+  test('Phase 23a: a random standing ten keeps its stop\'s 6 × 5 mat, and its stop\'s no-turning; the three faces of 4 come one at a time, either way round', () => {
+    const got = many(all, 900).filter((c) => c.kind === 'quantity_shape');
+    const ten = got.find((c) => shapeOf(c) === 'standing ten')!;
+    expect(ten.puzzle.initial.bounds).toEqual({ cols: 6, rows: 5 });
+    expect(ten.spec).toMatchObject({ symmetry: { rotation: false, mirror: false } });
+    const boot = got.find((c) => shapeOf(c) === 'boot')!;
+    expect(boot.puzzle.steps).toBeUndefined();
+    expect(boot.spec).toMatchObject({ symmetry: { rotation: true, mirror: true } });
   });
 
   test('never the same kind of puzzle with the same number twice in a row', () => {

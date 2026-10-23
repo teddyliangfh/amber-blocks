@@ -163,7 +163,7 @@ describe('free play random puzzle page (Phase 21)', () => {
     expect(text('prompt')).toBe(String(c.n));
     expect(text('feedback-title')).toBe('动手试试看');
     expect(text('feedback-detail')).toBe(`拼出 ${c.n} 块`);
-    expect(mockSounds).toEqual(['arrive']);
+    expect(mockSounds).toEqual(['arrive', 'look']);
     expect(mockStage.current!.state).toBe(c.puzzle.initial);
   });
 
@@ -201,7 +201,7 @@ describe('free play random puzzle page (Phase 21)', () => {
   });
 
   test('it follows progress: dealt for the stops the child has finished', async () => {
-    const all = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n7', 'ch1-n8', 'ch1-n9', 'ch1-n10', 'ch1-n11', 'ch1-n12', 'ch2-n1'];
+    const all = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n13', 'ch1-n7', 'ch1-n14', 'ch1-n8', 'ch1-n15', 'ch1-n9', 'ch1-n16', 'ch1-n10', 'ch1-n17', 'ch1-n11', 'ch1-n12', 'ch2-n1'];
     await open(memoryStorage({ [STORAGE_KEY]: serialize(finished(all)) }));
     expect([...mockDealt[0]!.done].sort()).toEqual([...all].sort());
   });

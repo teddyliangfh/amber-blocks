@@ -24,7 +24,12 @@ import type { Puzzle } from './schema';
 // stops; all twenty stops before are byte-identical to version 6.
 // Version 8 (2026-10-19, Phase 22) added Take-away Island (ch3-n1 – n8) after
 // Join Island; all twenty-four stops before are byte-identical to version 7.
-const FINGERPRINT_VERSION = 8;
+// Version 9 (2026-10-23, Phase 23a) added six picture stops (ch1-n13 – n17,
+// ch2-n13) between the old ones; all thirty-two stops before are
+// byte-identical to version 8.
+// Version 10 (2026-10-23, Phase 23b) added Shape Island (ch5-n1 – n8) after
+// Number Island; all thirty-eight stops before are byte-identical to version 9.
+const FINGERPRINT_VERSION = 10;
 const FINGERPRINTS: Readonly<Record<string, string>> = {
   'ch1-n1': 'df3b63c2',
   'ch1-n2': '795c9b41',
@@ -38,6 +43,11 @@ const FINGERPRINTS: Readonly<Record<string, string>> = {
   'ch1-n10': '29e4ff0f',
   'ch1-n11': 'acadc268',
   'ch1-n12': 'a5b67418',
+  'ch1-n13': '7698ef0f',
+  'ch1-n14': '631429b3',
+  'ch1-n15': '98d0336a',
+  'ch1-n16': 'd05ee624',
+  'ch1-n17': 'd06c3df8',
   'ch2-n1': '3dfffa88',
   'ch2-n2': 'deab7bca',
   'ch2-n3': 'fbd94da1',
@@ -50,6 +60,7 @@ const FINGERPRINTS: Readonly<Record<string, string>> = {
   'ch2-n10': '3ec25ced',
   'ch2-n11': '808c3608',
   'ch2-n12': '53dc5454',
+  'ch2-n13': 'e82d4a05',
   'ch3-n1': '81eccc44',
   'ch3-n2': '8d97d408',
   'ch3-n3': '46e7ebb8',
@@ -58,6 +69,14 @@ const FINGERPRINTS: Readonly<Record<string, string>> = {
   'ch3-n6': '2e58cc53',
   'ch3-n7': '93f43e80',
   'ch3-n8': 'f87bbf98',
+  'ch5-n1': '03c789ca',
+  'ch5-n2': '4bc53515',
+  'ch5-n3': '4e866202',
+  'ch5-n4': 'adb13c09',
+  'ch5-n5': 'edeb0d66',
+  'ch5-n6': 'ba1e51ce',
+  'ch5-n7': '871ee45c',
+  'ch5-n8': 'c92ed705',
 };
 
 const REFS = [1, 7, 4242].flatMap((seed) => [0, 1, 2].map((attemptVariant) => ({ seed, attemptVariant })));
@@ -84,6 +103,8 @@ function describePuzzle(p: Puzzle): string {
     // And a take-away's start and take, and a split's / take-away's blocks on the mat (Phase 22).
     ...(p.takeAway === undefined ? [] : [p.takeAway]),
     ...(p.onMat === undefined && s.bench.size > 0 && p.given === undefined ? [[...s.bench.entries()]] : []),
+    // And a Shape Island picture and its shadow (Phase 23b).
+    ...(p.picture === undefined && p.shadow === undefined ? [] : [p.picture, p.shadow]),
   ]);
 }
 

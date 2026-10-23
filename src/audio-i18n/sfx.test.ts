@@ -1,7 +1,7 @@
-import { JOIN_STEP, countPitch, createAudioSfx, createSilentSfx, notesFor } from './sfx';
+import { JOIN_STEP, LOOK_AT, countPitch, createAudioSfx, createSilentSfx, notesFor } from './sfx';
 import type { SfxName } from './sfx';
 
-const NAMES: ReadonlyArray<SfxName> = ['pickup', 'drop', 'return', 'blocked', 'count', 'counted', 'adjust', 'success', 'fanfare', 'arrive', 'tap', 'join', 'launch'];
+const NAMES: ReadonlyArray<SfxName> = ['pickup', 'drop', 'return', 'blocked', 'count', 'counted', 'adjust', 'success', 'fanfare', 'arrive', 'tap', 'join', 'launch', 'look'];
 
 function fakeContext(state = 'suspended') {
   const started: { f: number; at: number }[] = [];
@@ -56,6 +56,18 @@ test('success and adjust never sound alike: success climbs and ends high, adjust
   // Pick-up rises, putting back falls.
   expect(notesFor('pickup')[0]!.to!).toBeGreaterThan(notesFor('pickup')[0]!.f);
   expect(notesFor('return')[0]!.to!).toBeLessThan(notesFor('return')[0]!.f);
+});
+
+test('the cloud\'s chime (Phase 23-0): two notes going up, under the success sound and shorter; it waits for the pop, the reminder does not and is quieter', () => {
+  const open = notesFor('look');
+  const again = notesFor('look', 2);
+  expect(open[0]!.at).toBe(LOOK_AT);
+  expect(again[0]!.at).toBe(0);
+  expect(open[1]!.f).toBeGreaterThan(open[0]!.f);
+  expect(open[0]!.f).toBeLessThan(notesFor('success')[0]!.f);
+  const length = (ns: ReturnType<typeof notesFor>) => Math.max(...ns.map((n) => n.at + n.dur)) - Math.min(...ns.map((n) => n.at));
+  expect(length(open)).toBeLessThan(length(notesFor('success')));
+  expect(again[0]!.gain!).toBeLessThan(open[0]!.gain!);
 });
 
 test('counting climbs a major scale note by note and stays in a comfortable range up to 17', () => {

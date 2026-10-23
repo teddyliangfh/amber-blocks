@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { FONT, LEVEL_CHROME, THEME } from '../blocks-ui';
@@ -13,6 +13,14 @@ import { Icon } from './icons';
 // building. The bulb replaced ↻, which also meant "count again" and "play again";
 // it is drawn (Icon), not the 💡 emoji, which looks different on every phone (Phase 20 Q7).
 const SYMBOL = { start: '✦', building: '↗', success: '✓' } as const;
+// Phase 23-0 (PRD §3.5, §8 #4): the opening's words are Amber's (D-098), so
+// the start disc shows her face instead of ✦, which meant nothing to a child
+// who cannot read. A default for Ted: 'amber', or 'star' for the ✦.
+export const START_SYMBOL: 'amber' | 'star' = 'amber';
+const AMBER = require('../../assets/images/amber-girl.png');
+// Her face fills the disc: the picture (her head in an amber block) drawn this
+// much bigger than the disc and centred a little high.
+const AMBER_ZOOM = 1.45;
 
 // The speaker's nudge: it swells and settles twice (up, down, up, down), the
 // way a Spotlight ring pulses. No sound and no words come with it.
@@ -50,10 +58,14 @@ export function AnswerFeedback({ feedback, lang, onReplay, narrow = false, compa
   const detail = format(feedback.detail.key, lang, feedback.detail.params);
   const listen = format(copyKey('feedback.listen'), lang);
   const ink = feedback.tone === 'success' ? styles.successInk : null;
-  const disc = narrow ? 26 : compact ? 36 : 44;
+  // 44 → 48 (Phase 23-0): the state shows in the symbol, not the words.
+  const disc = narrow ? 26 : compact ? 36 : 48;
+  const art = (disc - 6) * AMBER_ZOOM;
   const symbol = (
     <View testID="feedback-symbol" style={[styles.disc, styles[`${feedback.tone}Disc`], { width: disc, height: disc, borderRadius: disc / 2 }]}>
-      {feedback.tone === 'adjust' ? (
+      {feedback.tone === 'start' && START_SYMBOL === 'amber' ? (
+        <Image testID="feedback-amber" source={AMBER} resizeMode="contain" style={{ position: 'absolute', width: art, height: art, left: (disc - 6 - art) / 2, top: (disc - 6 - art) / 2 - art * 0.04 }} />
+      ) : feedback.tone === 'adjust' ? (
         <Icon name="bulb" size={disc * 0.66} />
       ) : (
         <Text style={[styles.symbol, feedback.tone === 'success' ? styles.symbolOnGreen : null, { fontSize: disc * 0.5, lineHeight: disc * 0.62 }]}>{SYMBOL[feedback.tone]}</Text>
@@ -61,7 +73,7 @@ export function AnswerFeedback({ feedback, lang, onReplay, narrow = false, compa
     </View>
   );
   // The whole card replays; the speaker is drawn as a button so it reads as one.
-  const button = narrow ? 26 : compact ? 34 : 40;
+  const button = narrow ? 26 : compact ? 34 : 44;
   const speaker = (
     <Animated.View
       testID={nudge > 0 ? `feedback-speaker-nudge-${nudge}` : 'feedback-speaker'}
@@ -127,7 +139,7 @@ const styles = StyleSheet.create({
   narrowHead: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   grow: { flex: 1 },
   body: { flex: 1, gap: 3 },
-  disc: { alignItems: 'center', justifyContent: 'center', borderWidth: 3, backgroundColor: THEME.white },
+  disc: { alignItems: 'center', justifyContent: 'center', borderWidth: 3, backgroundColor: THEME.white, overflow: 'hidden' },
   startDisc: { borderColor: THEME.skyDeep },
   buildingDisc: { borderColor: THEME.skyDeep },
   adjustDisc: { borderColor: THEME.amber },

@@ -80,7 +80,8 @@ describe('fitted mats (2026-10-15 review: "make 1" faced thirty cells, 1 + 1 had
         for (const seed of [1, 9]) {
           const ref = { contentVersion: CONTENT_VERSION, chapterId: c.id, nodeId: n.id, attemptVariant: 0, seed };
           const p = materialize(ref);
-          expect(p.initial.bounds).toEqual(fitBench(n.spec));
+          // A stop may fix its own mat (Phase 23a: the standing ten's 6 × 5).
+          expect(p.initial.bounds).toEqual(n.bounds ?? fitBench(n.spec));
           expect(holdsMaterial(p.initial)).toBe(true);
           // Version 2 dealt every stop on 6 × 5 (Number Island) or 8 × 6 (Join Island).
           // A partner that starts on the mat (Phase 19) sits halfway down its own

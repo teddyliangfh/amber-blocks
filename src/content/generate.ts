@@ -18,6 +18,11 @@ function promptFor(question: Question, spec: QuestionSpec): CopyKey {
   if (spec.kind === 'sum_composition' && spec.onMat !== undefined) {
     return copyKey('prompt.send_away');
   }
+  // A Shape Island picture says what it is (Phase 23b); a picture in steps
+  // keeps the plain line, as its pictures change.
+  if (spec.kind === 'quantity_shape' && spec.picture !== undefined && spec.sequence !== true) {
+    return copyKey(`prompt.picture.${spec.picture}`);
+  }
   // Take away (Phase 22) is judged as a quantity; its own task line says what to send home.
   if (spec.kind === 'take_away') {
     return copyKey(spec.onMat === undefined ? 'prompt.take_away' : 'prompt.take_away.partner');
@@ -145,6 +150,8 @@ export function materializeNode(node: NodeSpec, bounds: Bounds, ref: PuzzleRef, 
     }
   }
   const ways = spec.kind === 'sum_composition' || spec.kind === 'split' ? spec.ways : undefined;
+  const picture = spec.kind === 'quantity_shape' ? spec.picture : undefined;
+  const shadow = spec.kind === 'quantity_shape' ? spec.shadow : undefined;
 
   const puzzle: Puzzle = {
     ref,
@@ -154,6 +161,8 @@ export function materializeNode(node: NodeSpec, bounds: Bounds, ref: PuzzleRef, 
     ...(given === undefined ? {} : { given }),
     ...(onMat === undefined ? {} : { onMat }),
     ...(takeAway === undefined ? {} : { takeAway }),
+    ...(picture === undefined ? {} : { picture }),
+    ...(shadow === undefined ? {} : { shadow }),
     initial,
     display: {
       target: question.kind === 'quantity' || question.kind === 'quantity_shape' ? question.target : question.kind === 'sum_composition' ? question.sum : question.kind === 'split' ? question.total : null,
