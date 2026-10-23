@@ -1522,7 +1522,7 @@ describe('Phase 22: Take-away Island on the level screen', () => {
 });
 
 describe('Phase 23-0: the shape picture rides on the cloud', () => {
-  test('a shape stop: the picture is inside the cloud, in the number\'s colour, one face on its top-left block; the start card shows Amber', async () => {
+  test('a shape stop: the picture is inside the cloud, in the number\'s colour, one face on its top-left block; Amber is only in the corner', async () => {
     await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n3')) }), 'ch1-n3');
     const cloud = container.querySelector('[data-testid="prompt"]')!;
     const picture = cloud.querySelector('[data-testid="template-preview"]') as HTMLElement | null;
@@ -1537,7 +1537,9 @@ describe('Phase 23-0: the shape picture rides on the cloud', () => {
     }
     expect(picture!.querySelectorAll('[data-testid="face-calm"]')).toHaveLength(1);
     expect(cells[0]!.querySelector('[data-testid="face-calm"]')).not.toBeNull();
-    expect(has('feedback-amber')).toBe(true);
+    // One Amber, not two (D-121): the start card shows ✦, she stays in the header's corner.
+    expect(has('feedback-amber')).toBe(false);
+    expect(has('amber-guide')).toBe(true);
   });
 
   test('a stop whose cloud is an equation has no picture, and neither has a quantity stop', async () => {

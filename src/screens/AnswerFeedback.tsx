@@ -15,8 +15,9 @@ import { Icon } from './icons';
 const SYMBOL = { start: '✦', building: '↗', success: '✓' } as const;
 // Phase 23-0 (PRD §3.5, §8 #4): the opening's words are Amber's (D-098), so
 // the start disc shows her face instead of ✦, which meant nothing to a child
-// who cannot read. A default for Ted: 'amber', or 'star' for the ✦.
-export const START_SYMBOL: 'amber' | 'star' = 'amber';
+// who cannot read. Back to ✦ (D-121): Amber already floats in the header's corner
+// right above the card, so her face in the disc showed her twice. 'amber' brings it back.
+export const START_SYMBOL: 'amber' | 'star' = 'star';
 const AMBER = require('../../assets/images/amber-girl.png');
 // Her face fills the disc: the picture (her head in an amber block) drawn this
 // much bigger than the disc and centred a little high.
