@@ -1930,6 +1930,8 @@ brief 第 4 节列出、本轮按要求没做的：三个伙伴合体、凑到 1
 
 # Phase 23c：比一比岛 Compare Island（2026-10-23，D-122 – D-128，内容版本 11）
 
+> 2026-10-27：Ted 否定了这版比一比岛（D-129）。新方向是左右两个数 + 方块、拖 / 点 `>` `<` `=` 进中间空格，见 [docs/compare-island-prd.md](../docs/compare-island-prd.md)；重做是 Phase 23d，本节只作记录。
+
 依据 [take-away-and-compare-design.md](../docs/take-away-and-compare-design.md) §3.2、§4、§5.3 – §5.6、§6、§7"Phase 23"、§9（全按默认）与 [shape-island-and-header-prd.md](../docs/shape-island-and-header-prd.md) §5、§9。顺序：冻结 v10 种子存档 → core → content → progress → screens / blocks-ui → 三视口走查 → 文档。没有 git 操作、没加依赖、`schemaVersion` 不变、旧 46 站指纹一字未变、`lint:purity` 零命中、没加自动语音 / 失败音 / 红叉。决策编号从 D-122 起（D-121 已被"提示卡改回 ✦"占用）。
 
 ## 种子存档（先于题库）
@@ -2028,3 +2030,104 @@ brief 第 4 节列出、本轮按要求没做的：三个伙伴合体、凑到 1
 - 自由玩随机题不出比较 / 排队题（设计稿 §4.6 本轮不加）。
 - 作品册比较站补画比较台（见"出入"）。
 - 走查时看到的旧现象（没改）：9 列工作台用满屏宽时木框贴到屏幕边（Phase 21 起 9 × 3 的站都这样）。
+
+---
+
+# Phase 23d：比一比岛重做——左右两个数，选 > < =（2026-10-27，D-130 – D-136，内容版本 12）
+
+依据 [docs/compare-island-prd.md](../docs/compare-island-prd.md)（v1.0 → v1.1）。顺序：23d-0 设计稿（Ted 确认）→ 23d-1 规格与任务（本节）→ 23d-2 冻结 v11 种子 → 23d-3 core + content → 23d-4 progress → 23d-5 screens → 23d-6 三视口走查 → 23d-7 文档。没有任何 git 操作；没加依赖、没改 `package.json`；`schemaVersion` 不变、没加存档字段；旧 46 站指纹一字未变；`lint:purity` 零命中；没加自动语音、失败音、红叉（答错只有原有的"嗯？"音和琥珀卡片）。
+
+## 23d-0 设计稿（D-130）
+
+- [x] [docs/mockups/compare-island-signs.html](../docs/mockups/compare-island-signs.html)，已发布为 Artifact（https://claude.ai/artifact/PDC7mmhMSTiN3N1qgVCgBc ，v2 加了第 8 – 10 站）：能玩的手机（八 / 十站接好、三个视口、拖或点、错了摇头飘回、求助三级、示范手、声音、减少动效）、符号块各状态、色板与实测对比度、375 × 812 八个画面 + 360 × 640 / 667 × 331、关卡表与脚本检查、和 PRD 的出入、要 Ted 定的事。
+- [x] Ted（2026-10-27）："设计稿 PRD 不错，你问的问题都按你觉得最合适的方案去做"；同时追加"关卡和 Boss 加更复杂的两位数比较，方块摆法更有迷惑性（12 两个 6 并排对 10 一根长条）"→ 岛 10 站。
+
+## 23d-1 规格与任务
+
+- [x] 把 PRD + Ted 的追加落成下面各步与 SPEC 改动（SPEC-math-core / content / progress / blocks-ui / screens / audio-i18n 已更新）。任务按依赖：种子 → core → content → progress → blocks-ui → screens → 走查 → 文档，每步跑本层测试再往下。
+
+## 23d-2 种子存档（先于题库）
+
+- [x] v11 代码（题库没动前）用临时 jest 测试生成、用完删除：`src/progress/__fixtures__/archive-v11-phase23c-{all-finished,ch4-half,ch2-half}.json`（v10 种子经 v11 `migrate`；全通那份按参考解打完旧比一比岛 8 站：54 站、作品册 54、`current` ch4-n8；旧岛一半：n1、n2 完成，`current` ch4-n3、台上一个伙伴；合体岛一半原样，`current` ch2-n5）。
+
+## 23d-3 core + content（D-131、D-132）
+
+- [x] 先把 23c 改过的比较 / 排队源文件恢复成 17d562b^（逐个 diff 核过：23c 对它们全是新增）：judge / core index、schema / material / solution / validate / generate / bench / challenge / copy / content index / catalog index、Stage / cheer / blocks-ui index / layout、hints / level-session / LevelScreen / MapScreen；删 `catalog/chapter-4.ts`、`CompareRail.tsx`、`CompareSketch.tsx`。`sfx.ts` 的 `compare` 音留着。
+- [x] core `sign.ts`：`Sign`、`SIGNS`、`signOf`。
+- [x] content：`sign` 规格与 `SignSide`（tower / row / square、parts 叠或 `beside` 并排）、`Puzzle.sign`、`sign.ts`（`sideOf` / `roundOf` / `sideShape` / `signBounds` / `roundOrder` / `signMaterial` / `picturedSides`、`SIGN_MAX_ROWS`）、`generate` / `bench` / `challenge` / `validate (assertSign)` 接上、`catalog/chapter-6.ts`（10 站）、`RETIRED_STOPS`、`CONTENT_VERSION = 12`、`CONTENT_CHANGES[11] = [12] = []`、文案 18 个新 key。
+- [x] 指纹：`FINGERPRINT_VERSION = 12`，旧 46 站不变；新 n1 `64299c9c`、n2 `a2f5a22a`、n3 `4b759c95`、n4 `a469d944`、n5 `5ace37e2`、n6 `12564009`、n7 `3da1c394`、n8 `22f7d5fe`、n9 `2adbe526`、n10 `bb2c3987`（描述追加 `p.sign`）。
+
+## 23d-4 progress（D-133）
+
+- [x] `migrate` 读 `RETIRED_STOPS`：退役站的完成、作品、作品册图片去掉，`current` 停在退役站移到第一个开着没完成的站；不进 `setAside`、不备份、不修复。`upgrade.test.ts` 新 describe v11 → v12（5 条）。
+
+## 23d-5 screens / blocks-ui（D-134 – D-136）
+
+- [x] blocks-ui：`SignBlock.tsx`（+ `PictureSign`）、`SignStage.tsx`、`sign-layout.ts`、`SIGN_COLORS`、`WorkPicture signed`。
+- [x] screens：`SignPlay.tsx`、`sign-hints.ts`、`LevelScreen` 遇到 `puzzle.sign` 交给 `SignPlay`（`onSigned`、`onSignReplay` = `newVariant`）、`MapScreen` `MAP_SIGN_LABEL`、`AlbumScreen` / `IslandDoneScreen` 画符号。
+- [x] 走查时补的两处：求助后一级打断上一级的逐块编号；伙伴只合体成 ≤ 10 的数（`JOIN_UP_TO`，十几那边保持伙伴颜色）。
+
+### 删掉的测试（150 条，逐条）
+
+- 旧比一比岛专属：`core/judge.test.ts` compare / order 5 条；`content/catalog/catalog.test.ts` Phase 23c 5 条；`content/generate.test.ts` Phase 23c 3 条；`content/fingerprint.test.ts` ch4-n1 – n8 8 条；`progress/upgrade.test.ts` v10 → v11 4 条；`blocks-ui/Stage.test.web.tsx` 比较台 1 条；`blocks-ui/cheer.test.ts` `LINE_UP_CHEER` 1 条；`blocks-ui/layout.test.ts` 比较台留行 1 条 + 每台手机 × ch4 八站的布局用例 104 条（13 台 × 8）；`screens/hints.test.ts` 5 条；`screens/level-session.test.ts` 4 条；`screens/LevelScreen.test.web.tsx` 4 条；`screens/LevelScreen.sound.test.web.tsx` 1 条；`screens/MapScreen.test.web.tsx` ch4 标签 1 条；`screens/IslandDoneScreen.test.web.tsx` Phase 23c 最后一岛 1 条。
+- 只改了名字（删一条、加回同义的一条）：`content/demo.test.ts` "fifty-four stops" → "fifty-six stops"；`IslandDoneScreen` 拿走岛那条（"on to Compare Island (Phase 23c)" → "(Phase 23d)"，目的地 ch4-n1 → ch6-n1）。
+
+### 新增的测试（216 条）
+
+- `core/sign.test.ts` 3；`content/sign.test.ts` 4；`content/generate.test.ts` 3（材料、校验拒绝 17 种、洗牌与回退）；`content/catalog/catalog.test.ts` 6（10 站与退役、轮次表、公平检查、难度曲线、材料即最后一轮、再玩一次的顺序）；`content/fingerprint.test.ts` ch6 10 条；`content/demo.test.ts` 1（改名）；`progress/upgrade.test.ts` v11 → v12 5 条；`blocks-ui/palette.test.ts` 符号色 1；`blocks-ui/sign-layout.test.ts` 163（(13 台 + 3 视口) × 10 站 + 3 条）；`blocks-ui/SignStage.test.web.tsx` 5；`screens/sign-hints.test.ts` 5；`screens/LevelScreen.test.web.tsx` 6；`LevelScreen.sound.test.web.tsx` 1；`MapScreen.test.web.tsx` 1；`IslandDoneScreen.test.web.tsx` 2。
+
+### 改了期望的旧测试（逐条）
+
+- `catalog.test.ts`：岛顺序 `..., 'ch3', 'ch6'`；工作台表 ch4 八站 → ch6 十站（3x5 3x4 3x5 3x6 7x4 3x5 3x9 5x10 6x10 5x10）；23a / 23b 两条"不算比一比岛"的过滤 ch4 → ch6。
+- `unlock.test.ts`：地图 54 → 56；ch3-n8 的下一站 ch6-n1、ch6-n10 没有下一站；打完旧岛停 ch6-n1、打完 ch6 停 ch6-n10；`openerOf(ch6-n1)` 是 ch3-n8。
+- `upgrade.test.ts`：`beforeV9` / `beforeV11` / `V5_CHAPTERS` 的过滤 ch4 → ch6；'next' 在最后一站 ch4-n8 → ch6-n10；v9 → v10 组 'next' 从 ch3-n8 落 ch6-n1；不再读 v10 的两份一半夹具（文件留着）。
+- `layout.test.ts`：恢复 23c 之前的样子，三处全目录循环跳过符号站（它们没有工作台，归 `sign-layout.test.ts`）。
+- `LevelScreen.test.web.tsx` / `LevelScreen.sound.test.web.tsx` / `MapScreen.test.web.tsx` / `IslandDoneScreen.test.web.tsx`：地图顺序里 ch4 八站换成 ch6 十站；奖杯与收尾页 ch4 → ch6；`blocks-ui` mock 加 `SignStage` 探针。
+
+## 门禁（最终）
+
+- [x] `pnpm lint` 0；`pnpm typecheck` 过；`pnpm lint:purity` 零命中；`pnpm test:gate` 64 suite / **1552**（基线 59 / 1486：删 150、加 216）；覆盖率全部 97.5 / 93.49（语句 / 分支），content 98.23 / 95.77、core 100 / 99.15、progress 99.09 / 97.8；`pnpm build:web` 过（9 个静态路由）。
+
+## 浏览器走查（Checkpoint 23d，Playwright）
+
+内建浏览器面板仍不去 localhost，用 Playwright（Chromium）对 `static-dist`（8787）。v11 全通夹具临时拷进 `dist/`、fetch 后写进 localStorage `amber-blocks/progress`，后几站把 `current` 改成要去的站再进；走查后已删、服务已停。拖放用真实鼠标事件（空格在呼吸，Playwright 的元素拖拽等不到"稳定"，改用 `page.mouse`）。没有听声音。截图 `docs/review-assets/p23d-*.jpg`。
+
+- [x] 375 × 812 地图：v11 全通存档打开即升级，比一比岛 0/10、ch6-n1 醒着其余睡着、没有 ch4 站点，标签 `4>1 2=2 4<5 6>2 3<4 3=3 7<9 10>9 12>10 6<9`；localStorage 只有 `amber-blocks/progress`（没有升级 / 损坏备份键），第一次改动后写成 v12、ch4 记录 0 条（`p23d-01`）。
+- [x] ch6-n1（375）：云朵 `4 □ 1` + 三颗点、卡片"动手试试看 / 选一个符号放进中间"；舞台 212 – 744，格 48、符号块 68、空格 76（呼吸时 78）、台子 61 × 48，托盘只有 > <（`p23d-02`）。拖 `<` 进空格 → 琥珀"4 比 1 多 / 换一个符号试试"、符号挑眉、两边 puzzled，1.2 秒后回到托盘原位、卡片保持（`p23d-03`）。拖 `>` → "4 大于 1 / 下一对！"、云朵 `4 > 1`、空格绿光（`p23d-04`）；第二拍 4 跳、1 看它（`p23d-05`）；下一对 `1 □ 3`，第 2、3 轮用点按（飞进去）答对；最后"5 大于 2 / 可以去下一站啦"、"再玩一次 / 下一站"下沿 806 / 812（`p23d-06`）；存档 ch6-n1 完成、作品册有图。
+- [x] ch6-n9（375，Ted 的例子）：`12 □ 10`，两个 6 并排（徽章 6、6）对 10 的长条，格 33（`p23d-07`）；点卡片三下 → "12 比 10 多 / 用大于号"、`>` 光圈、示范手（`p23d-08`）；答对后两个 6 保持紫色、徽章 6 和 6 还在（`JOIN_UP_TO`，修改后重拍）（`p23d-09`）。
+- [x] 作品册：比一比岛三张卡片画了符号，放大也画（`p23d-10`、`p23d-11`）。收尾页：十个角色欢呼（标签同地图）、"所有的岛都完成了！ / 回地图"、Boss 最后一轮 14 > 13 带符号（`p23d-12`）；回地图奖杯出现。
+- [x] 360 × 640：ch6-n9 格 26、符号 58、符号块下沿 572、托盘下沿 582 / 640（`p23d-360-n9-open`）；ch6-n7 格 29，打完"下一站"592 – 637 / 640（`p23d-360-n7-done`）；"12 比 10 多"一行（18px 高）。新卡片标题按 Fredoka 15px 量：最长 "12 and 10 are the same" 152px（可用 226），正文最长 "Put a sign in the middle" 126px。
+- [x] 667 × 331：ch6-n9 格 25、符号 56、托盘竖在右边 591 起（`p23d-667-n9-open`）；ch6-n10 五轮打完 `14 > 13`，按钮在左栏底部（下沿 326 / 331）（`p23d-667-n10-done`）。
+- [x] 控制台 0 error。
+- [ ] 减少动效、横屏拖动、"再玩一次"换顺序、`WRONG_SIGN = 'stay'` 只在 jsdom / 单元测试里走过。
+
+## 需要 Ted 决定（都有一处常量或一行）
+
+1. 10 站的轮次与顺序（`catalog/chapter-6.ts`），尤其新加的 8 – 10 站：十几用"10 加几个并排"、摆法骗人的三轮、Boss 五轮。岛名"比一比岛 / Compare Island"。
+2. `SAY_SYMBOL_NAMES = true`、`WRONG_SIGN = 'bounce'`、`TAP_TO_PLACE = true`、`PARTS_JOIN_ON_PASS = true`（`screens/sign-hints.ts`），`MAP_SIGN_LABEL = 'first-pair'`（`MapScreen.tsx`）。
+3. `JOIN_UP_TO = 10`（`blocks-ui/SignStage.tsx`，走查后加的，设计稿里还没有）：10 以上都是 10 的淡紫，所以 6 + 6 答对后保持两个紫色的 6，不变成和旁边 10 一样的淡紫。设成更大就照合体。
+4. 大塔偏小（Ted 已说可以接受，记在这里备查）：10 格高的长条在 360 × 640 是 26px、667 × 331 是 25px；最矮三台手机上 7 – 10 站 18 – 25px。
+5. `SIGN_MAX_ROWS = 10`（content）：一边最多 10 格高，十几只能"10 加几个并排"或伙伴并排，不会出 11 格高的塔。
+6. 两位数的颜色：十几全用 10 的淡紫（`hueFor` 封顶 10，Phase 21 起如此），台子上的 12 与 10 同色、靠数字区分。
+
+## 与 PRD / 设计稿的出入
+
+- 岛 10 站（PRD 8 站）：Ted 追加两位数站（D-130）；设计稿 v1 里建议的"Boss 最后一轮 (9, 8) → (8, 9)"被新 Boss 取代。
+- 数字台子在塔脚下、和空格同一行（PRD §5.1 画在塔顶）；没有木框工作台；符号是画的粗条不是 Fredoka 字形；求助第 3 级拆成标题 + 正文（`hint.sign.use.*` 只剩"用大于号"）。
+- 错了摇头用现成的 `useWobble`（±8°），PRD 写 ±10°；托盘呼吸用 `useBreathe`（1.07）。空格里的"?"是 Fredoka 的问号（读屏隐藏），PRD 说"是形状不是字"。
+- 没做开站后 3.5 秒的云朵提醒脉冲（其他岛有）；开站只有弹入、Amber 探身、look 音。
+- 完成过的站打开时停在最后一轮已答对的样子（PRD 没写；与其他站打开已拼对的作品一致），"再玩一次"派 `newVariant`（换轮次顺序）而不是 `replay`。
+- 360 × 640 第 5 站格 38、667 × 331 第 4 站 43（设计稿页面里写 40 / 41，实现以 `sign-layout.test` 钉住的为准）。
+
+## 只能真机确认
+
+- 符号块拖动与点按的手感；FLIP 弹簧飞入 / 飘回在慢手机上是否顺；空格"吸住"的半径（0.95 个符号）够不够宽容。
+- 两声比较音在手机扬声器上听不听得出方向；"嗯？"后飘回的节奏（0.65 秒）。
+- 两位数站：孩子会不会去数 12 块（26px 的块点不点得准），还是只看台子上的数字。
+- iOS Safari 的音频解锁与语音（同前）。
+
+## 已知遗留 / 没做
+
+- `archive-v10-phase23b-{ch1,ch2}-half.json` 现在没有测试读（v11 种子由它们生成，文件留着）。
+- 随机题不出比较题（PRD §10）。
+- 设计稿页面的合体演示与两处格子数没跟着走查后的改动更新。
