@@ -2,7 +2,7 @@ import { areTouching, groupSize } from '../core';
 import type { Command, Group } from '../core';
 import { CHAPTERS, CONTENT_VERSION, chapterId, format, materialize, materializeNode, nodeId } from '../content';
 import type { Puzzle } from '../content';
-import { GAP_TOLD_UNTIL, HELP_LADDER_STEPS, RAIL_SPOT, asksForHelp, biggestFirst, cardFor, covers, feedbackFor, guidanceFor, helpAt, hintFor, promptLine, promptParams, rungOf } from './hints';
+import { GAP_TOLD_UNTIL, HELP_LADDER_STEPS, asksForHelp, biggestFirst, cardFor, covers, feedbackFor, guidanceFor, helpAt, hintFor, promptLine, promptParams, rungOf } from './hints';
 import { commitCommand, startSession } from './level-session';
 import type { LevelSession } from './level-session';
 
@@ -1249,119 +1249,5 @@ describe('Phase 23a: the new picture stops\' decoys (PRD §4.1)', () => {
         expect(covers(spare.map(bar), q.template.cells.length - spare.reduce((a, b) => a + b, 0), q)).toBe(true);
       }
     }
-  });
-});
-
-describe('Phase 23c: Compare Island cards and help', () => {
-  const card = (s: LevelSession, lang: 'zh' | 'en' = 'zh') => {
-    const f = feedbackFor(s);
-    return { tone: f.tone, title: format(f.title.key, lang, f.title.params), detail: format(f.detail.key, lang, f.detail.params) };
-  };
-  const asked = (s: LevelSession, n: number) => {
-    const h = helpAt(s, n);
-    return { line: format(h.line.key, 'zh', h.line.params), focus: h.focus.objects, countUp: h.countUp };
-  };
-  const singles = (p: Puzzle, n: number, from = 0): ReadonlyArray<Command> => [...p.initial.units.keys()].slice(from, from + n).map((unitId, i) => ({ type: 'take', unitId, to: { x: from + i, y: 0 } }));
-  const put = (p: Puzzle, sizes: ReadonlyArray<number>): ReadonlyArray<Command> => sizes.map((n, i) => ({ type: 'takeGroup', groupId: partner(p, n).id, origin: { x: 0, y: i } }));
-
-  test('as many (ch4-n1): the task; short is "still fewer" (never how many), past it "take 1 away"; right reads "3 and 3 are the same"', () => {
-    const p = puzzleOf('ch4-n1');
-    const s = play(p, []);
-    expect(card(s)).toEqual({ tone: 'start', title: '动手试试看', detail: '搭一排和它一样多的' });
-    expect(card(s, 'en').detail).toBe('Build a row as many as this one');
-    expect(promptParams(p)).toEqual({ a: 3 });
-    expect(asksForHelp(s)).toBe(true);
-    expect(asked(s, 1)).toEqual({ line: '搭一排和它一样多的', focus: [RAIL_SPOT], countUp: false });
-    expect(asked(s, 2)).toEqual({ line: '在它下面再放一块', focus: [RAIL_SPOT], countUp: false });
-    expect(asked(s, 3)).toEqual({ line: '放到和它一样长', focus: [RAIL_SPOT], countUp: false });
-    const two = play(p, singles(p, 2));
-    expect(card(two)).toEqual({ tone: 'building', title: '还比它少', detail: '在它下面再放一块' });
-    expect(card(two, 'en').title).toBe('Still fewer');
-    // The first ask numbers the row the child built and lights the rail.
-    expect(asked(two, 1)).toEqual({ line: '在它下面再放一块', focus: [RAIL_SPOT], countUp: true });
-    expect(asked(two, 3).line).toBe('放到和它一样长');
-    const four = play(p, singles(p, 4));
-    expect(card(four)).toEqual({ tone: 'adjust', title: '比它多了，拿走 1 块', detail: '放到和它一样长' });
-    expect(card(four, 'en').title).toBe("That's more. Take 1 away");
-    expect(asked(four, 3)).toEqual({ line: '送 1 块回家', focus: [[...p.initial.units.keys()][3]], countUp: false });
-    const three = play(p, singles(p, 3));
-    expect(card(three)).toEqual({ tone: 'success', title: '拼对啦！', detail: '3 和 3 一样多' });
-    expect(card(three, 'en').detail).toBe('3 and 3 are the same');
-    expect(say(three)).toBe('3 和 3 一样多');
-  });
-
-  test('more (ch4-n2): "not more yet" until it is; one more (ch4-n4): the same is "same now, one more", the rail grown is "now it\'s 4 too"', () => {
-    const more = puzzleOf('ch4-n2');
-    expect(card(play(more, singles(more, 2)))).toEqual({ tone: 'building', title: '还没有比它多', detail: '在它下面再放一块' });
-    expect(asked(play(more, singles(more, 2)), 3).line).toBe('放到比它长');
-    expect(card(play(more, singles(more, 4))).detail).toBe('4 比 2 多');
-    const boss = puzzleOf('ch4-n4');
-    expect(card(play(boss, singles(boss, 3)))).toEqual({ tone: 'building', title: '一样多了，再多 1 块', detail: '在它下面再放一块' });
-    const grown = play(boss, singles(boss, 4));
-    expect(grown.step).toBe(1);
-    expect(card(grown)).toEqual({ tone: 'building', title: '它也变成 4 了！再多一块', detail: '在它下面再放一块' });
-    expect(card(grown, 'en').title).toBe("Now it's 4 too! One more");
-    expect(asked(grown, 3).line).toBe('放到比它长一块');
-    expect(card(play(boss, singles(boss, 6))).detail).toBe('6 比 5 多');
-  });
-
-  test('one fewer (ch4-n7, 5): "a bit more"; the same is "same now, take one away"; past it "take 2 away"; 4 reads "4 is fewer than 5"', () => {
-    const p = puzzleOf('ch4-n7');
-    expect(card(play(p, singles(p, 3)))).toEqual({ tone: 'building', title: '再多一点', detail: '在它下面再放一块' });
-    expect(asked(play(p, singles(p, 3)), 3).line).toBe('放到比它短一块');
-    expect(card(play(p, singles(p, 5)))).toEqual({ tone: 'adjust', title: '一样多了，拿走 1 块', detail: '送 1 块回家' });
-    expect(card(play(p, singles(p, 5)), 'en').title).toBe('Same now. Take one away');
-    expect(card(play(p, singles(p, 6)))).toEqual({ tone: 'adjust', title: '比它多了，拿走 2 块', detail: '放到比它短一块' });
-    expect(asked(play(p, singles(p, 6)), 3).line).toBe('送 2 块回家');
-    expect(card(play(p, singles(p, 4))).detail).toBe('4 比 5 少');
-    expect(card(play(p, singles(p, 4)), 'en').detail).toBe('4 is fewer than 5');
-  });
-
-  test('picking more than 3 (ch4-n6): a 2 is "2 is fewer than 3" (amber, try another); the ladder sends it back, then swaps in the 5; 1 + 2 is the same, a discovery; 5, or 2 + 5, is right', () => {
-    const p = puzzleOf('ch4-n6');
-    const s = play(p, []);
-    expect(card(s)).toEqual({ tone: 'start', title: '动手试试看', detail: '找一个比 3 多的伙伴' });
-    expect(card(s, 'en').detail).toBe('Find a partner with more than 3');
-    expect([...asked(s, 1).focus].sort()).toEqual([RAIL_SPOT, ...[...p.initial.groups.keys()]].sort());
-    const two = play(p, put(p, [2]));
-    expect(card(two)).toEqual({ tone: 'adjust', title: '2 比 3 少', detail: '换一个伙伴试试' });
-    expect(card(two, 'en').title).toBe('2 is fewer than 3');
-    expect(asked(two, 2)).toEqual({ line: '把 2 送回去', focus: [partner(p, 2).id], countUp: false });
-    expect(asked(two, 3)).toEqual({ line: '把 2 送回去，换 5 过来', focus: [partner(p, 2).id, partner(p, 5).id], countUp: false });
-    const both = play(p, put(p, [1, 2]));
-    expect(card(both)).toEqual({ tone: 'building', title: '1 加 2 是 3，和它一样多！', detail: '找一个比 3 多的伙伴' });
-    expect(card(both, 'en').title).toBe('1 and 2 make 3, the same!');
-    expect(card(play(p, put(p, [5]))).detail).toBe('5 比 3 多');
-    expect(card(play(p, put(p, [5, 2]))).detail).toBe('7 比 3 多');
-    // Picking fewer than 4 (ch4-n3): the 4 is "the same", the 5 "more".
-    const fewer = puzzleOf('ch4-n3');
-    expect(card(play(fewer, put(fewer, [4]))).title).toBe('4 和 4 一样多');
-    expect(card(play(fewer, put(fewer, [5]))).title).toBe('5 比 4 多');
-    expect(card(play(fewer, put(fewer, [2]))).detail).toBe('2 比 4 少');
-  });
-
-  test('the line-up (ch4-n8): two the wrong way round say which goes first; all three out of order "start with the smallest"; on top of each other "side by side"; the ladder: the smallest first, then where all three go', () => {
-    const p = puzzleOf('ch4-n8');
-    const at = (n: number, x: number, y = 0): Command => ({ type: 'takeGroup', groupId: partner(p, n).id, origin: { x, y } });
-    const s = play(p, []);
-    expect(card(s)).toEqual({ tone: 'start', title: '动手试试看', detail: '从小到大排好队' });
-    expect(card(s, 'en').detail).toBe('Line up, smallest first');
-    expect(promptParams(p)).toEqual({});
-    expect([...asked(s, 1).focus].sort()).toEqual([...p.initial.groups.keys()].sort());
-    expect(asked(s, 2)).toEqual({ line: '先放最小的', focus: [partner(p, 1).id], countUp: false });
-    expect(asked(s, 3)).toEqual({ line: '1 放最左边，再放 3，再放 4', focus: [partner(p, 1).id], countUp: false });
-    const swapped = play(p, [at(3, 0), at(1, 4)]);
-    expect(card(swapped)).toEqual({ tone: 'adjust', title: '3 比 1 多，1 排前面', detail: '先放最小的' });
-    expect(card(swapped, 'en').title).toBe('3 is more than 1. 1 goes first');
-    expect(asked(swapped, 1).countUp).toBe(false);
-    expect(card(play(p, [at(1, 0), at(3, 1)]))).toEqual({ tone: 'building', title: '再搬一个', detail: '从小到大排好队' });
-    const wrong = play(p, [at(1, 0), at(4, 1), at(3, 5)]);
-    expect(card(wrong)).toEqual({ tone: 'adjust', title: '从小的开始排', detail: '4 比 3 多，3 排前面' });
-    expect(card(wrong, 'en').title).toBe('Start with the smallest');
-    const stacked = play(p, [at(1, 0, 0), at(3, 0, 1), at(4, 4, 2)]);
-    expect(card(stacked)).toEqual({ tone: 'adjust', title: '一个挨着一个，排成一排', detail: '从小到大排好队' });
-    const done = play(p, [at(1, 0), at(3, 1), at(4, 4)]);
-    expect(card(done)).toEqual({ tone: 'success', title: '拼对啦！', detail: '1、3、4，从小到大' });
-    expect(card(done, 'en').detail).toBe('1, 3, 4, smallest first');
   });
 });

@@ -13,6 +13,7 @@ import type { NodeStatus, ProgressState } from '../progress';
 import { SkyCloud } from './Cloud';
 import { Icon } from './icons';
 import { useProgress } from './progress-store';
+import { signLabel } from './sign-hints';
 import { play } from './sound';
 import { ParentGate, RoundButton } from './ui';
 
@@ -64,6 +65,10 @@ const TRAIL_TOP = 76;
 // other island. Only Shape Island's pictures: Number Island's picture stops
 // keep their numbers. A default for Ted.
 export const MAP_SHAPE_LABEL: 'picture' | 'number' = 'picture';
+// A Compare Island stop's label (Phase 23d, PRD §5.4, §11 #7): 'first-pair',
+// its first round and sign ("4>1"); 'signs', the signs its tray holds ("><=").
+// A default for Ted.
+export const MAP_SIGN_LABEL: 'first-pair' | 'signs' = 'first-pair';
 
 // The picture a stop shows on the map instead of its number, if it does.
 export function mapPictureOf(node: NodeSpec): ReadonlyArray<{ readonly x: number; readonly y: number }> | null {
@@ -115,21 +120,11 @@ export function labelOf(node: NodeSpec): { label: string; number: number } {
       return { label: String(s.total), number: s.total };
     case 'take_away':
       return s.steps !== undefined ? { label: String(s.start), number: s.start } : { label: `${s.start}−${s.take}`, number: s.start - s.take };
-    // Compare Island (Phase 23c, design §4.2): the sign first, then the rail's
-    // number, in the rail's colour (`=3`, `>2`, `<4`); the "one more" boss is
-    // just its first number (`+1` would read as a sum). The line-up: MAP_ORDER_LABEL.
-    case 'compare': {
-      const sign = { same: '=', more: '>', one_more: '>', fewer: '<', one_fewer: '<' }[s.relation];
-      return { label: s.steps !== undefined && s.steps > 1 ? String(s.given) : `${sign}${s.given}`, number: s.given };
-    }
-    case 'order':
-      return { label: MAP_ORDER_LABEL === 'sizes' ? s.sizes.join('') : '≤', number: Math.max(...s.sizes) };
+    // Compare Island (Phase 23d, PRD §5.4): the first round and its sign, in the colour of its bigger number.
+    case 'sign':
+      return signLabel(s, MAP_SIGN_LABEL);
   }
 }
-
-// How the line-up boss (Phase 23c) reads on the map (design §4.2): 'sizes',
-// its three numbers run together (`134`); 'sign', `≤`. A default for Ted.
-export const MAP_ORDER_LABEL: 'sizes' | 'sign' = 'sizes';
 
 // A winding trail: stops swing left and right down the island.
 function trailX(index: number, width: number, size: number): number {

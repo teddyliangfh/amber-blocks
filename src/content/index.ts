@@ -3,9 +3,9 @@
 export type { ChapterId, CopyKey, NodeId } from './ids';
 export { chapterId, nodeId } from './ids';
 
-export type { Chapter, NodeSpec, PictureId, Puzzle, PuzzleDisplay, PuzzleRef, QuestionSpec, ShadowSpec } from './schema';
+export type { Chapter, NodeSpec, PictureId, Puzzle, PuzzleDisplay, PuzzleRef, QuestionSpec, ShadowSpec, SignLayout, SignRound, SignRoundSpec, SignSide, SignSideView } from './schema';
 
-export { BOSS_ENTRANCE, CHAPTERS, CONTENT_CHANGES, CONTENT_VERSION, COUNT_TO_PASS, ISLAND_SHOWCASE, SHAPE_ISLAND_GATE, SHAPE_ISLAND_POSITION, SIDE_ISLANDS, findChapter, findNode } from './catalog';
+export { BOSS_ENTRANCE, CHAPTERS, CONTENT_CHANGES, CONTENT_VERSION, COUNT_TO_PASS, ISLAND_SHOWCASE, RETIRED_STOPS, SHAPE_ISLAND_GATE, SHAPE_ISLAND_POSITION, SIDE_ISLANDS, findChapter, findNode } from './catalog';
 
 export { materialize, materializeNode } from './generate';
 export { validate } from './validate';
@@ -18,9 +18,12 @@ export { COPY, MAX_NUMBER_WORD, copyKey, format, numberWord } from './copy';
 
 export { bodyOf, handlesFor, hueFor } from './material';
 
-export { BENCH_MARGIN, COMPARE_ROWS, MIN_BENCH, benchFor, fitBench } from './bench';
+export { BENCH_MARGIN, MIN_BENCH, benchFor, fitBench } from './bench';
 
 export { SANDBOX, sandboxMaterial } from './sandbox';
+
+export type { SideShape } from './sign';
+export { ALL_SIGNS, SIGN_MAX_ROWS, picturedSides, roundOf, roundOrder, sideOf, sideShape, signBounds, signMaterial } from './sign';
 
 export type { Challenge, ChallengeKind } from './challenge';
 export { CHALLENGE_RULES, CHALLENGE_SHADOW, challengeCap, nextChallenge } from './challenge';

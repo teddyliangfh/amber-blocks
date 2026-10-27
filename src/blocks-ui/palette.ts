@@ -94,6 +94,20 @@ export const THEME = {
   cloud: '#FFFFFF',
 } as const;
 
+// Compare Island's sign blocks (Phase 23d, design: measured there). The body is
+// the island's "press this" amber (OKLCH hue 77°: 17° from 3's yellow and 19°
+// from 2's orange, so never read as a number); the edge a shade darker than
+// amberDeep, which was 2.5:1 on the sand tray (now 3.6:1 on the sand, 3.6 on
+// the sky, 4.3 on the felt). White on amber is 1.7:1, so the sign is white with
+// a dark amber outline (4.6:1 on the body, 8.0:1 around the white).
+export const SIGN_COLORS = {
+  fill: THEME.amber,
+  edge: '#A66800',
+  glyph: THEME.white,
+  outline: '#7A4300',
+  cheek: 'rgba(255,126,149,0.55)',
+} as const;
+
 export const STAGE_COLORS = {
   background: THEME.sky,
   benchFill: THEME.board,

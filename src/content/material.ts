@@ -197,17 +197,6 @@ export function presetMaterial(total: number, bounds: Bounds, prefix: string): B
   return state;
 }
 
-// Compare Island material (Phase 23c): `count` single blocks in the tray to
-// build a row from, coloured as ones (as they turn on the bench, like the
-// spares of handleMaterial): the colour of the partner on the rail would
-// say "the same" before the child has compared anything.
-export function singlesMaterial(count: number, bounds: Bounds, prefix: string): BenchState {
-  if (!Number.isInteger(count) || count < 1) {
-    throw new Error(`content: singlesMaterial expects a positive integer, got ${count}`);
-  }
-  return createBenchState({ units: unitIds(prefix, count).map((id) => ({ id, hue: hueFor(1) })), bounds });
-}
-
 type UnitIdList = ReturnType<typeof unitIds>;
 
 const MAX_RESHUFFLES = 8;

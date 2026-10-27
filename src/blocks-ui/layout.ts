@@ -102,16 +102,7 @@ function settle(geo: StageGeometry, items: ReadonlyArray<Footprint>, stageHeight
 // comfortable size, trying the tray below and beside the bench. When no layout
 // reaches that size, the one with the biggest tray blocks wins; the tray never
 // overflows either way (layoutTray shrinks until everything is inside).
-//
-// `rail`: rows kept free right above the bench (Phase 23c: a compare's rail,
-// CompareRail, one row at the bench's cell size). The stage is laid out as
-// if the bench had those rows too, then the bench is the rows below them.
-export function computeGeometry(stageWidth: number, stageHeight: number, bounds: Bounds, trayItems: ReadonlyArray<Footprint> = [], gap = 12, rail = 0): StageGeometry {
-  if (rail > 0) {
-    const geo = computeGeometry(stageWidth, stageHeight, { cols: bounds.cols, rows: bounds.rows + rail }, trayItems, gap);
-    const above = geo.cell * rail;
-    return { ...geo, bench: { ...geo.bench, y: geo.bench.y + above, height: geo.bench.height - above, rows: bounds.rows } };
-  }
+export function computeGeometry(stageWidth: number, stageHeight: number, bounds: Bounds, trayItems: ReadonlyArray<Footprint> = [], gap = 12): StageGeometry {
   return settle(chooseGeometry(stageWidth, stageHeight, bounds, trayItems, gap), trayItems, stageHeight);
 }
 

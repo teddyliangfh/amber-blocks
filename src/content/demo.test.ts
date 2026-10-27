@@ -10,8 +10,8 @@ describe('M2 map via the public API', () => {
     chapter.nodes.map((node) => ({ contentVersion: CONTENT_VERSION, chapterId: chapter.id, nodeId: node.id, attemptVariant: 0, seed: 2026 })),
   );
 
-  test('fifty-four stops (Phase 23c), eleven of them bosses', () => {
-    expect(refs).toHaveLength(54);
+  test('fifty-six stops (Phase 23d: Compare Island\'s ten for the old eight), eleven of them bosses', () => {
+    expect(refs).toHaveLength(56);
     expect(CHAPTERS.flatMap((c) => c.nodes).filter((n) => n.role === 'boss')).toHaveLength(11);
   });
 

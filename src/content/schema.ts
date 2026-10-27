@@ -1,4 +1,4 @@
-import type { BenchState, Bounds, Command, CompareRelation, GroupId, Question, ShapeTemplate, Symmetry } from '../core';
+import type { BenchState, Bounds, Command, GroupId, Question, ShapeTemplate, Sign, Symmetry } from '../core';
 import type { ChapterId, CopyKey, NodeId } from './ids';
 
 export interface Chapter {
@@ -111,29 +111,39 @@ export type QuestionSpec =
       readonly onMat?: ReadonlyArray<number>;
       readonly steps?: ReadonlyArray<number>;
     }
-  // Compare (Phase 23c, Compare Island, design §2.1 / §2.3): a partner of
-  // `given` stands on a rail above the mat (scenery: not material, never
-  // judged, never saved) and the child puts out a row that stands to it as
-  // `relation` says. Judged by count alone. Exactly one of: `singles`, that
-  // many single blocks in the tray to build a row from; `partners`, one
-  // partner of each size in the tray (shuffled) to pick from, exactly one of
-  // them right alone. `steps`: asked this many times on the same blocks, the
-  // partner on the rail growing by one after each ("one more" three times:
-  // 3 → 4 → 5); 1 when left out.
+  // Compare Island (Phase 23d, D-129): rounds of two numbers, each with its
+  // own blocks to look at and count, and a slot between them for a sign. The
+  // child answers each round with a sign block (signOf, never the mat); the
+  // last right sign finishes the stop. `signs`: the sign blocks in the tray
+  // (all three when left out).
   | {
-      readonly kind: 'compare';
-      readonly given: number;
-      readonly relation: CompareRelation;
-      readonly singles?: number;
-      readonly partners?: ReadonlyArray<number>;
-      readonly steps?: number;
-    }
-  // Line up (Phase 23c): one partner of each size in the tray (shuffled), to
-  // stand side by side on the mat from the smallest; `sizes` smallest first.
-  | {
-      readonly kind: 'order';
-      readonly sizes: ReadonlyArray<number>;
+      readonly kind: 'sign';
+      readonly rounds: ReadonlyArray<SignRoundSpec>;
+      readonly signs?: ReadonlyArray<Sign>;
     };
+
+// One side of a round: a number (a tower), or a number laid out another way
+// (`layout`), or made of partners (`parts`, adding up to `n`), stacked into
+// one tower or standing side by side (`beside`). sign.ts draws them.
+export type SignLayout = 'tower' | 'row' | 'square';
+export type SignSide = number | { readonly n: number; readonly layout?: SignLayout; readonly parts?: ReadonlyArray<number>; readonly beside?: boolean };
+export interface SignRoundSpec {
+  readonly left: SignSide;
+  readonly right: SignSide;
+}
+
+// The same, read once (sign.ts roundOf): every side spelled out, and the sign that fits.
+export interface SignSideView {
+  readonly n: number;
+  readonly layout: SignLayout;
+  readonly parts: ReadonlyArray<number> | null;
+  readonly beside: boolean;
+}
+export interface SignRound {
+  readonly left: SignSideView;
+  readonly right: SignSideView;
+  readonly answer: Sign;
+}
 
 // The pictures Shape Island names (copy `picture.<id>`).
 export type PictureId = 'mushroom' | 'duck' | 'tree' | 'boat' | 'house' | 'corner' | 'dog' | 'rocket';
@@ -186,6 +196,12 @@ export interface Puzzle {
   // A Shape Island picture and its shadow (Phase 23b), from the spec.
   readonly picture?: PictureId;
   readonly shadow?: ShadowSpec;
+  // A Compare Island stop (Phase 23d): its rounds in the order this visit asks
+  // them, and the sign blocks in the tray. The material is then the last
+  // round's two sides already on the mat (the finished picture, saved as the
+  // work), and `question` asks for exactly those blocks on the mat, so the
+  // picture is always right: the rounds are judged by their signs instead.
+  readonly sign?: { readonly rounds: ReadonlyArray<SignRound>; readonly signs: ReadonlyArray<Sign> };
   // All material, in the tray except a given partner, the partners on the mat
   // or a take-away / split stop's blocks (all on the mat); partners already defined with their shapes.
   readonly initial: BenchState;

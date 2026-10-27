@@ -1,5 +1,5 @@
 import type { BenchState, Bounds } from '../core';
-import { CHAPTERS, CONTENT_CHANGES, CONTENT_VERSION, materialize } from '../content';
+import { CHAPTERS, CONTENT_CHANGES, CONTENT_VERSION, RETIRED_STOPS, materialize } from '../content';
 import type { Chapter, NodeId } from '../content';
 import { sameMaterial } from './sanitize';
 import type { NodeProgress, ProgressState } from './schema';
@@ -44,6 +44,15 @@ function changedBetween(from: number, to: number, changes: Readonly<Record<numbe
   return out;
 }
 
+// Stops taken off the map after `from` up to `to` (RETIRED_STOPS, Phase 23d).
+function retiredBetween(from: number, to: number, retired: Readonly<Record<number, ReadonlyArray<NodeId>>>): ReadonlySet<NodeId> {
+  const out = new Set<NodeId>();
+  for (let v = Math.max(from, 0) + 1; v <= to; v += 1) {
+    (retired[v] ?? []).forEach((id) => out.add(id));
+  }
+  return out;
+}
+
 // Work made on a mat of another size (version 3 fitted each stop's mat to its
 // material): the same pieces in the same cells when they still fit, else the
 // whole arrangement slid to the top-left corner, so shapes and joins survive.
@@ -84,13 +93,17 @@ function refit(node: NodeProgress): BenchState | null | undefined {
 // build that already dealt it), moved onto a resized mat where needed (onMat). An archive whose version this build cannot
 // place keeps only its completions. The album is history and stays exactly as
 // it was, whatever changed (2026-10-15 review Q); so does the sandbox, which is
-// no stop's material (review O). Whatever is still wrong after this is damage,
-// and sanitize reports it.
+// no stop's material (review O). Stops a version retired (Phase 23d: the first
+// Compare Island) go entirely: completion, work, album picture; a map resting
+// on one moves to the first open stop. That is the upgrade Ted asked for, not
+// damage, so nothing is set aside or reported. Whatever is still wrong after
+// this is damage, and sanitize reports it.
 export function migrate(
   stored: ProgressState,
   contentVersion: number = CONTENT_VERSION,
   chapters: ReadonlyArray<Chapter> = CHAPTERS,
   changes: Readonly<Record<number, ReadonlyArray<NodeId>>> = CONTENT_CHANGES,
+  retiredStops: Readonly<Record<number, ReadonlyArray<NodeId>>> = RETIRED_STOPS,
 ): Migrated {
   if (stored.contentVersion === contentVersion) {
     return { state: stored, setAside: [] };
@@ -102,9 +115,13 @@ export function migrate(
     const setAside = [...stored.nodes].filter(([, n]) => n.work !== null).map(([id]) => id);
     return { state: { ...stored, contentVersion, completedNodeIds, current: null, nodes: new Map() }, setAside };
   }
+  const retired = retiredBetween(stored.contentVersion, contentVersion, retiredStops);
   const nodes = new Map<NodeId, NodeProgress>();
   const setAside: NodeId[] = [];
   for (const [id, node] of stored.nodes) {
+    if (retired.has(id)) {
+      continue;
+    }
     // A ref that disagrees with its own archive is damage, not an upgrade.
     if (node.ref.contentVersion !== stored.contentVersion) {
       nodes.set(id, node);
@@ -125,7 +142,19 @@ export function migrate(
     }
     nodes.set(id, { ...upgraded, work });
   }
-  return { state: { ...stored, contentVersion, completedNodeIds, nodes, current: onwardFrom(stored.current, completedNodeIds, chapters) }, setAside };
+  const album = [...stored.album.keys()].some((id) => retired.has(id)) ? new Map([...stored.album].filter(([id]) => !retired.has(id))) : stored.album;
+  const current = stored.current !== null && retired.has(stored.current) ? firstOpen(completedNodeIds, chapters) : onwardFrom(stored.current, completedNodeIds, chapters);
+  return { state: { ...stored, contentVersion, completedNodeIds, nodes, album, current }, setAside };
+}
+
+// The first stop in map order that finishing has opened (the stop before it is
+// finished) and that is not finished itself; null when there is none.
+function firstOpen(completed: ReadonlySet<NodeId>, chapters: ReadonlyArray<Chapter>): NodeId | null {
+  const open = mapOrder(chapters).find((e) => {
+    const opener = openerOf(e.nodeId, chapters);
+    return opener !== undefined && !completed.has(e.nodeId) && completed.has(opener);
+  });
+  return open?.nodeId ?? null;
 }
 
 // Where the map rests after an upgrade, when it rested on a finished stop.
@@ -148,11 +177,7 @@ export function onwardFrom(current: NodeId | null, completed: ReadonlySet<NodeId
   }
   const order = mapOrder(chapters);
   if (rule === 'first-open') {
-    const open = order.find((e) => {
-      const opener = openerOf(e.nodeId, chapters);
-      return opener !== undefined && !completed.has(e.nodeId) && completed.has(opener);
-    });
-    return open?.nodeId ?? current;
+    return firstOpen(completed, chapters) ?? current;
   }
   const next = order[order.findIndex((e) => e.nodeId === current) + 1];
   return next !== undefined && !completed.has(next.nodeId) ? next.nodeId : current;

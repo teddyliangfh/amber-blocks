@@ -13,17 +13,18 @@ import type { Lang, NodeId, Puzzle } from '../content';
 import type { BenchState, Command, UnitId } from '../core';
 import { chapterOf, nextNodeOf, statusOf } from '../progress';
 import { createCorrectionVoice } from './correction-voice';
-import { RAIL_SPOT, asksForHelp, biggestFirst, cardFor, feedbackFor, guidanceFor, helpAt, matchedFeedback, partsLine, partsOf, promptLine as taskLine, promptParams, shadowDemo } from './hints';
+import { asksForHelp, biggestFirst, cardFor, feedbackFor, guidanceFor, helpAt, matchedFeedback, partsLine, partsOf, promptLine as taskLine, promptParams, shadowDemo } from './hints';
 import type { AskedHelp, Line } from './hints';
 import { AmberGuide } from './AmberGuide';
 import { AnswerFeedback } from './AnswerFeedback';
-import { CompareSketch } from './CompareSketch';
 import { SkyCloud, TargetCloud } from './Cloud';
 import { Icon } from './icons';
 import type { IconName } from './icons';
-import { asideCells, atStart, cloudTitle, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, lineUp, matOf, previewCommand, recount, revealShadow, shadowView, solvedEquation, startSession, targetNumberOf, undoCommand, waysApart } from './level-session';
+import { asideCells, atStart, cloudTitle, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, matOf, previewCommand, recount, revealShadow, shadowView, solvedEquation, startSession, targetNumberOf, undoCommand, waysApart } from './level-session';
 import type { LevelSession } from './level-session';
 import { LevelRecovery } from './LevelRecovery';
+import { SignPlay } from './SignPlay';
+import type { SignHost } from './SignPlay';
 import { useProgress } from './progress-store';
 import { play } from './sound';
 import { AUTO_SPEECH } from './speech-policy';
@@ -82,10 +83,6 @@ const PICTURE_FACE_MIN = 10;
 // the card is tapped; 'parts', the parts written out (`3 + 1 + 1 + 1 = 6`).
 // A default for Ted: with the island before Join Island, no plus yet.
 export const SHAPE_CLOUD_ON_PASS: 'count' | 'parts' = 'count';
-
-// The rows above a compare's mat its rail takes (Phase 23c, design §5.6: one
-// row, at the mat's cell size, so the two rows line up cell for cell).
-const COMPARE_RAIL_ROWS = 1;
 
 function isBossStop(nodeId: NodeId): boolean {
   return chapterOf(nodeId).nodes.find((n) => n.id === nodeId)?.role === 'boss';
@@ -690,8 +687,7 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
     if (stageSize === null) {
       return null;
     }
-    // A compare keeps a row above the mat for the partner on its rail (Phase 23c).
-    return computeGeometry(stageSize.width, stageSize.height, puzzle.initial.bounds, objects.map((o) => o.footprint), undefined, puzzle.question.kind === 'compare' ? COMPARE_RAIL_ROWS : 0);
+    return computeGeometry(stageSize.width, stageSize.height, puzzle.initial.bounds, objects.map((o) => o.footprint));
   }, [stageSize, puzzle, objects]);
 
   const order = useMemo(() => (session === null ? new Map<UnitId, number>() : countOrder(session)), [session]);
@@ -713,20 +709,6 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
       play('launch');
     }
   }, [celebration, launches]);
-  // Compare Island (Phase 23c, design §5.3): with the second beat, the child's
-  // number then the rail's (high-low is "more"); a line-up its three, smallest first.
-  const compareNotes = useMemo((): ReadonlyArray<number> | null => {
-    const q = session?.puzzle.question;
-    if (session === null || q === undefined || !session.verdict.matched) {
-      return null;
-    }
-    return q.kind === 'compare' ? [session.verdict.benchCount, q.given] : q.kind === 'order' ? lineUp(session.history.state) : null;
-  }, [session]);
-  useEffect(() => {
-    if (celebration > 0 && compareNotes !== null && compareNotes.length > 0) {
-      play('compare', compareNotes[compareNotes.length - 1], compareNotes.slice(0, -1));
-    }
-  }, [celebration, compareNotes]);
 
   // A stop asked in steps: the new picture nods as it comes up (no chime: the
   // stop has not opened again).
@@ -758,20 +740,8 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
   const intoShadow = shadowDemo(session);
   const first = intoShadow ?? demoMove(session);
   const demoPiece = first === undefined ? undefined : first.type === 'takeGroup' || first.type === 'returnGroup' ? (first.groupId as string) : first.type === 'take' || first.type === 'move' || first.type === 'return' ? (first.unitId as string) : undefined;
-  // On Compare Island (Phase 23c) right under the rail, where the answer's first piece goes.
-  const lined = puzzle.question.kind === 'compare' || puzzle.question.kind === 'order';
   const demoTo =
-    intoShadow?.type === 'takeGroup'
-      ? intoShadow.origin
-      : intoShadow?.type === 'take'
-        ? intoShadow.to
-        : (puzzle.given !== undefined || lined) && first?.type === 'takeGroup'
-          ? first.origin
-          : lined && first?.type === 'take'
-            ? first.to
-            : first?.type === 'move'
-              ? first.to
-              : undefined;
+    intoShadow?.type === 'takeGroup' ? intoShadow.origin : intoShadow?.type === 'take' ? intoShadow.to : puzzle.given !== undefined && first?.type === 'takeGroup' ? first.origin : first?.type === 'move' ? first.to : undefined;
   const template = session.puzzle.display.template;
   const isBoss = boss;
   const solved = session.verdict.matched;
@@ -782,7 +752,7 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
   // Each number celebrates its own way; the 8 brick drives off, 17 stands and
   // waves, the countdown's last block launches (cheer.ts).
   const picture = session.puzzle.display.template;
-  const cheer = cheerFor(targetNumber, { boss: isBoss, countdown, shape: picture === null ? null : { w: Math.max(...picture.cells.map((c) => c.x)) + 1, h: Math.max(...picture.cells.map((c) => c.y)) + 1 }, picture: session.whole.picture ?? null, lineUp: puzzle.question.kind === 'order' });
+  const cheer = cheerFor(targetNumber, { boss: isBoss, countdown, shape: picture === null ? null : { w: Math.max(...picture.cells.map((c) => c.x)) + 1, h: Math.max(...picture.cells.map((c) => c.y)) + 1 }, picture: session.whole.picture ?? null });
   // A picture's shadow (Phase 23b): drawn while it is not right; help's cells glow in it.
   const shadow = solved ? null : shadowView(session);
   // The number to make sits on a cloud; a boss cloud wears a star.
@@ -795,9 +765,6 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
   // it (PRD §3.3) the side column ran 42px past a 331px-high phone once solved.
   const cloudSize: CloudSize = landscape ? 'side' : compact ? 'compact' : 'regular';
   const showPicture = template !== null && /^\d+$/.test(title);
-  // Compare Island's little picture (Phase 23c): two rows, or three bars; until it is right.
-  const question = session.puzzle.question;
-  const sketch = (question.kind === 'compare' || question.kind === 'order') && !solved ? <CompareSketch question={question} size={cloudSize} /> : null;
   const box = template === null ? null : pictureBox(Math.max(...template.cells.map((c) => c.x)) + 1, Math.max(...template.cells.map((c) => c.y)) + 1, cloudSize);
   const head = template === null ? null : [...template.cells].sort((a, b) => a.y - b.y || a.x - b.x)[0]!;
   const templatePreview =
@@ -831,7 +798,6 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
                 {title}
               </Text>
               {templatePreview}
-              {sketch}
             </TargetCloud>
           </Pressable>
         </Animated.View>
@@ -912,8 +878,6 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
           // a first way, off the way made (D-097).
           outline={host.entrance && !solved ? { n: targetNumber, lit: matOf(session).bench.size, made: asideCells(session) } : undefined}
           shadow={shadow === null ? undefined : { n: targetNumber, cells: shadow.cells, lit: shadow.lit, glow: guide?.focus.cells ?? [] }}
-          // A compare's partner on the rail above the mat (Phase 23c): scenery; the current step's.
-          rail={question.kind === 'compare' ? { n: question.given, id: RAIL_SPOT } : undefined}
           wink={counting.complete ? counts : 0}
         />
       ) : null}
@@ -1079,6 +1043,23 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
     [dispatch, nodeId],
   );
   const onReplay = useCallback(() => dispatch({ type: 'replay', nodeId }).ok, [dispatch, nodeId]);
+  // Compare Island (Phase 23d): the last right sign keeps the finished picture
+  // as the stop's work; "play again" deals the rounds in a new order.
+  const onSigned = useCallback(
+    (work: BenchState) => {
+      dispatch({ type: 'complete', nodeId, verdict: { matched: true, benchCount: work.bench.size, reason: 'matched' }, work });
+    },
+    [dispatch, nodeId],
+  );
+  // After "play again" the new deal opens fresh, not on the finished picture.
+  const [signReplayed, setSignReplayed] = useState(false);
+  const onSignReplay = useCallback(() => {
+    const ok = dispatch({ type: 'newVariant', nodeId }).ok;
+    if (ok) {
+      setSignReplayed(true);
+    }
+    return ok;
+  }, [dispatch, nodeId]);
   const onMap = useCallback(() => {
     voice.stop();
     router.dismissTo('/');
@@ -1127,6 +1108,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
   const hasNext = nextNodeOf(nodeId) !== null;
   const nextStop = nextNodeOf(nodeId);
   const islandDone = (nextStop === null || chapterOf(nextStop).id !== chapter.id) && chapter.nodes.every((n) => state?.completedNodeIds.has(n.id) ?? false);
+  const nextLine = (): Line => ({ key: copyKey(hasNext ? 'feedback.next' : 'feedback.done'), params: {} });
   const host: PlayHost = {
     work: entered?.work ?? null,
     finished: completed,
@@ -1138,7 +1120,7 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
     onMat,
     onReplay,
     restartable: completed,
-    next: () => ({ key: copyKey(hasNext ? 'feedback.next' : 'feedback.done'), params: {} }),
+    next: nextLine,
     // A finished stop always keeps its way on (2026-10-15 review: one more block
     // after solving took the button away, which felt like a punishment). Right
     // now: the bright, breathing button beside "play again"; finished before but
@@ -1171,6 +1153,10 @@ export function LevelScreen({ nodeId: rawNodeId }: { readonly nodeId: string }) 
     },
     exit: { title: text.map, icon: 'map', testID: 'menu-map', onPress: onMap },
   };
+  if (puzzle.sign !== undefined) {
+    const signHost: SignHost = { finished: completed && !signReplayed, boss: host.boss, onSolved: onSigned, onReplay: onSignReplay, restartable: completed, next: nextLine, actions: host.actions, exit: host.exit };
+    return <SignPlay key={`${puzzle.ref.nodeId}-${puzzle.ref.attemptVariant}`} puzzle={puzzle} lang={lang} host={signHost} />;
+  }
   return <LevelPlay puzzle={puzzle} lang={lang} host={host} />;
 }
 

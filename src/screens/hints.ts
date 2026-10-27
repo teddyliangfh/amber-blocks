@@ -1,8 +1,8 @@
 import { CHAPTERS, copyKey, nodeId } from '../content';
 import type { CopyKey, NodeId, Puzzle } from '../content';
-import { DEFAULT_SYMMETRY, areTouching, clusters, compares, variants } from '../core';
-import type { BenchState, Cell, Command, CompareRelation, Group, GroupId, Question, UnitId } from '../core';
-import { demoMove, lineUp, matOf, onlyGiven, onlyOnMat, onlyPreset, roomBeside, sameWayAgain, shadowView, solvedParts, takeAwayAt } from './level-session';
+import { DEFAULT_SYMMETRY, areTouching, clusters, variants } from '../core';
+import type { BenchState, Cell, Command, Group, GroupId, Question, UnitId } from '../core';
+import { demoMove, matOf, onlyGiven, onlyOnMat, onlyPreset, roomBeside, sameWayAgain, shadowView, solvedParts, takeAwayAt } from './level-session';
 import type { LevelSession } from './level-session';
 import { fill } from './shadow';
 import type { Piece, Placement } from './shadow';
@@ -50,13 +50,6 @@ export function promptParams(puzzle: Puzzle): Record<string, number> {
   const given = puzzle.given === undefined ? undefined : puzzle.initial.groups.get(puzzle.given);
   if (q.kind === 'sum_composition' && given !== undefined) {
     return { a: given.unitIds.length, n: q.sum };
-  }
-  // Compare Island (Phase 23c): the rail's number ("find a partner with fewer than 4"); a line-up none.
-  if (q.kind === 'compare') {
-    return { a: q.given };
-  }
-  if (q.kind === 'order') {
-    return {};
   }
   return { n: q.kind === 'sum_composition' ? q.sum : q.kind === 'split' ? q.total : q.target };
 }
@@ -179,140 +172,17 @@ function takeAwayFeedback(session: LevelSession, line: (name: string, params?: R
   return { tone: 'adjust', title: line('feedback.send.toomany', { k: left - count }), detail: line('hint.bring.back', { k: left - count }) };
 }
 
-// What lights up for the partner on the rail above a compare's mat (Phase
-// 23c): the rail is scenery, not material, so it has no id of its own; the
-// screen lights it when the focus holds this.
-export const RAIL_SPOT = 'compare-rail';
-
-// The counts a compare accepts, from `lo` to `hi` (Infinity: no top).
-function compareRange(given: number, relation: CompareRelation): { readonly lo: number; readonly hi: number } {
-  switch (relation) {
-    case 'same':
-      return { lo: given, hi: given };
-    case 'more':
-      return { lo: given + 1, hi: Infinity };
-    case 'fewer':
-      return { lo: 1, hi: given - 1 };
-    case 'one_more':
-      return { lo: given + 1, hi: given + 1 };
-    case 'one_fewer':
-      return { lo: given - 1, hi: given - 1 };
-  }
-}
-
-// The whole help for a row too short: as long as it, longer, one longer, shorter, one shorter.
-const ROW_HINT: Readonly<Record<CompareRelation, string>> = {
-  same: 'hint.as-long',
-  more: 'hint.longer',
-  fewer: 'hint.shorter',
-  one_more: 'hint.one-longer',
-  one_fewer: 'hint.one-shorter',
-};
-
-// How a count stands to the rail's: the word the cards say it with.
-function relationOf(count: number, given: number): 'more' | 'fewer' | 'same' {
-  return count > given ? 'more' : count < given ? 'fewer' : 'same';
-}
-
-// A compare built from partners (the tray deals partners, not single blocks).
-function picksPartners(session: LevelSession): boolean {
-  return session.whole.initial.groups.size > 0;
-}
-
-// The cards of a compare (Phase 23c, design §5.3). An empty mat is the task.
-// The rail just grown ("one more" in steps): it is the child's size now, one
-// more to go. Picking: two partners that make the rail's number are a
-// discovery; one that does not do is said as a fact ("2 is fewer than 3"),
-// amber, never a cross: the lesson itself, not giving the answer away.
-// Building: short of it is building (never how many short, D-078); past it
-// (or the same, when one fewer is asked) is a correction that says how many
-// to take away.
-function compareFeedback(session: LevelSession, line: (name: string, params?: Readonly<Record<string, number>>) => Line): AnswerFeedback {
-  const q = session.puzzle.question;
-  if (q.kind !== 'compare') {
-    throw new Error('hints: not a compare');
-  }
-  const count = session.verdict.benchCount;
-  const a = q.given;
-  if (count === 0) {
-    return { tone: 'start', title: line('feedback.start'), detail: promptLine(session) };
-  }
-  if (session.step > 0 && q.relation === 'one_more' && count === a) {
-    return { tone: 'building', title: line('feedback.grow', { a }), detail: line('hint.under') };
-  }
-  if (picksPartners(session)) {
-    const parts = lineUp(session.history.state);
-    if (parts.length === 2 && count === a && q.relation !== 'same') {
-      return { tone: 'building', title: line('feedback.compare.found-same', { x: parts[0]!, y: parts[1]!, a }), detail: promptLine(session) };
-    }
-    return { tone: 'adjust', title: line(`feedback.compare.is.${relationOf(count, a)}`, { x: count, a }), detail: line('hint.try.another') };
-  }
-  const { lo, hi } = compareRange(a, q.relation);
-  if (count < lo) {
-    const title = q.relation === 'more' ? 'feedback.compare.notmore' : q.relation === 'one_more' && count === a ? 'feedback.compare.same-now' : q.relation === 'one_fewer' ? 'feedback.compare.bit-more' : 'feedback.compare.fewer';
-    return { tone: 'building', title: line(title), detail: line('hint.under') };
-  }
-  if (q.relation === 'one_fewer' && count === a) {
-    return { tone: 'adjust', title: line('feedback.compare.same-back'), detail: line('hint.send.home', { k: 1 }) };
-  }
-  return { tone: 'adjust', title: line('feedback.compare.over', { k: count - hi }), detail: line(ROW_HINT[q.relation]) };
-}
-
-// A line-up as it stands (Phase 23c): its partners left (then top) first, and
-// whether any two share a column (one on top of another).
-function lineUpOf(state: BenchState): { readonly sizes: ReadonlyArray<number>; readonly stacked: boolean } {
-  const spans = benchPartners(state)
-    .map((g) => {
-      const cells = g.unitIds.map((u) => state.bench.get(u)!);
-      return { left: Math.min(...cells.map((c) => c.x)), right: Math.max(...cells.map((c) => c.x)) };
-    })
-    .sort((x, y) => x.left - y.left);
-  return { sizes: lineUp(state), stacked: spans.some((sp, i) => i > 0 && spans[i - 1]!.right >= sp.left) };
-}
-
-// The cards of a line-up (Phase 23c, design §5.3): the task on an empty mat;
-// two the wrong way round: which goes first; all three there but not smallest
-// first: start with the smallest, and which goes first; one on top of
-// another: side by side; otherwise one more to bring.
-function orderFeedback(session: LevelSession, line: (name: string, params?: Readonly<Record<string, number>>) => Line): AnswerFeedback {
-  const q = session.puzzle.question;
-  const all = q.kind === 'order' ? q.sizes.length : 0;
-  const { sizes, stacked } = lineUpOf(session.history.state);
-  if (sizes.length === 0) {
-    return { tone: 'start', title: line('feedback.start'), detail: promptLine(session) };
-  }
-  const i = sizes.findIndex((n, k) => k > 0 && sizes[k - 1]! > n);
-  const first = i === -1 ? null : line('feedback.order.first', { x: sizes[i - 1]!, y: sizes[i]! });
-  if (sizes.length === all) {
-    if (first !== null) {
-      return { tone: 'adjust', title: line('feedback.order.smallest'), detail: first };
-    }
-    return { tone: 'adjust', title: line('hint.side-by-side'), detail: promptLine(session) };
-  }
-  if (first !== null && !stacked) {
-    return { tone: 'adjust', title: first, detail: line('hint.smallest-first') };
-  }
-  return { tone: 'building', title: line('feedback.order.one-more'), detail: promptLine(session) };
-}
-
 // Feedback describes a committed answer, not an in-flight drag. An incomplete
 // collection is encouragement; enough blocks in the wrong arrangement gets an
 // actionable correction. Colours alone never carry the verdict.
 export function feedbackFor(session: LevelSession): AnswerFeedback {
   const { puzzle, verdict } = session;
   const q = puzzle.question;
+  const target = q.kind === 'addition_exact' ? q.operands[0] + q.operands[1] : q.kind === 'sum_composition' ? q.sum : q.kind === 'split' ? q.total : q.target;
   const line = (name: string, params: Readonly<Record<string, number>> = {}): Line => ({ key: copyKey(name), params });
   if (verdict.matched) {
     return { tone: 'success', title: line('feedback.success'), detail: matchedFeedback(session) };
   }
-  // Compare Island (Phase 23c) has its own cards.
-  if (q.kind === 'compare') {
-    return compareFeedback(session, line);
-  }
-  if (q.kind === 'order') {
-    return orderFeedback(session, line);
-  }
-  const target = q.kind === 'addition_exact' ? q.operands[0] + q.operands[1] : q.kind === 'sum_composition' ? q.sum : q.kind === 'split' ? q.total : q.target;
   // Take-away Island (Phase 22) has its own cards.
   if (q.kind === 'split') {
     return splitFeedback(session, line);
@@ -558,16 +428,6 @@ export function matchedFeedback(session: LevelSession): Line {
   if (away !== null) {
     return { key: copyKey('feedback.matched.take_away'), params: { n: away.start, k: away.take, r: away.start - away.take } };
   }
-  // Compare Island (Phase 23c): "4 is more than 2", the child's number first
-  // (design §9 #5), never "greater than"; a line-up names its three in order.
-  if (q.kind === 'compare') {
-    const x = session.verdict.benchCount;
-    return { key: copyKey(`feedback.matched.compare.${relationOf(x, q.given)}`), params: { x, a: q.given } };
-  }
-  if (q.kind === 'order') {
-    const [a, b, c] = lineUp(session.history.state);
-    return q.sizes.length === 3 ? { key: copyKey('feedback.matched.order'), params: { a: a!, b: b!, c: c! } } : { key: copyKey('feedback.matched.quantity'), params: { n: q.sizes.reduce((m, n) => m + n, 0) } };
-  }
   if (q.kind === 'split') {
     const parts = solvedParts(session);
     return parts === null ? { key: copyKey('feedback.matched.quantity'), params: { n: q.total } } : { key: copyKey('feedback.matched.split'), params: { n: q.total, a: parts[0], b: parts[1] } };
@@ -701,8 +561,8 @@ export function hintFor(session: LevelSession): Line {
   if (verdict.matched) {
     return matchedFeedback(session);
   }
-  // Take-away Island's cards carry their own line (Phase 22), and Compare Island's (Phase 23c).
-  if (q.kind === 'split' || session.whole.takeAway !== undefined || q.kind === 'compare' || q.kind === 'order') {
+  // Take-away Island's cards carry their own line (Phase 22).
+  if (q.kind === 'split' || session.whole.takeAway !== undefined) {
     return feedbackFor(session).detail;
   }
   switch (q.kind) {
@@ -807,14 +667,6 @@ function lookHere(session: LevelSession): AnswerFocus {
   }
   if (session.whole.takeAway !== undefined && session.whole.onMat !== undefined) {
     return { objects: benchPartners(state).map((g) => g.id), template: false };
-  }
-  // Compare Island (Phase 23c, design §5.5): the partner on the rail (and,
-  // picking, the partners in the tray); a line-up: its three, wherever they are.
-  if (puzzle.question.kind === 'compare') {
-    return { objects: [RAIL_SPOT, ...(picksPartners(session) ? trayPartners(state).map((g) => g.id) : [])], template: false };
-  }
-  if (puzzle.question.kind === 'order') {
-    return { objects: [...state.groups.values()].map((g) => g.id), template: false };
   }
   if (verdict.reason === 'not-one-cluster') {
     // Everything outside the biggest group of touching blocks.
@@ -985,7 +837,7 @@ function sameSum(session: LevelSession): Guidance | null {
   const q = session.puzzle.question;
   const state = matOf(session);
   const bench = benchPartners(state);
-  if (q.kind === 'quantity' || q.kind === 'quantity_shape' || q.kind === 'split' || q.kind === 'compare' || q.kind === 'order' || bench.length !== 2 || !areTouching(state, bench[0]!, bench[1]!)) {
+  if (q.kind === 'quantity' || q.kind === 'quantity_shape' || q.kind === 'split' || bench.length !== 2 || !areTouching(state, bench[0]!, bench[1]!)) {
     return null;
   }
   const plan = pairPlan(state, q.kind === 'addition_exact' ? [q.operands] : q.allowed);
@@ -1004,14 +856,11 @@ function sameSum(session: LevelSession): Guidance | null {
 // send 2 home, 3 stay; bring the 4 back, send the 2).
 export function asksForHelp(session: LevelSession, f: AnswerFeedback = feedbackFor(session)): boolean {
   const takeAwayIsland = session.puzzle.question.kind === 'split' || session.whole.takeAway !== undefined;
-  // Compare Island (Phase 23c): its openings and building states ask too (as long as it; the smallest first).
-  const compareIsland = session.puzzle.question.kind === 'compare' || session.puzzle.question.kind === 'order';
   // A Shape Island picture (Phase 23b): its opening, and its shadow's cards.
   const shadowAsks = session.shadow !== null && f.tone !== 'success' && (f.tone === 'start' || [copyKey('feedback.shadow.gap'), copyKey('feedback.shadow.out'), copyKey('feedback.change')].includes(f.title.key));
   return (
     shadowAsks ||
     f.tone === 'adjust' ||
-    (compareIsland && f.tone !== 'success') ||
     onlyOnMat(session) ||
     onlyPreset(session) ||
     (f.tone === 'building' && (takeAwayIsland || sameWayAgain(session) || session.whole.given !== undefined || session.whole.onMat !== undefined || f.title.key === copyKey('feedback.same-sum')))
@@ -1093,48 +942,6 @@ function besidePlan(session: LevelSession): Guidance | null {
   return null;
 }
 
-// The whole help on a compare (Phase 23c, design §5.5). Picking: the partner
-// on the mat to send back and the right one to bring (the middle rung sends
-// back only); with nothing on the mat, the task with the rail lit. Building:
-// short of it, how long the row must be, the rail lit (the middle rung: one
-// more under it); past it, how many to send home, the ones at the right end lit.
-function comparePlan(session: LevelSession): Guidance | null {
-  const q = session.puzzle.question;
-  if (q.kind !== 'compare') {
-    return null;
-  }
-  const state = session.history.state;
-  const count = session.verdict.benchCount;
-  const rail: AnswerFocus = { objects: [RAIL_SPOT], template: false };
-  if (picksPartners(session)) {
-    const right = trayPartners(state).find((g) => compares(size(g), q.given, q.relation));
-    const [wrong] = leftToRight(state, benchPartners(state));
-    if (wrong === undefined || right === undefined) {
-      return wrong === undefined ? { line: promptLine(session), focus: rail } : { line: { key: copyKey('hint.send'), params: { a: size(wrong) } }, focus: { objects: [wrong.id], template: false } };
-    }
-    return { line: { key: copyKey('hint.swap.pair'), params: { a: size(wrong), b: size(right) } }, focus: { objects: [wrong.id, right.id], template: false } };
-  }
-  const { hi } = compareRange(q.given, q.relation);
-  if (count > hi) {
-    const k = count - hi;
-    const fromRight = [...state.bench.entries()].sort(([, a], [, b]) => b.x - a.x || b.y - a.y).map(([u]) => u as string);
-    return { line: { key: copyKey('hint.send.home'), params: { k } }, focus: { objects: fromRight.slice(0, k), template: false } };
-  }
-  return { line: { key: copyKey(ROW_HINT[q.relation]), params: {} }, focus: rail };
-}
-
-// The whole help on a line-up (Phase 23c): where each of the three goes, the
-// smallest lit (the middle rung: only that the smallest goes first).
-function orderPlan(session: LevelSession): Guidance | null {
-  const q = session.puzzle.question;
-  if (q.kind !== 'order' || q.sizes.length !== 3) {
-    return null;
-  }
-  const smallest = [...session.history.state.groups.values()].find((g) => size(g) === q.sizes[0]);
-  const [a, b, c] = q.sizes;
-  return { line: { key: copyKey('hint.order.line'), params: { a: a!, b: b!, c: c! } }, focus: { objects: smallest === undefined ? [] : [smallest.id], template: false } };
-}
-
 // What to say and light up. Level 1 is the line said on its own (hintFor) with
 // the pointers that give nothing away. Level 2 is help the child asked for (the
 // card, the help button): it names the partner to send back or bring and
@@ -1153,11 +960,7 @@ export function guidanceFor(session: LevelSession, level: 1 | 2): Guidance {
   // A shape from partners plans towards partners that can make the picture.
   const accepts = q.kind === 'quantity_shape' ? (shapes: ReadonlyArray<ReadonlyArray<Cell>>, loose: number) => covers(shapes, loose, q) : undefined;
   const plan =
-    q.kind === 'compare'
-      ? comparePlan(session)
-      : q.kind === 'order'
-        ? orderPlan(session)
-        : q.kind === 'split'
+    q.kind === 'split'
       ? splitPlan(session)
       : session.whole.takeAway !== undefined
         ? takeAwayPlan(session)
@@ -1290,14 +1093,6 @@ function sendOnly(full: Guidance): Guidance | null {
   if (key === copyKey('hint.pull.right')) {
     return { line: { key: copyKey('hint.pull'), params: {} }, focus: full.focus };
   }
-  // Compare Island (Phase 23c, design §5.5): "one more under it" before "as
-  // long as it"; "the smallest goes first" before where all three go.
-  if (Object.values(ROW_HINT).some((h) => key === copyKey(h))) {
-    return { line: { key: copyKey('hint.under'), params: {} }, focus: full.focus };
-  }
-  if (key === copyKey('hint.order.line')) {
-    return { line: { key: copyKey('hint.smallest-first'), params: {} }, focus: full.focus };
-  }
   return null;
 }
 
@@ -1325,7 +1120,7 @@ export function helpAt(session: LevelSession, asks: number, steps: number = HELP
   // (Past a way made that stands aside, the count is not what is off.)
   // (Past a way made that stands aside, the count is not what is off; on a
   // take-away from partners the partners light up instead, Phase 22.)
-  const count = session.verdict.reason === 'count-mismatch' && !sameWayAgain(session) && !(session.whole.takeAway !== undefined && session.whole.onMat !== undefined) && session.puzzle.question.kind !== 'order';
+  const count = session.verdict.reason === 'count-mismatch' && !sameWayAgain(session) && !(session.whole.takeAway !== undefined && session.whole.onMat !== undefined);
   const objects = look.focus.objects.length > 0 || count ? look.focus.objects : benchPartners(session.history.state).map((g) => g.id);
   return { line: look.line, focus: { objects, template: look.focus.template }, countUp: count && session.history.state.bench.size > 0 };
 }

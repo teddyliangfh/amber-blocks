@@ -28,18 +28,7 @@ export type Question =
       readonly total: number;
       readonly parts: number;
       readonly except?: ReadonlyArray<ReadonlyArray<number>>;
-    }
-  // Compare with a partner shown above the mat (Phase 23c, Compare Island):
-  // only how many are on the bench, not how they lie (design §2.3). An empty
-  // bench never compares, not even as "fewer".
-  | { readonly kind: 'compare'; readonly given: number; readonly relation: CompareRelation }
-  // Line up (Phase 23c): partners of exactly these sizes on the bench, every
-  // block of the bench in one of them, side by side left to right (no column
-  // shared) from the smallest. `sizes` in the order they must stand.
-  | { readonly kind: 'order'; readonly sizes: ReadonlyArray<number> };
-
-// How the child's count must stand to the given one.
-export type CompareRelation = 'same' | 'more' | 'fewer' | 'one_more' | 'one_fewer';
+    };
 
 // Descriptive, for the UI to phrase a hint. Never a score.
 export type VerdictReason =
@@ -52,10 +41,7 @@ export type VerdictReason =
   // A split: the right count, but not that many clusters.
   | 'parts-mismatch'
   // A split made before (in `except`): right, but not again.
-  | 'split-used'
-  // A line-up: the right partners all on the bench, but not smallest first
-  // side by side.
-  | 'order-mismatch';
+  | 'split-used';
 
 export interface Verdict {
   readonly matched: boolean;
@@ -66,41 +52,6 @@ export interface Verdict {
 
 function verdict(count: number, reason: VerdictReason): Verdict {
   return { matched: reason === 'matched', benchCount: count, reason };
-}
-
-// The relation alone; the judge adds that an empty bench never compares.
-export function compares(count: number, given: number, relation: CompareRelation): boolean {
-  switch (relation) {
-    case 'same':
-      return count === given;
-    case 'more':
-      return count > given;
-    case 'fewer':
-      return count < given;
-    case 'one_more':
-      return count === given + 1;
-    case 'one_fewer':
-      return count === given - 1;
-  }
-}
-
-function judgeOrder(state: BenchState, count: number, sizes: ReadonlyArray<number>): Verdict {
-  if (count !== sizes.reduce((a, b) => a + b, 0)) {
-    return verdict(count, 'count-mismatch');
-  }
-  const groups = [...state.groups.values()].filter((g) => g.unitIds.every((u) => state.bench.has(u)));
-  const grouped = groups.reduce((n, g) => n + groupSize(g), 0);
-  if (grouped !== count || !sameSizes(groups.map(groupSize), sizes)) {
-    return verdict(count, 'groups-mismatch');
-  }
-  const spans = groups
-    .map((g) => {
-      const xs = g.unitIds.map((u) => state.bench.get(u)!.x);
-      return { size: groupSize(g), left: Math.min(...xs), right: Math.max(...xs) };
-    })
-    .sort((a, b) => a.left - b.left);
-  const inLine = spans.every((s, i) => i === 0 || spans[i - 1]!.right < s.left);
-  return verdict(count, inLine && sizes.every((n, i) => spans[i]!.size === n) ? 'matched' : 'order-mismatch');
 }
 
 // The same sizes, in any order.
@@ -179,9 +130,5 @@ export function judge(state: BenchState, question: Question): Verdict {
       }
       return verdict(count, (question.except ?? []).some((e) => sameSizes(e, sizes)) ? 'split-used' : 'matched');
     }
-    case 'compare':
-      return verdict(count, count > 0 && compares(count, question.given, question.relation) ? 'matched' : 'count-mismatch');
-    case 'order':
-      return judgeOrder(state, count, question.sizes);
   }
 }

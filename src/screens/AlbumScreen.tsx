@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } fr
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Buddy, FONT, Stage, THEME, WorkPicture, cheerFor, colorsFor, pictureOf, showcaseGeometry } from '../blocks-ui';
+import { Buddy, FONT, PictureSign, Stage, THEME, WorkPicture, cheerFor, colorsFor, pictureOf, showcaseGeometry } from '../blocks-ui';
 import type { CheerMove } from '../blocks-ui';
 import { CHAPTERS, MAX_NUMBER_WORD, copyKey, format, hueFor } from '../content';
 import type { Chapter, CopyKey, NodeId, NodeSpec } from '../content';
@@ -79,7 +79,7 @@ function Card({ entry, width, onOpen }: { readonly entry: AlbumEntry; readonly w
       onPress={onOpen}
       onPressIn={() => play('tap')}
       style={({ pressed }) => [styles.card, { width, transform: [{ translateY: pressed ? 3 : 0 }], boxShadow: `0 ${pressed ? 1 : 4}px 0 ${THEME.skyDeep}` }]}>
-      <WorkPicture state={entry.work} width={inner} height={Math.round(inner * 0.62)} apart={workWaysApart(entry.node, entry.work)} testID="album-picture" />
+      <WorkPicture state={entry.work} width={inner} height={Math.round(inner * 0.62)} apart={workWaysApart(entry.node, entry.work)} signed={entry.node.spec.kind === 'sign'} testID="album-picture" />
       <View style={[styles.tag, { backgroundColor: colors.fill, borderColor: colors.edge }]}>
         <Text style={[styles.tagText, { fontSize: label.length > 2 ? 17 : 21 }]}>{label}</Text>
       </View>
@@ -145,6 +145,8 @@ function Zoom({ entry, onClose, lang }: { readonly entry: AlbumEntry; readonly o
               onPreview={() => false}
               onTapUnit={() => undefined}
             />
+            {/* A Compare Island picture's sign, between its two numbers (Phase 23d). */}
+            {entry.node.spec.kind === 'sign' ? <PictureSign work={entry.work} cell={geometry.cell} x={geometry.bench.x} y={geometry.bench.y} /> : null}
           </View>
         </View>
       </View>

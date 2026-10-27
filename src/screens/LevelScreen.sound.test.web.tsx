@@ -9,7 +9,7 @@ import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import type { StageProps } from '../blocks-ui';
+import type { SignStageProps, StageProps } from '../blocks-ui';
 import { CONTENT_VERSION, chapterId, materialize, nodeId } from '../content';
 import type { GroupId } from '../core';
 import { STORAGE_KEY, createInitialState, deserialize, memoryStorage, reduce, serialize } from '../progress';
@@ -18,6 +18,7 @@ import { CORRECTION_QUIET_MS } from './correction-voice';
 import { CLOUD_NUDGE_MAX, CLOUD_NUDGE_MS, LevelScreen, NUDGE_AFTER_MS, SOLVE_SETTLE_MS } from './LevelScreen';
 import { ParentScreen } from './ParentScreen';
 import { ProgressProvider } from './progress-store';
+import { NEXT_PAIR_MS, SIGN_SETTLE_MS, WRONG_BACK_MS } from './SignPlay';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -48,12 +49,17 @@ jest.mock('./sound', () => ({
 }));
 
 const mockStage: { current: StageProps | null } = { current: null };
+const mockSignStage: { current: SignStageProps | null } = { current: null };
 jest.mock('../blocks-ui', () => {
   const actual = jest.requireActual('../blocks-ui');
   return {
     ...actual,
     Stage: (props: StageProps) => {
       mockStage.current = props;
+      return null;
+    },
+    SignStage: (props: SignStageProps) => {
+      mockSignStage.current = props;
       return null;
     },
   };
@@ -135,7 +141,7 @@ function partnerOf(id: string, size: number): GroupId {
 
 function unlockedTo(upTo: string, seed = 5): ProgressState {
   let s = createInitialState(seed);
-  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n13', 'ch1-n7', 'ch1-n14', 'ch1-n8', 'ch1-n15', 'ch1-n9', 'ch1-n16', 'ch1-n10', 'ch1-n17', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n13', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8', 'ch4-n1', 'ch4-n2', 'ch4-n3', 'ch4-n4', 'ch4-n5', 'ch4-n6', 'ch4-n7', 'ch4-n8'];
+  const order = ['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5', 'ch1-n6', 'ch1-n13', 'ch1-n7', 'ch1-n14', 'ch1-n8', 'ch1-n15', 'ch1-n9', 'ch1-n16', 'ch1-n10', 'ch1-n17', 'ch1-n11', 'ch1-n12', 'ch2-n1', 'ch2-n2', 'ch2-n3', 'ch2-n9', 'ch2-n4', 'ch2-n10', 'ch2-n5', 'ch2-n6', 'ch2-n11', 'ch2-n13', 'ch2-n7', 'ch2-n12', 'ch2-n8', 'ch3-n1', 'ch3-n2', 'ch3-n3', 'ch3-n4', 'ch3-n5', 'ch3-n6', 'ch3-n7', 'ch3-n8', 'ch6-n1', 'ch6-n2', 'ch6-n3', 'ch6-n4', 'ch6-n5', 'ch6-n6', 'ch6-n7', 'ch6-n8', 'ch6-n9', 'ch6-n10'];
   for (const id of order.slice(0, order.indexOf(upTo))) {
     const e = reduce(s, { type: 'enter', nodeId: nodeId(id) });
     const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
@@ -506,36 +512,6 @@ describe('Phase 22: Take-away Island sounds', () => {
   });
 });
 
-describe('Phase 23c: Compare Island sounds', () => {
-  test('a compare: the success sound, then on the second beat the child\'s number and the rail\'s; a wrong partner is the adjust sound; the line-up sounds its three, smallest first', async () => {
-    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch4-n2')) }), 'ch4-n2');
-    expect(mockSounds).toEqual(['arrive', 'look']);
-    const ids = [...puzzleFor('ch4-n2').initial.units.keys()];
-    for (let i = 0; i < 3; i += 1) {
-      await command({ type: 'take', unitId: ids[i]!, to: { x: i, y: 0 } });
-    }
-    expect(mockSounds.slice(2)).toEqual(['success']);
-    await beat();
-    expect(mockSounds.slice(3)).toEqual(['compare:2']);
-    expect(mockSaid).toEqual([]);
-    act(() => root.unmount());
-    root = createRoot(container);
-    mockSounds.length = 0;
-    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch4-n3')) }), 'ch4-n3');
-    await command({ type: 'takeGroup', groupId: partnerOf('ch4-n3', 5), origin: { x: 0, y: 0 } });
-    expect(mockSounds.slice(2)).toEqual(['adjust']);
-    act(() => root.unmount());
-    root = createRoot(container);
-    mockSounds.length = 0;
-    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch4-n8')) }), 'ch4-n8');
-    await command({ type: 'takeGroup', groupId: partnerOf('ch4-n8', 1), origin: { x: 0, y: 0 } });
-    await command({ type: 'takeGroup', groupId: partnerOf('ch4-n8', 3), origin: { x: 1, y: 0 } });
-    await command({ type: 'takeGroup', groupId: partnerOf('ch4-n8', 4), origin: { x: 4, y: 0 } });
-    expect(mockSounds.slice(2)).toEqual(['fanfare']);
-    await beat();
-    expect(mockSounds.slice(3)).toEqual(['compare:4']);
-  });
-});
 
 describe('Phase 23-0: the cloud says "look here"', () => {
   const nudgeMs = CLOUD_NUDGE_MS!;
@@ -608,5 +584,44 @@ describe('Phase 23-0: the cloud says "look here"', () => {
     expect(looksAt()).toBe('cloud-look-2-0');
     await wait(nudgeMs);
     expect(reminders()).toBe(1);
+  });
+});
+
+describe('Phase 23d: Compare Island sounds', () => {
+  const after = async (ms: number) => {
+    act(() => jest.advanceTimersByTime(ms));
+    await settle();
+  };
+  const tap = async (sg: '>' | '<' | '=') => {
+    await act(async () => mockSignStage.current!.onTapSign(sg));
+    await settle();
+  };
+  test('a wrong sign: the soft "hmm?", then it goes home; a right one: success, then on the second beat each number\'s note, the left\'s first; the boss\'s last is the fanfare; nothing said unasked', async () => {
+    jest.useFakeTimers({ advanceTimers: 1 });
+    try {
+      await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch6-n4')) }), 'ch6-n4');
+      expect(mockSounds).toEqual(['arrive', 'look']);
+      await tap('<');
+      expect(mockSounds.slice(2)).toEqual(['pickup', 'adjust']);
+      await after(WRONG_BACK_MS);
+      expect(mockSounds.slice(4)).toEqual(['return']);
+      await tap('>');
+      expect(mockSounds.slice(5)).toEqual(['pickup', 'success']);
+      await after(SIGN_SETTLE_MS);
+      // 6 then 2: the compare sound is the right number with the left one first.
+      expect(mockSounds.slice(7)).toEqual(['compare:2']);
+      await after(NEXT_PAIR_MS);
+      for (const sg of ['<', '='] as const) {
+        await tap(sg);
+        await after(SIGN_SETTLE_MS);
+        await after(NEXT_PAIR_MS);
+      }
+      mockSounds.length = 0;
+      await tap('>');
+      expect(mockSounds).toEqual(['pickup', 'fanfare']);
+      expect(mockSaid).toEqual([]);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

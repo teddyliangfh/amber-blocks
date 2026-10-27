@@ -12,7 +12,6 @@ import { BossOutline } from './BossOutline';
 import { ShadowOutline } from './ShadowOutline';
 import { DemoHand } from './DemoHand';
 import type { Mood } from './Face';
-import { CompareRail } from './CompareRail';
 import { Spotlight } from './Spotlight';
 import { planTray, trayView } from './tray';
 import type { TrayObject } from './tray';
@@ -97,10 +96,6 @@ export interface StageProps {
   // Numbers that pop up above a block for a moment (free play: a group of blocks
   // just changed size). `tick` makes each one new.
   readonly bubbles?: ReadonlyArray<{ readonly at: Cell; readonly n: number; readonly tick: number }>;
-  // A compare's partner on the rail above the mat (Phase 23c, CompareRail):
-  // its number, and the id a spotlight names it by. The geometry must leave a
-  // row above the bench for it (computeGeometry's `rail`).
-  readonly rail?: { readonly n: number; readonly id: string };
 }
 
 // A seam between two joining pieces, lit for a moment (merge.ts MERGE_SEAM_MS).
@@ -190,7 +185,7 @@ function headOf(cells: ReadonlyArray<Cell>): Cell {
   return cells.reduce((best, c) => (c.y < best.y || (c.y === best.y && c.x < best.x) ? c : best));
 }
 
-export function Stage({ state, geometry, trayObjects, enabled, countOrder, matched, mood: moodOf, celebrateTick, onCommand, onPreview, onTapUnit, onTapTray, onDragActive, onFeel, spotlight = [], demo = 0, demoPiece, demoTo: demoCell, demoBack = false, wink = 0, trayHidden = false, cheer = 'hop', merge = false, apart, onJoin, bubbles = [], outline, shadow, rail }: StageProps) {
+export function Stage({ state, geometry, trayObjects, enabled, countOrder, matched, mood: moodOf, celebrateTick, onCommand, onPreview, onTapUnit, onTapTray, onDragActive, onFeel, spotlight = [], demo = 0, demoPiece, demoTo: demoCell, demoBack = false, wink = 0, trayHidden = false, cheer = 'hop', merge = false, apart, onJoin, bubbles = [], outline, shadow }: StageProps) {
   const [preview, setPreview] = useState<Preview | null>(null);
   // The last thing tapped in the tray, and its hop. Ticks count down from -1
   // so they never match a solve's (useCheer plays each tick once).
@@ -449,9 +444,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
       const onBench = model.benchPartners.find((g) => g.id === id);
       const unitInTray = tray.units.find((u) => u.unitId === id);
       const unitOnBench = state.bench.get(id as UnitId);
-      if (rail !== undefined && id === rail.id) {
-        out.push({ id, rect: { x: geometry.bench.x, y: geometry.bench.y - cell, width: rail.n * cell, height: cell } });
-      } else if (inTray !== undefined) {
+      if (inTray !== undefined) {
         const fp = footprintOf(inTray.group.shape).footprint;
         const unit = cell * inTray.spot.scale;
         out.push({ id, rect: { x: inTray.spot.x, y: inTray.spot.y, width: fp.w * unit, height: fp.h * unit } });
@@ -468,7 +461,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
       }
     }
     return out;
-  }, [spotlight, tray, model, state.bench, cell, geometry, rail]);
+  }, [spotlight, tray, model, state.bench, cell, geometry]);
   const gridDots = useMemo(() => {
     const dots: { key: string; x: number; y: number }[] = [];
     for (let i = 1; i < bench.cols; i += 1) {
@@ -786,7 +779,6 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
         }),
       )}
       {outline !== undefined ? <BossOutline geometry={geometry} n={outline.n} lit={outline.lit} made={outline.made} colors={colorsFor(hueFor(outline.n))} /> : null}
-      {rail !== undefined ? <CompareRail geometry={geometry} n={rail.n} colors={colorsFor(hueFor(rail.n))} celebrateTick={celebrateTick} onTap={onTapTray} /> : null}
       {shadow !== undefined ? <ShadowOutline geometry={geometry} cells={shadow.cells} lit={shadow.lit} glow={shadow.glow} colors={colorsFor(hueFor(shadow.n))} /> : null}
       {preview?.cells.map((c) => {
         const p = cellToPx(geometry, c);

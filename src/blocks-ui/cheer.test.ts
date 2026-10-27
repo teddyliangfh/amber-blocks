@@ -1,4 +1,4 @@
-import { BOSS_PICTURE_CHEER, LINE_UP_CHEER, cheerFor } from './cheer';
+import { BOSS_PICTURE_CHEER, cheerFor } from './cheer';
 
 describe('cheer moves (2026-10-15 review J)', () => {
   test('each number has its own move', () => {
@@ -36,11 +36,5 @@ describe('cheer moves (2026-10-15 review J)', () => {
     // No picture, or one with no move of its own: the number's move.
     expect(cheerFor(6, { picture: null })).toBe('stack');
     expect(cheerFor(6, { picture: 'kite' })).toBe('stack');
-  });
-
-  test('Phase 23c: a line-up parades, each jumping higher than the one before (LINE_UP_CHEER), whatever its biggest number', () => {
-    expect(LINE_UP_CHEER).toBe('stack');
-    expect(cheerFor(4, { lineUp: true, boss: true })).toBe('stack');
-    expect(cheerFor(4, { boss: true })).toBe('wiggle');
   });
 });

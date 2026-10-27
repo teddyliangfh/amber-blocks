@@ -275,11 +275,11 @@ describe('fitted mats (2026-10-15 review: the mat was sized for the hardest stop
     // Phase 21's stops never had the old mats (the row of nine to send the
     // extra back from does not even fit one); their blocks are held to 40px
     // by the layout budget test below.
-    // Nor did Compare Island's (Phase 23c): a two-row mat under a rail.
-    const added = new Set(['ch2-n9', 'ch2-n10', 'ch2-n11', 'ch2-n12', ...['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8'].map((n) => `ch4-${n}`)]);
+    const added = new Set(['ch2-n9', 'ch2-n10', 'ch2-n11', 'ch2-n12']);
     for (const phone of PHONES) {
       for (const chapter of CHAPTERS) {
-        for (const node of chapter.nodes.filter((n) => !added.has(n.id))) {
+        // Compare Island (Phase 23d) has no mat to play on: sign-layout.test.ts.
+        for (const node of chapter.nodes.filter((n) => !added.has(n.id) && n.spec.kind !== 'sign')) {
           expect(`${phone.name} ${node.id} ${at(phone.name, node.id) >= at(phone.name, node.id, old(node.id))}`).toBe(`${phone.name} ${node.id} true`);
         }
       }
@@ -294,19 +294,16 @@ describe('fitted mats (2026-10-15 review: the mat was sized for the hardest stop
 const MIN_PLAYABLE = 32;
 
 describe('layout on real phones with the real catalog (review P2)', () => {
-  const cases = PHONES.flatMap((phone) => CHAPTERS.flatMap((chapter) => chapter.nodes.map((node) => ({ phone, chapter, node }))));
+  // (Compare Island's stops, Phase 23d, have their own stage: sign-layout.test.ts.)
+  const cases = PHONES.flatMap((phone) => CHAPTERS.flatMap((chapter) => chapter.nodes.filter((n) => n.spec.kind !== 'sign').map((node) => ({ phone, chapter, node }))));
   test.each(cases.map((c) => [c.phone.name, c.node.id as string, c] as const))('%s · %s', (_name, _id, { phone, chapter, node }) => {
     const size = stageSizeOf(phone);
     const stage = { x: 0, y: 0, width: size.width, height: size.height };
     for (const attemptVariant of [0, 1, 2]) {
       const puzzle = materialize({ contentVersion: CONTENT_VERSION, chapterId: chapter.id, nodeId: node.id, attemptVariant, seed: 11 });
       const objects = trayObjects(puzzle.initial);
-      // A compare keeps a row above the mat for its rail (Phase 23c, as LevelScreen lays it).
-      const rail = puzzle.question.kind === 'compare' ? 1 : 0;
-      const g = computeGeometry(size.width, size.height, puzzle.initial.bounds, objects.map((o) => o.footprint), undefined, rail);
+      const g = computeGeometry(size.width, size.height, puzzle.initial.bounds, objects.map((o) => o.footprint));
       expect(inside(stage, g.bench)).toBe(true);
-      expect(inside(stage, { ...g.bench, y: g.bench.y - rail * g.cell, height: g.bench.height + rail * g.cell })).toBe(true);
-      expect(g.bench.rows).toBe(puzzle.initial.bounds.rows);
       expect(inside(stage, g.tray)).toBe(true);
       expect(overlap(g.bench, g.tray)).toBe(false);
       expect(g.cell).toBeGreaterThanOrEqual(MIN_PLAYABLE);
@@ -335,7 +332,7 @@ describe('layout budget (2026-10-16 review E-1 / B-1)', () => {
   const on = (phone: string, id: string, attemptVariant = 0) => {
     const size = stageSizeOf(PHONES.find((p) => p.name === phone)!);
     const objects = trayObjects(puzzleOf(id, attemptVariant).initial);
-    const g = computeGeometry(size.width, size.height, puzzleOf(id, attemptVariant).initial.bounds, objects.map((o) => o.footprint), undefined, puzzleOf(id, attemptVariant).question.kind === 'compare' ? 1 : 0);
+    const g = computeGeometry(size.width, size.height, puzzleOf(id, attemptVariant).initial.bounds, objects.map((o) => o.footprint));
     const list = objects.map((o) => ({ id: o.id, footprint: o.footprint }));
     const placed = boxes(g, list);
     const used = Math.max(...placed.map((b) => b.y + b.height)) - Math.min(...placed.map((b) => b.y)) + 2 * TRAY_PAD;
@@ -364,7 +361,8 @@ describe('layout budget (2026-10-16 review E-1 / B-1)', () => {
     const small: Record<string, number> = {};
     for (const phone of PHONES) {
       for (const chapter of CHAPTERS) {
-        for (const node of chapter.nodes) {
+        // (Compare Island, Phase 23d: its own stage, sign-layout.test.ts.)
+        for (const node of chapter.nodes.filter((n) => n.spec.kind !== 'sign')) {
           const worst = Math.min(...[0, 1, 2].map((v) => Math.min(on(phone.name, node.id, v).g.cell, Math.floor(on(phone.name, node.id, v).block))));
           if (worst < TRAY_MIN_BLOCK) {
             small[`${phone.name} · ${node.id}`] = worst;
@@ -505,16 +503,3 @@ describe('Phase 20 Q12: a piece let go on a taken spot lands on the nearest free
   });
 });
 
-
-describe('Phase 23c: a row kept above the mat for a compare\'s rail', () => {
-  test('the bench is the rows under the rail, the same cell size; the tray right under the bench; the rail inside the stage', () => {
-    const plain = computeGeometry(390, 576, { cols: 6, rows: 3 }, []);
-    const railed = computeGeometry(390, 576, { cols: 6, rows: 2 }, [], undefined, 1);
-    expect(railed.cell).toBe(plain.cell);
-    expect(railed.bench.rows).toBe(2);
-    expect(railed.bench.y).toBe(plain.bench.y + plain.cell);
-    expect(railed.bench.height).toBe(2 * plain.cell);
-    expect(railed.bench.y - railed.cell).toBeGreaterThanOrEqual(0);
-    expect(railed.tray).toEqual(plain.tray);
-  });
-});

@@ -38,25 +38,16 @@ const BY_PICTURE: Readonly<Record<string, CheerMove>> = {
 // rocks it like any boat.
 export const BOSS_PICTURE_CHEER = true;
 
-// A line-up solved (Phase 23c, design §5.3 "parade"): the three jump one
-// after another, each higher than the one before, smallest first: what
-// 'stack' does, the partners kept apart (Stage `apart`). A default for Ted.
-export const LINE_UP_CHEER: CheerMove = 'stack';
-
 // `shape`: the solved picture, when the stop asked for one (an 8 brick drives).
-// `lineUp`: the stop lined partners up smallest first (Compare Island's boss).
 // `picture`: a Shape Island picture's name.
 // `countdown`: the stop counted down to this number one block at a time (the
 // Take-away Island boss): what is left launches.
 export function cheerFor(
   target: number,
-  { boss = false, shape = null, countdown = false, picture = null, lineUp = false }: { readonly boss?: boolean; readonly shape?: { readonly w: number; readonly h: number } | null; readonly countdown?: boolean; readonly picture?: string | null; readonly lineUp?: boolean } = {},
+  { boss = false, shape = null, countdown = false, picture = null }: { readonly boss?: boolean; readonly shape?: { readonly w: number; readonly h: number } | null; readonly countdown?: boolean; readonly picture?: string | null } = {},
 ): CheerMove {
   if (boss && countdown) {
     return 'launch';
-  }
-  if (lineUp) {
-    return LINE_UP_CHEER;
   }
   const own = picture === null ? undefined : BY_PICTURE[picture];
   if (own !== undefined) {

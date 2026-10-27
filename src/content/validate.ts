@@ -1,6 +1,8 @@
-import { DEFAULT_SYMMETRY, apply, areTouching, assertInvariants, clusters, compares, groupSize, judge, variants } from '../core';
+import { DEFAULT_SYMMETRY, SIGNS, apply, areTouching, assertInvariants, clusters, groupSize, judge, signOf, variants } from '../core';
 import type { BenchState, Bounds, Cell, Group, Question, ShapeTemplate, Symmetry } from '../core';
 import { holdsMaterial } from './bench';
+import { MAX_NUMBER_WORD } from './copy';
+import { SIGN_MAX_ROWS, roundOf, sideShape } from './sign';
 import { assertDistractors } from './distractors';
 import type { Puzzle, QuestionSpec } from './schema';
 import { benchPair, questionAt, samePair, stepCount } from './steps';
@@ -300,92 +302,69 @@ function assertTakeAway(spec: Extract<QuestionSpec, { kind: 'take_away' }>, puzz
   }
 }
 
-// Compare (Phase 23c, design §3.2): the partner on the rail and the row that
-// answers it each fit in one row of the mat, left-aligned; never "fewer" than
-// 1. Built from single blocks: enough of them for the last step; steps only
-// for "one more" (the rail grows to what the child just built). From
-// partners: different sizes, exactly one of them right alone (more partners
-// together may be right too: only the count is compared, design §9 #9), and
-// none wider than the mat.
-function assertCompare(spec: Extract<QuestionSpec, { kind: 'compare' }>, puzzle: Puzzle): void {
-  const { initial } = puzzle;
-  const count = spec.steps ?? 1;
-  if (!Number.isInteger(spec.given) || spec.given < 1 || !Number.isInteger(count) || count < 1) {
-    throw new Error(`content: a compare needs a partner of 1 or more on the rail, got ${spec.given}`);
+// Compare Island (Phase 23d, PRD §7.1): every side a number a child can count
+// (and hear counted) that stands on a phone; partners that make their number;
+// a square only for a square number; every round's answer in the tray; the
+// rounds the visit asks are the spec's, in some order, and the material is
+// the last one's two sides on the mat.
+function assertSign(spec: Extract<QuestionSpec, { kind: 'sign' }>, puzzle: Puzzle): void {
+  if (spec.rounds.length === 0) {
+    throw new Error('content: a sign stop asks at least one round');
   }
-  if ((spec.relation === 'fewer' || spec.relation === 'one_fewer') && spec.given < 2) {
-    throw new Error(`content: nothing on the mat is fewer than ${spec.given}`);
+  const signs = spec.signs ?? SIGNS;
+  if (signs.length === 0 || new Set(signs).size !== signs.length || signs.some((s) => !SIGNS.includes(s))) {
+    throw new Error(`content: sign blocks ${signs.join(' ')} are not a set of > < =`);
   }
-  const top = spec.given + count - 1;
-  if (top > initial.bounds.cols) {
-    throw new Error(`content: the rail's ${top} is wider than the mat`);
-  }
-  if (count > 1 && (spec.relation !== 'one_more' || spec.partners !== undefined)) {
-    throw new Error('content: a compare asked in steps is "one more", built from single blocks');
-  }
-  if ((spec.singles === undefined) === (spec.partners === undefined)) {
-    throw new Error('content: a compare deals single blocks or partners, one of them');
-  }
-  if (spec.singles !== undefined) {
-    const need = { same: top, more: top + 1, one_more: top + 1, fewer: 1, one_fewer: top - 1 }[spec.relation];
-    if (initial.groups.size > 0 || initial.units.size !== spec.singles || spec.singles < need || need > initial.bounds.cols) {
-      throw new Error(`content: ${spec.singles} single blocks cannot answer ${spec.relation} ${top} in a row of the mat`);
+  for (const r of spec.rounds) {
+    for (const side of [r.left, r.right]) {
+      const v = roundOf({ left: side, right: side }).left;
+      if (!Number.isInteger(v.n) || v.n < 1 || v.n > MAX_NUMBER_WORD) {
+        throw new Error(`content: a side of ${v.n} is not a number from 1 to ${MAX_NUMBER_WORD}`);
+      }
+      if (v.parts !== null) {
+        if (v.parts.length < 2 || v.parts.some((p) => !Number.isInteger(p) || p < 1) || v.parts.reduce((a, b) => a + b, 0) !== v.n) {
+          throw new Error(`content: partners ${v.parts.join(' + ')} do not make ${v.n}`);
+        }
+        if (v.layout !== 'tower') {
+          throw new Error('content: partners stand as towers, stacked or side by side');
+        }
+      } else if (v.beside) {
+        throw new Error('content: only partners stand side by side');
+      }
+      if (v.layout === 'square' && (v.n < 4 || !Number.isInteger(Math.sqrt(v.n)))) {
+        throw new Error(`content: ${v.n} is not a square number`);
+      }
+      if (sideShape(v).rows > SIGN_MAX_ROWS) {
+        throw new Error(`content: a side of ${v.n} stands more than ${SIGN_MAX_ROWS} blocks high`);
+      }
     }
-    return;
+    const answer = signOf(roundOf(r).left.n, roundOf(r).right.n);
+    if (!signs.includes(answer)) {
+      throw new Error(`content: the tray has no ${answer} for ${roundOf(r).left.n} and ${roundOf(r).right.n}`);
+    }
   }
-  const sizes = spec.partners!;
-  if (new Set(sizes).size !== sizes.length || initial.groups.size !== sizes.length) {
-    throw new Error(`content: a compare deals partners of different sizes, got ${sizes.join(', ')}`);
+  const asked = puzzle.sign;
+  const key = (r: { readonly left: { readonly n: number }; readonly right: { readonly n: number } }) => `${r.left.n}|${r.right.n}`;
+  if (asked === undefined || asked.rounds.length !== spec.rounds.length || [...asked.rounds.map(key)].sort().join() !== spec.rounds.map(roundOf).map(key).sort().join()) {
+    throw new Error('content: a sign stop asks its own rounds, each once');
   }
-  assertPartnersFit(initial);
-  const right = sizes.filter((n) => compares(n, spec.given, spec.relation));
-  if (right.length !== 1) {
-    throw new Error(`content: ${right.length} partners of ${sizes.join(', ')} alone are ${spec.relation} than ${spec.given}`);
-  }
-}
-
-// Line up (Phase 23c): two or more partners of different sizes, smallest
-// first, all of them side by side in one row of the mat.
-function assertOrder(spec: Extract<QuestionSpec, { kind: 'order' }>, puzzle: Puzzle): void {
-  const { initial } = puzzle;
-  const { sizes } = spec;
-  if (sizes.length < 2 || sizes.some((n, i) => !Number.isInteger(n) || n < 1 || (i > 0 && n <= sizes[i - 1]!))) {
-    throw new Error(`content: a line-up is of different sizes, smallest first, got ${sizes.join(', ')}`);
-  }
-  if (initial.groups.size !== sizes.length || initial.units.size !== sizes.reduce((a, b) => a + b, 0)) {
-    throw new Error('content: a line-up deals exactly its partners');
-  }
-  const width = [...initial.groups.values()].reduce((w, g) => w + Math.max(...g.shape.map((c) => c.x)) + 1, 0);
-  if (width > initial.bounds.cols) {
-    throw new Error(`content: ${sizes.join(', ')} side by side are wider than the mat`);
+  const last = asked.rounds[asked.rounds.length - 1]!;
+  if (puzzle.initial.bench.size !== puzzle.initial.units.size || puzzle.initial.units.size !== last.left.n + last.right.n) {
+    throw new Error('content: a sign stop\'s material is its last round, on the mat');
   }
 }
 
 export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
   const { question, initial, solution } = puzzle;
   assertInvariants(initial);
-  // Only a given partner, partners to send back, or a take-away / split stop's
-  // blocks start on the mat (each checked with its spec below).
-  const preset = spec.kind === 'split' || spec.kind === 'take_away';
+  // Only a given partner, partners to send back, or a take-away / split / sign
+  // stop's blocks start on the mat (each checked with its spec below).
+  const preset = spec.kind === 'split' || spec.kind === 'take_away' || spec.kind === 'sign';
   if (initial.bench.size !== 0 && !preset && !(spec.kind === 'sum_composition' && (spec.given !== undefined || spec.onMat !== undefined))) {
     throw new Error('content: material must start in the tray');
   }
 
   switch (question.kind) {
-    case 'compare': {
-      if (spec.kind !== 'compare') {
-        throw new Error(`content: question ${question.kind} does not match spec ${spec.kind}`);
-      }
-      assertCompare(spec, puzzle);
-      break;
-    }
-    case 'order': {
-      if (spec.kind !== 'order') {
-        throw new Error(`content: question ${question.kind} does not match spec ${spec.kind}`);
-      }
-      assertOrder(spec, puzzle);
-      break;
-    }
     case 'split': {
       if (spec.kind !== 'split') {
         throw new Error(`content: question ${question.kind} does not match spec ${spec.kind}`);
@@ -397,6 +376,10 @@ export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
     case 'quantity_shape': {
       if (spec.kind === 'take_away') {
         assertTakeAway(spec, puzzle);
+        break;
+      }
+      if (spec.kind === 'sign') {
+        assertSign(spec, puzzle);
         break;
       }
       if (spec.kind !== 'quantity' && spec.kind !== 'quantity_shape') {
@@ -483,6 +466,9 @@ export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
   if ((puzzle.takeAway !== undefined) !== (spec.kind === 'take_away')) {
     throw new Error('content: a take-away puzzle comes from a take-away spec');
   }
+  if ((puzzle.sign !== undefined) !== (spec.kind === 'sign')) {
+    throw new Error('content: a sign puzzle comes from a sign spec');
+  }
 
   // Putting everything out is how a child finds "too many": it must never bounce.
   if (!holdsMaterial(initial)) {
@@ -516,13 +502,8 @@ export function validate(puzzle: Puzzle, spec: QuestionSpec): void {
         throw new Error('content: every step of a countdown is the count left');
       }
     });
-  } else if (spec.kind === 'compare' && (spec.steps ?? 1) > 1) {
-    // "One more" in steps: the rail grows by one each step.
-    if (steps.length !== spec.steps || steps.some((step, i) => step.kind !== 'compare' || step.given !== spec.given + i || step.relation !== spec.relation)) {
-      throw new Error('content: every step of a compare is the rail one bigger');
-    }
   } else if (puzzle.steps !== undefined) {
-    throw new Error('content: steps come from a sequence, countdown or compare spec');
+    throw new Error('content: steps come from a sequence or countdown spec');
   }
 
   // A sum asked several ways: each way passes once, with a pair the earlier

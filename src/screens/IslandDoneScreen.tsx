@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } fr
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Buddy, Confetti, FONT, Stage, THEME, colorsFor, showcaseGeometry } from '../blocks-ui';
+import { Buddy, Confetti, FONT, PictureSign, Stage, THEME, colorsFor, showcaseGeometry } from '../blocks-ui';
 import { CHAPTERS, CONTENT_VERSION, ISLAND_SHOWCASE, copyKey, format, hueFor, materialize } from '../content';
 import type { Chapter, CopyKey, Lang, NodeSpec, Puzzle } from '../content';
 import { apply, judge } from '../core';
@@ -189,6 +189,8 @@ export function IslandDoneScreen({ chapterId }: { readonly chapterId: string }) 
                 onPreview={() => false}
                 onTapUnit={() => undefined}
               />
+              {/* Compare Island's boss round wears its sign (Phase 23d). */}
+              {chapter.nodes.every((n) => n.spec.kind === 'sign') ? <PictureSign work={shown} cell={geometry.cell} x={geometry.bench.x} y={geometry.bench.y} /> : null}
               <Confetti tick={1} x={box.width / 2} y={geometry.bench.height / 2} colors={[...colors, THEME.amber, THEME.white]} count={40} duration={1400} />
             </View>
           </View>

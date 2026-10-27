@@ -31,7 +31,9 @@ import type { Puzzle } from './schema';
 // Number Island; all thirty-eight stops before are byte-identical to version 9.
 // Version 11 (2026-10-23, Phase 23c) added Compare Island (ch4-n1 – n8) after
 // Take-away Island; all forty-six stops before are byte-identical to version 10.
-const FINGERPRINT_VERSION = 11;
+// Version 12 (2026-10-27, Phase 23d) retired ch4 and added the redone Compare
+// Island (ch6-n1 – n10); the forty-six other stops are byte-identical to version 11.
+const FINGERPRINT_VERSION = 12;
 const FINGERPRINTS: Readonly<Record<string, string>> = {
   'ch1-n1': 'df3b63c2',
   'ch1-n2': '795c9b41',
@@ -79,14 +81,16 @@ const FINGERPRINTS: Readonly<Record<string, string>> = {
   'ch5-n6': 'ba1e51ce',
   'ch5-n7': '871ee45c',
   'ch5-n8': 'c92ed705',
-  'ch4-n1': '193a0041',
-  'ch4-n2': 'e1a7170e',
-  'ch4-n3': '225d6ea7',
-  'ch4-n4': 'f75ed30e',
-  'ch4-n5': '606bca21',
-  'ch4-n6': 'ba41a567',
-  'ch4-n7': 'bb3e3f1a',
-  'ch4-n8': 'f843b856',
+  'ch6-n1': '64299c9c',
+  'ch6-n2': 'a2f5a22a',
+  'ch6-n3': '4b759c95',
+  'ch6-n4': 'a469d944',
+  'ch6-n5': '5ace37e2',
+  'ch6-n6': '12564009',
+  'ch6-n7': '3da1c394',
+  'ch6-n8': '22f7d5fe',
+  'ch6-n9': '2adbe526',
+  'ch6-n10': 'bb2c3987',
 };
 
 const REFS = [1, 7, 4242].flatMap((seed) => [0, 1, 2].map((attemptVariant) => ({ seed, attemptVariant })));
@@ -115,6 +119,8 @@ function describePuzzle(p: Puzzle): string {
     ...(p.onMat === undefined && s.bench.size > 0 && p.given === undefined ? [[...s.bench.entries()]] : []),
     // And a Shape Island picture and its shadow (Phase 23b).
     ...(p.picture === undefined && p.shadow === undefined ? [] : [p.picture, p.shadow]),
+    // And a Compare Island stop's rounds, in this visit's order, and its signs (Phase 23d).
+    ...(p.sign === undefined ? [] : [p.sign]),
   ]);
 }
 

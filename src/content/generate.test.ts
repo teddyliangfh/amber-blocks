@@ -751,61 +751,71 @@ describe('Phase 23b: pictures and shadows (validate)', () => {
   });
 });
 
-describe('Phase 23c: compare and line up (validate, builders)', () => {
-  const r = ref('x', 'x-n1');
-  const at = (spec: NodeSpec['spec']) => () => materializeNode(custom(spec), fitBench(spec), r);
+describe('Phase 23d: sign stops (Compare Island)', () => {
+  type SignSpec = Extract<NodeSpec['spec'], { kind: 'sign' }>;
+  const sign = (rounds: SignSpec['rounds'], signs?: SignSpec['signs']): SignSpec => (signs === undefined ? { kind: 'sign', rounds } : { kind: 'sign', rounds, signs });
+  const make = (spec: SignSpec, attemptVariant = 0) => materializeNode(custom(spec), fitBench(spec), ref('ch6', 'x-n1', attemptVariant));
+  const ok = sign([{ left: 4, right: 1 }, { left: 1, right: 3 }]);
 
-  test('a compare deals single blocks or partners into the tray, nothing on the mat; the line-up deals its partners', () => {
-    const build = at({ kind: 'compare', given: 3, relation: 'same', singles: 5 })();
-    expect(build.initial.units.size).toBe(5);
-    expect(build.initial.groups.size).toBe(0);
-    expect([...build.initial.units.values()].every((u) => u.hue === 'n1')).toBe(true);
-    expect(build.question).toEqual({ kind: 'compare', given: 3, relation: 'same' });
-    expect(build.steps).toBeUndefined();
-    const pick = at({ kind: 'compare', given: 4, relation: 'fewer', partners: [2, 5, 4] })();
-    expect([...pick.initial.groups.values()].map((g) => g.unitIds.length).sort()).toEqual([2, 4, 5]);
-    expect(pick.display.partnerIds).toHaveLength(3);
-    const line = at({ kind: 'order', sizes: [1, 3, 4] })();
-    expect(line.question).toEqual({ kind: 'order', sizes: [1, 3, 4] });
-    expect(line.display.target).toBeNull();
-    expect(fitBench({ kind: 'compare', given: 3, relation: 'same', singles: 5 })).toEqual({ cols: 6, rows: 2 });
-    // Too much for two rows: the mat grows wider, never taller.
-    expect(fitBench({ kind: 'compare', given: 2, relation: 'more', partners: [5, 4, 3] })).toEqual({ cols: 7, rows: 2 });
+  test('the material is the last round on the mat, partners in their own colours, standing on the bottom row with a free column between', () => {
+    const p = make(sign([{ left: 2, right: 2 }, { left: { n: 5, parts: [2, 3], beside: true }, right: { n: 4, layout: 'square' } }]));
+    expect(p.initial.bounds).toEqual({ cols: 5, rows: 3 });
+    const at = [...p.initial.groups.values()].map((g) => [groupSize(g), g.unitIds.map((u) => p.initial.bench.get(u)).map((c) => `${c!.x},${c!.y}`).sort().join(' ')]);
+    expect(at).toEqual([
+      [2, '0,1 0,2'],
+      [3, '1,0 1,1 1,2'],
+      [4, '3,1 3,2 4,1 4,2'],
+    ]);
+    expect([...p.initial.units.values()].map((u) => u.hue)).toEqual(['n2', 'n2', 'n3', 'n3', 'n3', 'n4', 'n4', 'n4', 'n4']);
+    // Stacked partners: the first at the bottom.
+    const stacked = make(sign([{ left: { n: 3, parts: [2, 1] }, right: 3 }]));
+    expect([...stacked.initial.groups.values()].map((g) => g.unitIds.map((u) => stacked.initial.bench.get(u)!.y).sort().join())).toEqual(['1,2', '0', '0,1,2']);
+    // A row lies on the bottom row.
+    const row = make(sign([{ left: { n: 3, layout: 'row' }, right: 2 }]));
+    expect([...row.initial.bench.values()].filter((c) => c.x < 3).every((c) => c.y === 1)).toBe(true);
   });
 
-  test('the compare content bugs validate refuses', () => {
-    const five = at({ kind: 'compare', given: 3, relation: 'same', singles: 5 })();
-    expect(at({ kind: 'compare', given: 3, relation: 'same' })).toThrow(/single blocks or partners, one of them|positive integer/);
-    expect(at({ kind: 'compare', given: 3, relation: 'same', singles: 5, partners: [2] })).toThrow(/one of them|partners alone are same than 3/);
-    expect(at({ kind: 'compare', given: 3, relation: 'same', singles: 2 })).toThrow(/2 single blocks cannot be same than 3/);
-    expect(() => validate(five, { kind: 'compare', given: 3, relation: 'same', singles: 2 })).toThrow(/2 single blocks cannot answer same 3/);
-    expect(() => validate(five, { kind: 'compare', given: 7, relation: 'same', singles: 5 })).toThrow(/rail's 7 is wider than the mat/);
-    expect(() => validate(five, { kind: 'compare', given: 1, relation: 'fewer', singles: 5 })).toThrow(/nothing on the mat is fewer than 1/);
-    expect(() => validate(five, { kind: 'compare', given: 0, relation: 'more', singles: 5 })).toThrow(/a partner of 1 or more/);
-    expect(at({ kind: 'compare', given: 3, relation: 'more', partners: [4, 5, 1] })).toThrow(/2 partners alone are more than 3/);
-    const pick = at({ kind: 'compare', given: 4, relation: 'fewer', partners: [2, 5, 4] })();
-    expect(() => validate(pick, { kind: 'compare', given: 3, relation: 'more', partners: [2, 5, 4] })).toThrow(/2 partners of 2, 5, 4 alone are more than 3/);
-    expect(() => validate(pick, { kind: 'compare', given: 4, relation: 'fewer', partners: [2, 5, 5] })).toThrow(/partners of different sizes/);
-    expect(at({ kind: 'compare', given: 3, relation: 'same', steps: 2, singles: 6 })).toThrow(/asked in steps is "one more"/);
-    // The rail wider than the mat.
-    expect(() => materializeNode(custom({ kind: 'compare', given: 5, relation: 'same', singles: 6 }), { cols: 4, rows: 2 }, r)).toThrow(/rail's 5 is wider than the mat|could not|does not fit/);
-    const ok = at({ kind: 'compare', given: 3, relation: 'one_more', steps: 3, singles: 6 })();
-    expect(() => validate({ ...ok, steps: [ok.steps![0]!, { kind: 'compare', given: 5, relation: 'one_more' }, ok.steps![2]!] }, { kind: 'compare', given: 3, relation: 'one_more', steps: 3, singles: 6 })).toThrow(/rail one bigger/);
-    expect(() => validate({ ...ok, steps: undefined }, { kind: 'quantity', targets: [3], extra: 1 })).toThrow(/question compare does not match spec quantity/);
-    // A reference answer too short to pass.
-    expect(() => validate({ ...ok, solution: ok.solution.slice(0, 5) }, { kind: 'compare', given: 3, relation: 'one_more', steps: 3, singles: 6 })).toThrow(/does not pass/);
+  test('validate refuses a sign stop a child could not answer or a phone could not show', () => {
+    // The bad side comes first: the material is the last round's, so validate is what refuses it.
+    const bad = (left: SignSpec['rounds'][number]['left']) => make(sign([{ left, right: 1 }, { left: 2, right: 1 }]));
+    expect(() => make(sign([]))).toThrow();
+    expect(() => make(sign([{ left: 4, right: 1 }], []))).toThrow(/not a set/);
+    expect(() => make(sign([{ left: 4, right: 1 }], ['>', '>']))).toThrow(/not a set/);
+    expect(() => make(sign([{ left: 4, right: 4 }], ['>', '<']))).toThrow(/no = for 4 and 4/);
+    expect(() => bad(0)).toThrow(/not a number/);
+    expect(() => bad(18)).toThrow(/not a number/);
+    expect(() => bad(2.5)).toThrow(/not a number/);
+    expect(() => bad({ n: 5, parts: [2, 2] })).toThrow(/do not make 5/);
+    expect(() => bad({ n: 5, parts: [5] })).toThrow(/do not make 5/);
+    expect(() => bad({ n: 5, parts: [0, 5] })).toThrow(/do not make 5/);
+    expect(() => bad({ n: 4, parts: [2, 2], layout: 'row' })).toThrow(/stand as towers/);
+    expect(() => bad({ n: 4, beside: true })).toThrow(/only partners/);
+    expect(() => bad({ n: 6, layout: 'square' })).toThrow(/not a square/);
+    expect(() => bad({ n: 1, layout: 'square' })).toThrow(/not a square/);
+    expect(() => bad(11)).toThrow(/more than 10 blocks high/);
+    expect(() => bad({ n: 11, parts: [10, 1], beside: true })).not.toThrow();
+    const p = make(ok);
+    expect(() => validate(p, sign([]))).toThrow(/at least one round/);
+    expect(() => validate({ ...p, sign: undefined }, ok)).toThrow(/its own rounds/);
+    expect(() => validate({ ...p, sign: { ...p.sign!, rounds: [p.sign!.rounds[0]!, p.sign!.rounds[0]!] } }, ok)).toThrow(/its own rounds/);
+    expect(() => validate({ ...p, sign: { ...p.sign!, rounds: [p.sign!.rounds[0]!] } }, ok)).toThrow(/its own rounds/);
+    const other = make(sign([{ left: 1, right: 3 }, { left: 4, right: 2 }]));
+    expect(() => validate({ ...p, initial: other.initial }, ok)).toThrow(/last round, on the mat/);
+    expect(() => validate(p, { kind: 'quantity', targets: [4], extra: 1 })).toThrow();
+    const plain = materializeNode(custom({ kind: 'quantity', targets: [3], extra: 1 }), bounds, ref('ch1', 'x-n1'));
+    expect(() => validate({ ...plain, sign: p.sign }, { kind: 'quantity', targets: [3], extra: 1 })).toThrow(/a sign puzzle comes from a sign spec/);
   });
 
-  test('the line-up content bugs validate refuses; the builders refuse what they cannot answer', () => {
-    expect(at({ kind: 'order', sizes: [3, 1, 4] })).toThrow(/smallest first/);
-    expect(at({ kind: 'order', sizes: [3] })).toThrow(/smallest first/);
-    expect(() => materializeNode(custom({ kind: 'order', sizes: [1, 3, 4] }), { cols: 7, rows: 3 }, r)).toThrow(/wider than the mat/);
-    const line = at({ kind: 'order', sizes: [1, 3, 4] })();
-    expect(() => validate(line, { kind: 'order', sizes: [1, 2, 4] })).toThrow(/exactly its partners/);
-    expect(() => validate(line, { kind: 'compare', given: 3, relation: 'same', singles: 5 })).toThrow(/question order does not match spec compare/);
-    expect(() => buildSolution({ kind: 'order', sizes: [1, 2] }, partnerMaterial([1, 3], bounds, 'x').state)).toThrow(/no partners of sizes 1, 2/);
-    expect(() => buildSolution({ kind: 'compare', given: 3, relation: 'more' }, partnerMaterial([1, 2, 3], bounds, 'x').state)).toThrow(/0 partners alone are more than 3/);
-    expect(() => buildSolution({ kind: 'compare', given: 5, relation: 'more' }, materializeNode(custom({ kind: 'compare', given: 2, relation: 'more', singles: 4 }), { cols: 5, rows: 2 }, r).initial)).toThrow(/4 single blocks cannot be more than 5/);
-    expect(() => buildSolution({ kind: 'compare', given: 3, relation: 'same' }, partnerMaterial([1], bounds, 'x').state, [{ kind: 'quantity', target: 3 }])).toThrow(/every step of a compare is a compare/);
+  test('a replay shuffles the rounds by the ref; when every order runs a sign three times or repeats, it falls back', () => {
+    const three = sign([{ left: 4, right: 1 }, { left: 5, right: 1 }, { left: 6, right: 1 }]);
+    // Every order is > > >: no shuffle passes, so the catalog order stays.
+    expect(make(three, 1).sign!.rounds.map((r) => r.left.n)).toEqual([4, 5, 6]);
+    // Two rounds have two orders: a replay alternates as far as it can.
+    const two = sign([{ left: 4, right: 1 }, { left: 1, right: 3 }]);
+    const orders = [0, 1, 2, 3].map((v) => make(two, v).sign!.rounds.map((r) => r.answer).join(''));
+    expect(orders[0]).toBe('><');
+    expect(new Set(orders).size).toBe(2);
+    // One round: nothing to shuffle.
+    expect(make(sign([{ left: 2, right: 2 }]), 3).sign!.rounds).toHaveLength(1);
   });
 });

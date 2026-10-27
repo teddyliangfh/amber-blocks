@@ -1,4 +1,4 @@
-import { areTouching, cell, compares, groupSize } from '../core';
+import { areTouching, cell, groupSize } from '../core';
 import type { BenchState, Bounds, Cell, Command, Group, Question, UnitId } from '../core';
 
 // A reference solution written in core commands. It exists so that validate()
@@ -246,31 +246,6 @@ function pullApart(initial: BenchState, ways: number): ReadonlyArray<Command> {
   return commands;
 }
 
-// Compare (Phase 23c): the smallest row the relation accepts, single blocks
-// laid from the left of the top row, right under the partner on the rail; in
-// steps, one more block each time the rail grows. From partners: the one
-// partner that is right alone, under the rail (validate() makes sure there is
-// exactly one).
-function compareRow(question: Extract<Question, { kind: 'compare' }>, initial: BenchState, steps: ReadonlyArray<Question>): ReadonlyArray<Command> {
-  const last = steps[steps.length - 1] ?? question;
-  if (last.kind !== 'compare') {
-    throw new Error('content: every step of a compare is a compare');
-  }
-  if (initial.groups.size > 0) {
-    const right = [...initial.groups.values()].filter((g) => compares(groupSize(g), question.given, question.relation));
-    if (right.length !== 1) {
-      throw new Error(`content: ${right.length} partners alone are ${question.relation} than ${question.given}`);
-    }
-    return [{ type: 'takeGroup', groupId: right[0]!.id, origin: cell(0, 0) }];
-  }
-  const loose = looseUnitsInTray(initial);
-  const need = loose.map((_, i) => i + 1).find((n) => compares(n, last.given, last.relation));
-  if (need === undefined) {
-    throw new Error(`content: ${loose.length} single blocks cannot be ${last.relation} than ${last.given}`);
-  }
-  return loose.slice(0, need).map((unitId, x): Command => ({ type: 'take', unitId, to: cell(x, 0) }));
-}
-
 export function buildSolution(question: Question, initial: BenchState, steps: ReadonlyArray<Question> = [], ways = 1): ReadonlyArray<Command> {
   switch (question.kind) {
     case 'quantity': {
@@ -358,15 +333,5 @@ export function buildSolution(question: Question, initial: BenchState, steps: Re
     }
     case 'split':
       return pullApart(initial, ways);
-    case 'compare':
-      return compareRow(question, initial, steps);
-    // Line up (Phase 23c): smallest first, joined in one row from the left.
-    case 'order': {
-      const groups = partnersWithSizes(initial, question.sizes);
-      if (groups === undefined) {
-        throw new Error(`content: no partners of sizes ${question.sizes.join(', ')} in the tray`);
-      }
-      return packPartners(groups, initial.bounds);
-    }
   }
 }

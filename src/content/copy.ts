@@ -55,10 +55,10 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
   'chapter.ch1.title': { zh: '数字岛', en: 'Number Island', params: [] },
   'chapter.ch2.title': { zh: '合体岛', en: 'Join Island', params: [] },
   'chapter.ch3.title': { zh: '拿走岛', en: 'Take-away Island', params: [] },
-  // Compare Island (Phase 23c, design §4.3).
-  'chapter.ch4.title': { zh: '比一比岛', en: 'Compare Island', params: [] },
   // Shape Island (Phase 23b). A default for Ted (PRD §8 #8): 影子岛 / Shadow Island.
   'chapter.ch5.title': { zh: '造型岛', en: 'Shape Island', params: [] },
+  // Compare Island, redone (Phase 23d, D-129): a new id; ch4 is retired.
+  'chapter.ch6.title': { zh: '比一比岛', en: 'Compare Island', params: [] },
 
   'prompt.quantity': { zh: '拼出 {n} 块', en: 'Make {n}', params: ['n'] },
   'prompt.quantity_shape': { zh: '用 {n} 块拼成这个样子', en: 'Build this with {n}', params: ['n'] },
@@ -190,6 +190,29 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
   // The rocket's success line (Shape Island's boss, launched).
   'feedback.launch': { zh: '小火箭，发射！', en: 'Rocket, blast off!', params: [] },
 
+  // Compare Island (Phase 23d, PRD §6): two numbers and a sign between them.
+  'prompt.sign': { zh: '选一个符号放进中间', en: 'Put a sign in the middle', params: [] },
+  'prompt.sign.pair': { zh: '{a} 和 {b}，选一个符号', en: '{a} and {b}. Pick a sign', params: ['a', 'b'] },
+  // The right sign, said by name (SAY_SYMBOL_NAMES) ...
+  'feedback.matched.sign.gt': { zh: '{a} 大于 {b}', en: '{a} is greater than {b}', params: ['a', 'b'] },
+  'feedback.matched.sign.lt': { zh: '{a} 小于 {b}', en: '{a} is less than {b}', params: ['a', 'b'] },
+  'feedback.matched.sign.eq': { zh: '{a} 等于 {b}', en: '{a} equals {b}', params: ['a', 'b'] },
+  // ... or by what it means; also the card after a wrong sign (a fact, not "wrong").
+  'feedback.sign.more': { zh: '{a} 比 {b} 多', en: '{a} is more than {b}', params: ['a', 'b'] },
+  'feedback.sign.fewer': { zh: '{a} 比 {b} 少', en: '{a} is fewer than {b}', params: ['a', 'b'] },
+  'feedback.sign.same': { zh: '{a} 和 {b} 一样多', en: '{a} and {b} are the same', params: ['a', 'b'] },
+  'feedback.sign.next': { zh: '下一对！', en: 'Next pair!', params: [] },
+  'hint.sign.try': { zh: '换一个符号试试', en: 'Try another sign', params: [] },
+  // Help's third step names the sign under the fact on the card's title
+  // (PRD §6 had one line; split so the English title fits a 360px phone).
+  'hint.sign.use.gt': { zh: '用大于号', en: 'Use greater than', params: [] },
+  'hint.sign.use.lt': { zh: '用小于号', en: 'Use less than', params: [] },
+  'hint.sign.use.eq': { zh: '用等于号', en: 'Use equals', params: [] },
+  // The sign blocks' names, for screen readers (nothing is said aloud on a tap).
+  'sign.gt': { zh: '大于号', en: 'greater than', params: [] },
+  'sign.lt': { zh: '小于号', en: 'less than', params: [] },
+  'sign.eq': { zh: '等于号', en: 'equals', params: [] },
+
   // The end of an island (2026-10-15): the button on its last stop, the line
   // on the island page (said when tapped, never on its own) and its button.
   'island.done': { zh: '{island}完成了', en: '{island} done!', params: ['island'] },
@@ -202,60 +225,6 @@ export const COPY: Readonly<Record<string, CopyEntry>> = {
 
   'count.progress': { zh: '已数 {k} 块', en: '{k} so far', params: ['k'] },
   'count.total': { zh: '一共 {n} 块', en: '{n} in all', params: ['n'] },
-
-  // Compare Island (Phase 23c, design §6). The task: build a row that stands
-  // to the partner on the rail as the stop asks, or pick a partner that does
-  // (each relation has its line, whether or not a stop asks it yet).
-  'prompt.compare.same': { zh: '搭一排和它一样多的', en: 'Build a row as many as this one', params: [] },
-  'prompt.compare.more': { zh: '搭一排比它多的', en: 'Build a row with more', params: [] },
-  'prompt.compare.fewer': { zh: '搭一排比它少的', en: 'Build a row with fewer', params: [] },
-  'prompt.compare.one_more': { zh: '搭一排正好多 1 块的', en: 'Build a row with just one more', params: [] },
-  'prompt.compare.one_fewer': { zh: '搭一排正好少 1 块的', en: 'Build a row with just one fewer', params: [] },
-  'prompt.compare.pick.same': { zh: '找一个和 {a} 一样多的伙伴', en: 'Find a partner the same as {a}', params: ['a'] },
-  'prompt.compare.pick.more': { zh: '找一个比 {a} 多的伙伴', en: 'Find a partner with more than {a}', params: ['a'] },
-  'prompt.compare.pick.fewer': { zh: '找一个比 {a} 少的伙伴', en: 'Find a partner with fewer than {a}', params: ['a'] },
-  'prompt.compare.pick.one_more': { zh: '找一个比 {a} 多 1 的伙伴', en: 'Find a partner with one more than {a}', params: ['a'] },
-  'prompt.compare.pick.one_fewer': { zh: '找一个比 {a} 少 1 的伙伴', en: 'Find a partner with one fewer than {a}', params: ['a'] },
-  'prompt.order': { zh: '从小到大排好队', en: 'Line up, smallest first', params: [] },
-  // Right: the child's number first, the rail's after (design §9 #5); never
-  // "greater than" (SAY_SYMBOL_NAMES). A line-up names its three in order.
-  'feedback.matched.compare.more': { zh: '{x} 比 {a} 多', en: '{x} is more than {a}', params: ['x', 'a'] },
-  'feedback.matched.compare.fewer': { zh: '{x} 比 {a} 少', en: '{x} is fewer than {a}', params: ['x', 'a'] },
-  'feedback.matched.compare.same': { zh: '{x} 和 {a} 一样多', en: '{x} and {a} are the same', params: ['x', 'a'] },
-  'feedback.matched.order': { zh: '{a}、{b}、{c}，从小到大', en: '{a}, {b}, {c}, smallest first', params: ['a', 'b', 'c'] },
-  // Building a row: still short of it; not past it yet; a little more (one
-  // fewer); past it (take k away); the same, one more to go; the same, one to
-  // take away. A partner picked that does not do: what it is next to the rail
-  // (said as a fact, the lesson itself, not a "wrong"); two that make the
-  // same: a discovery. The rail grows ("one more" in steps).
-  'feedback.compare.fewer': { zh: '还比它少', en: 'Still fewer', params: [] },
-  'feedback.compare.notmore': { zh: '还没有比它多', en: 'Not more yet', params: [] },
-  'feedback.compare.bit-more': { zh: '再多一点', en: 'A bit more', params: [] },
-  'feedback.compare.over': { zh: '比它多了，拿走 {k} 块', en: "That's more. Take {k} away", params: ['k'] },
-  'feedback.compare.same-now': { zh: '一样多了，再多 1 块', en: 'Same now. One more', params: [] },
-  'feedback.compare.same-back': { zh: '一样多了，拿走 1 块', en: 'Same now. Take one away', params: [] },
-  'feedback.compare.is.more': { zh: '{x} 比 {a} 多', en: '{x} is more than {a}', params: ['x', 'a'] },
-  'feedback.compare.is.fewer': { zh: '{x} 比 {a} 少', en: '{x} is fewer than {a}', params: ['x', 'a'] },
-  'feedback.compare.is.same': { zh: '{x} 和 {a} 一样多', en: '{x} and {a} are the same', params: ['x', 'a'] },
-  'feedback.compare.found-same': { zh: '{x} 加 {y} 是 {a}，和它一样多！', en: '{x} and {y} make {a}, the same!', params: ['x', 'y', 'a'] },
-  'feedback.grow': { zh: '它也变成 {a} 了！再多一块', en: "Now it's {a} too! One more", params: ['a'] },
-  // A line-up: one more to bring; not smallest first; which goes first.
-  'feedback.order.one-more': { zh: '再搬一个', en: 'Bring one more', params: [] },
-  'feedback.order.smallest': { zh: '从小的开始排', en: 'Start with the smallest', params: [] },
-  'feedback.order.first': { zh: '{x} 比 {y} 多，{y} 排前面', en: '{x} is more than {y}. {y} goes first', params: ['x', 'y'] },
-  // Compare Island help (design §5.5): one more under it; as long as it
-  // (longer, one longer, shorter, one shorter); try another partner; the
-  // smallest first; where each of the three goes; side by side.
-  'hint.under': { zh: '在它下面再放一块', en: 'Put one more under it', params: [] },
-  'hint.as-long': { zh: '放到和它一样长', en: 'Make it as long as this one', params: [] },
-  'hint.longer': { zh: '放到比它长', en: 'Make it longer than this one', params: [] },
-  'hint.one-longer': { zh: '放到比它长一块', en: 'Make it one longer than this one', params: [] },
-  'hint.shorter': { zh: '放到比它短', en: 'Make it shorter than this one', params: [] },
-  'hint.one-shorter': { zh: '放到比它短一块', en: 'Make it one shorter than this one', params: [] },
-  'hint.try.another': { zh: '换一个伙伴试试', en: 'Try another partner', params: [] },
-  'hint.smallest-first': { zh: '先放最小的', en: 'The smallest goes first', params: [] },
-  'hint.order.line': { zh: '{a} 放最左边，再放 {b}，再放 {c}', en: 'The {a} on the left, then the {b}, then the {c}', params: ['a', 'b', 'c'] },
-  'hint.side-by-side': { zh: '一个挨着一个，排成一排', en: 'Side by side, in one row', params: [] },
 
   ...pictureEntries(),
   ...numberEntries(),

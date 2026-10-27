@@ -68,12 +68,10 @@ function numberOf(spec: QuestionSpec): number {
       return spec.total;
     case 'take_away':
       return spec.start;
-    // Compare Island (Phase 23c): the biggest partner on the rail, or in the
-    // line-up. Not asked at random either.
-    case 'compare':
-      return spec.given + (spec.steps ?? 1) - 1;
-    case 'order':
-      return Math.max(...spec.sizes);
+    // Compare Island (Phase 23d): the biggest number it shows. Random puzzles
+    // do not ask signs (PRD §10).
+    case 'sign':
+      return Math.max(...spec.rounds.flatMap((r) => [r.left, r.right].map((s) => (typeof s === 'number' ? s : s.n))));
   }
 }
 

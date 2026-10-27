@@ -1,4 +1,4 @@
-import { THEME, colorsFor } from './palette';
+import { SIGN_COLORS, THEME, colorsFor } from './palette';
 
 // WCAG 2 contrast, and OKLCH hue, computed from the hex values the app paints.
 function channel(c: number): number {
@@ -112,6 +112,21 @@ describe('block colours', () => {
     }
     expect(clashes).toEqual(KNOWN_CLASHES);
     expect(oklch(THEME.preview).c).toBeLessThan(0.05);
+  });
+
+  test('Phase 23d: the sign blocks are not a number\'s colour, and their outlines read on every ground', () => {
+    for (const h of HUES) {
+      expect(`${h} ${hueGap(SIGN_COLORS.fill, colorsFor(h).fill) >= 15}`).toBe(`${h} true`);
+    }
+    // The glyph: its outline against the body and around the white (white on amber alone is 1.7:1).
+    expect(contrast(SIGN_COLORS.outline, SIGN_COLORS.fill)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(SIGN_COLORS.glyph, SIGN_COLORS.outline)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(SIGN_COLORS.glyph, SIGN_COLORS.fill)).toBeLessThan(3);
+    // The block's edge on the tray, the sky (lifted) and the felt (in the slot).
+    for (const ground of [THEME.sand, THEME.sky, THEME.felt]) {
+      expect(`${ground} ${contrast(SIGN_COLORS.edge, ground) >= 3}`).toBe(`${ground} true`);
+    }
+    expect(contrast(THEME.faceInk, SIGN_COLORS.fill)).toBeGreaterThanOrEqual(4.5);
   });
 
   test('an unknown hue falls back to 10', () => {

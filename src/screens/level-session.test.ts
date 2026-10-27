@@ -1,6 +1,6 @@
 import { cell, unitIds } from '../core';
 import { CHAPTERS, CONTENT_VERSION, chapterId, materialize, nodeId } from '../content';
-import { COMPARE_ORDER, asideCells, atStart, cloudTitle, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, givenPartner, isCounted, lineUp, matOf, onlyGiven, onlyOnMat, onlyPreset, previewCommand, recount, roomBeside, sameWayAgain, solvedEquation, solvedParts, startSession, takeAwayAt, targetNumberOf, undoCommand, wayAside, waysApart, workWaysApart } from './level-session';
+import { asideCells, atStart, cloudTitle, commitCommand, countOrder, countProgress, countTap, countWordsStale, demoMove, givenPartner, isCounted, matOf, onlyGiven, onlyOnMat, onlyPreset, previewCommand, recount, roomBeside, sameWayAgain, solvedEquation, solvedParts, startSession, takeAwayAt, targetNumberOf, undoCommand, wayAside, waysApart, workWaysApart } from './level-session';
 
 const puzzle = materialize({ contentVersion: CONTENT_VERSION, chapterId: chapterId('ch1'), nodeId: nodeId('ch1-n2'), attemptVariant: 0, seed: 5 });
 const ids = [...puzzle.initial.units.keys()];
@@ -725,99 +725,5 @@ describe('Phase 22: Take-away Island', () => {
     expect(resumed.verdict).toEqual({ matched: false, benchCount: 3, reason: 'count-mismatch' });
     // Finished and reopened: the last count, right.
     expect(startSession(p, done.history.state, true).verdict.matched).toBe(true);
-  });
-});
-
-describe('Phase 23c: Compare Island', () => {
-  const of = (id: string) => materialize({ contentVersion: CONTENT_VERSION, chapterId: chapterId('ch4'), nodeId: nodeId(id), attemptVariant: 0, seed: 5 });
-  const run = (p: ReturnType<typeof of>, cmds: ReadonlyArray<Parameters<typeof commitCommand>[1]>, from = startSession(p, null)) =>
-    cmds.reduce((s, cmd) => {
-      const r = commitCommand(s, cmd);
-      if (!r.ok) {
-        throw new Error(`${cmd.type}: ${r.reason}`);
-      }
-      return r.session;
-    }, from);
-  const singles = (p: ReturnType<typeof of>, n: number, from = 0) => [...p.initial.units.keys()].slice(from, from + n).map((unitId, i) => ({ type: 'take' as const, unitId, to: cell(from + i, 0) }));
-  const partnerOf = (p: ReturnType<typeof of>, n: number) => [...p.initial.groups.values()].find((g) => g.unitIds.length === n)!.id;
-
-  test('as many (ch4-n1): the cloud shows the rail\'s 3; the hand puts the first block right under it; three is right and reads 3 = 3, four is not', () => {
-    const p = of('ch4-n1');
-    const s = startSession(p, null);
-    expect(atStart(s)).toBe(true);
-    expect(cloudTitle(s)).toBe('3');
-    expect(targetNumberOf(s)).toBe(3);
-    expect(solvedEquation(s)).toBeNull();
-    expect(demoMove(s)).toMatchObject({ type: 'take', to: { x: 0, y: 0 } });
-    expect(COMPARE_ORDER).toBe('child-first');
-    const r = commitCommand(run(p, singles(p, 2)), singles(p, 3)[2]!);
-    expect(r.ok && r.solvedNow).toBe(true);
-    const three = r.ok ? r.session : s;
-    expect(solvedEquation(three)).toBe('3 = 3');
-    const four = run(p, singles(p, 1, 3), three);
-    expect(four.verdict).toEqual({ matched: false, benchCount: 4, reason: 'count-mismatch' });
-    expect(solvedEquation(four)).toBeNull();
-    // The rail is not on the mat: a row of three anywhere is three.
-    expect(run(p, [0, 1, 2].map((i) => ({ type: 'take' as const, unitId: [...p.initial.units.keys()][i]!, to: cell(2 + i, 1) }))).verdict.matched).toBe(true);
-  });
-
-  test('more (ch4-n2) reads 3 > 2 and 4 > 2; fewer by picking (ch4-n3) reads 2 < 4; the solved row is the child\'s number', () => {
-    const more = of('ch4-n2');
-    const three = run(more, singles(more, 3));
-    expect(solvedEquation(three)).toBe('3 > 2');
-    expect(targetNumberOf(three)).toBe(3);
-    expect(solvedEquation(run(more, singles(more, 1, 3), three))).toBe('4 > 2');
-    const fewer = of('ch4-n3');
-    const two = run(fewer, [{ type: 'takeGroup', groupId: partnerOf(fewer, 2), origin: cell(0, 0) }]);
-    expect(solvedEquation(two)).toBe('2 < 4');
-    expect(cloudTitle(startSession(fewer, null))).toBe('4');
-    expect(demoMove(startSession(fewer, null))).toEqual({ type: 'takeGroup', groupId: partnerOf(fewer, 2), origin: cell(0, 0) });
-  });
-
-  test('one more three times (ch4-n4): the rail grows 3 → 4 → 5 as each is built; saved work resumes on the step it reached', () => {
-    const p = of('ch4-n4');
-    let s = startSession(p, null);
-    const steps: number[] = [];
-    for (const cmd of singles(p, 6)) {
-      const r = commitCommand(s, cmd);
-      if (!r.ok) {
-        throw new Error(r.reason);
-      }
-      s = r.session;
-      if (r.stepDone) {
-        steps.push(s.history.state.bench.size);
-      }
-      // The cloud shows the rail as it is now (solvedEquation takes over once right).
-      expect(cloudTitle(s)).toBe(String(s.puzzle.question.kind === 'compare' ? s.puzzle.question.given : 0));
-    }
-    expect(steps).toEqual([4, 5]);
-    expect(s.step).toBe(2);
-    expect(s.verdict.matched).toBe(true);
-    expect(solvedEquation(s)).toBe('6 > 5');
-    // Reloaded with 5 on the mat: the first two steps are behind it, the rail is 5, one more to go.
-    const five = startSession(p, run(p, singles(p, 5)).history.state);
-    expect(five.step).toBe(2);
-    expect(five.puzzle.question).toEqual({ kind: 'compare', given: 5, relation: 'one_more' });
-    expect(five.verdict.matched).toBe(false);
-    // With 6: done.
-    expect(startSession(p, s.history.state).verdict.matched).toBe(true);
-    // Taken back below the rail, the steps stay where they are.
-    const back = run(p, [{ type: 'return', unitId: [...p.initial.units.keys()][5]! }, { type: 'return', unitId: [...p.initial.units.keys()][4]! }], s);
-    expect(back.step).toBe(2);
-    expect(cloudTitle(back)).toBe('5');
-  });
-
-  test('the line-up (ch4-n8): no number on the cloud; 1, 3 and 4 side by side are three characters, never one 8; it reads 1 < 3 < 4', () => {
-    const p = of('ch4-n8');
-    const s = startSession(p, null);
-    expect(cloudTitle(s)).toBe('');
-    expect(targetNumberOf(s)).toBe(4);
-    const done = run(p, p.solution);
-    expect(done.verdict.matched).toBe(true);
-    expect(solvedEquation(done)).toBe('1 < 3 < 4');
-    expect(waysApart(done).map((w) => w.length).sort()).toEqual([1, 3, 4]);
-    expect(workWaysApart(CHAPTERS.find((c) => c.id === 'ch4')!.nodes[7]!, done.history.state).map((w) => w.length).sort()).toEqual([1, 3, 4]);
-    expect(lineUp(done.history.state)).toEqual([1, 3, 4]);
-    expect(solvedEquation(run(p, p.solution.slice(0, 2)))).toBeNull();
   });
 });

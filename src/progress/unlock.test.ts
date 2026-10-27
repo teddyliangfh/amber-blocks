@@ -20,7 +20,7 @@ function completeAll(state: ProgressState, ids: ReadonlyArray<string>): Progress
 describe('unlock', () => {
   test('map order flattens chapters in order', () => {
     expect(mapOrder().map((e) => e.nodeId).slice(0, 5)).toEqual(['ch1-n1', 'ch1-n2', 'ch1-n3', 'ch1-n4', 'ch1-n5']);
-    expect(mapOrder()).toHaveLength(54);
+    expect(mapOrder()).toHaveLength(56);
     // Phase 23a: the new pictures sit between the old ones.
     expect(nextNodeOf(nodeId('ch1-n6'))).toBe('ch1-n13');
     expect(nextNodeOf(nodeId('ch1-n17'))).toBe('ch1-n11');
@@ -37,9 +37,9 @@ describe('unlock', () => {
     // Phase 22: Take-away Island follows Join Island.
     expect(nextNodeOf(nodeId('ch2-n8'))).toBe('ch3-n1');
     // Phase 23c: Compare Island follows Take-away Island, last on the map.
-    expect(nextNodeOf(nodeId('ch3-n8'))).toBe('ch4-n1');
-    expect(nextNodeOf(nodeId('ch4-n8'))).toBeNull();
-    expect(chapterOf(nodeId('ch4-n4')).id).toBe('ch4');
+    expect(nextNodeOf(nodeId('ch3-n8'))).toBe('ch6-n1');
+    expect(nextNodeOf(nodeId('ch6-n10'))).toBeNull();
+    expect(chapterOf(nodeId('ch6-n4')).id).toBe('ch6');
     expect(chapterOf(nodeId('ch2-n1')).id).toBe('ch2');
     expect(chapterOf(nodeId('ch3-n5')).id).toBe('ch3');
     expect(() => nextNodeOf(nodeId('nope'))).toThrow(/unknown node/);
@@ -85,13 +85,13 @@ describe('unlock', () => {
     const shapes = completeAll(all, ['ch5-n1', 'ch5-n2', 'ch5-n3', 'ch5-n4', 'ch5-n5', 'ch5-n6', 'ch5-n7', 'ch5-n8']);
     expect(chapterCompletion(shapes, chapterId('ch5'))).toEqual({ done: 8, total: 8 });
     // Phase 23c: Take-away Island's boss opens Compare Island (on the way); the map rests there.
-    expect(statusOf(shapes, nodeId('ch4-n1'))).toBe('available');
-    expect(statusOf(shapes, nodeId('ch4-n2'))).toBe('locked');
-    expect(openerOf(nodeId('ch4-n1'))).toBe('ch3-n8');
-    expect(defaultCurrent({ ...shapes, current: null })).toBe('ch4-n1');
-    const compared = completeAll(shapes, ['ch4-n1', 'ch4-n2', 'ch4-n3', 'ch4-n4', 'ch4-n5', 'ch4-n6', 'ch4-n7', 'ch4-n8']);
-    expect(chapterCompletion(compared, chapterId('ch4'))).toEqual({ done: 8, total: 8 });
-    expect(defaultCurrent({ ...compared, current: null })).toBe('ch4-n8');
+    expect(statusOf(shapes, nodeId('ch6-n1'))).toBe('available');
+    expect(statusOf(shapes, nodeId('ch6-n2'))).toBe('locked');
+    expect(openerOf(nodeId('ch6-n1'))).toBe('ch3-n8');
+    expect(defaultCurrent({ ...shapes, current: null })).toBe('ch6-n1');
+    const compared = completeAll(shapes, ['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10'].map((n) => `ch6-${n}`));
+    expect(chapterCompletion(compared, chapterId('ch6'))).toEqual({ done: 10, total: 10 });
+    expect(defaultCurrent({ ...compared, current: null })).toBe('ch6-n10');
   });
 
   test('Phase 23b: Shape Island is off the way (SIDE_ISLANDS): its stops open one by one from Number Island\'s boss, Join Island\'s first stop opens from that boss too', () => {
@@ -109,7 +109,7 @@ describe('unlock', () => {
     const noShapes = CHAPTERS.filter((c) => c.id !== 'ch5');
     expect(openerOf(nodeId('ch2-n1'), noShapes)).toBe('ch1-n12');
     expect(openerOf(nodeId('ch3-n1'), noShapes)).toBe('ch2-n8');
-    expect(openerOf(nodeId('ch4-n1'), noShapes)).toBe('ch3-n8');
+    expect(openerOf(nodeId('ch6-n1'), noShapes)).toBe('ch3-n8');
   });
 
   test('AC-46: saved work without completion opens nothing; entering marks in-progress', () => {

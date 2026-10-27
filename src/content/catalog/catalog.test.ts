@@ -1,16 +1,18 @@
 import { benchFor } from '../bench';
 import { materialize } from '../generate';
-import { BOSS_ENTRANCE, CHAPTERS, CONTENT_VERSION, SHAPE_ISLAND_GATE, SHAPE_ISLAND_POSITION, SIDE_ISLANDS, findChapter, findNode } from './index';
+import { BOSS_ENTRANCE, CHAPTERS, CONTENT_VERSION, RETIRED_STOPS, SHAPE_ISLAND_GATE, SHAPE_ISLAND_POSITION, SIDE_ISLANDS, findChapter, findNode } from './index';
 import { SHADOW_POLICY } from './chapter-5';
 import { chapterId, nodeId } from '../ids';
 import type { PuzzleRef, QuestionSpec } from '../schema';
 import type { ShapeTemplate } from '../../core';
-import { DEFAULT_SYMMETRY, apply, judge, matchesTemplate, mirrorX, rotate90, variants } from '../../core';
+import { DEFAULT_SYMMETRY, judge, matchesTemplate, mirrorX, rotate90, variants } from '../../core';
+import { SIGN_MAX_ROWS, picturedSides, roundOf, sideShape } from '../sign';
 import { SINGLES_DRAG_CAP } from './chapter-1';
 import { BOAT_5, BOAT_5_C, CORNER_5, DOG_6, DUCK_5, L_4, PLUS_5, RING_8, SQUARE_3X3, STAIRS_10, STAIRS_6, S_4, TEN_2X5, TEN_STANDING, T_4 } from './shapes';
 
 // An island by its number (ch5, Shape Island, sits second on the map since Phase 23b).
 const ch = (n: number) => findChapter(chapterId(`ch${n}`));
+const at6 = (id: string) => ch(6).nodes.find((n) => n.id === id)!;
 
 const ref = (chapter: string, node: string, contentVersion = CONTENT_VERSION): PuzzleRef => ({
   contentVersion,
@@ -23,7 +25,7 @@ const ref = (chapter: string, node: string, contentVersion = CONTENT_VERSION): P
 describe('catalog', () => {
   test('map: three islands, three legs with a boss each (seventeen stops since Phase 23a), thirteen join stops, then eight take-away stops', () => {
     // Phase 23b: Shape Island (ch5) between Number Island and Join Island (SHAPE_ISLAND_POSITION).
-    expect(CHAPTERS.map((c) => c.id)).toEqual(['ch1', 'ch5', 'ch2', 'ch3', 'ch4']);
+    expect(CHAPTERS.map((c) => c.id)).toEqual(['ch1', 'ch5', 'ch2', 'ch3', 'ch6']);
     expect(ch(3).nodes).toHaveLength(8);
     expect(ch(3).nodes.filter((n) => n.role === 'boss').map((n) => n.id)).toEqual(['ch3-n4', 'ch3-n8']);
     expect(ch(1).nodes).toHaveLength(17);
@@ -61,9 +63,9 @@ describe('catalog', () => {
       // never turned, it needs no room standing up (6 × 3, not 6 × 5).
       'ch5-n1': '5x4', 'ch5-n2': '6x3', 'ch5-n3': '6x4', 'ch5-n4': '6x4', 'ch5-n5': '6x4', 'ch5-n6': '6x4', 'ch5-n7': '6x4', 'ch5-n8': '6x5',
       'ch3-n1': '4x3', 'ch3-n2': '5x3', 'ch3-n3': '5x3', 'ch3-n4': '6x3', 'ch3-n5': '6x3', 'ch3-n6': '7x3', 'ch3-n7': '8x3', 'ch3-n8': '6x3',
-      // Phase 23c: a compare's two rows under the rail, a spare column past
-      // its longest row (design §3.2); the line-up's three side by side.
-      'ch4-n1': '6x2', 'ch4-n2': '5x2', 'ch4-n3': '6x2', 'ch4-n4': '7x2', 'ch4-n5': '6x2', 'ch4-n6': '6x2', 'ch4-n7': '7x2', 'ch4-n8': '9x3',
+      // Phase 23d: the widest round's two sides and the gap for the sign, as
+      // tall as the tallest side (the finished picture; nothing moves on it).
+      'ch6-n1': '3x5', 'ch6-n2': '3x4', 'ch6-n3': '3x5', 'ch6-n4': '3x6', 'ch6-n5': '7x4', 'ch6-n6': '3x5', 'ch6-n7': '3x9', 'ch6-n8': '5x10', 'ch6-n9': '6x10', 'ch6-n10': '5x10',
     });
   });
 
@@ -257,7 +259,7 @@ describe('catalog', () => {
       expect(at(id).role).toBe('normal');
     }
     // (Shape Island's eight, Phase 23b, left out.)
-    const all = CHAPTERS.filter((c) => c.id !== 'ch5' && c.id !== 'ch4').flatMap((c) => c.nodes);
+    const all = CHAPTERS.filter((c) => c.id !== 'ch5' && c.id !== 'ch6').flatMap((c) => c.nodes);
     expect(all).toHaveLength(38);
     expect(all.filter((n) => n.spec.kind === 'quantity_shape')).toHaveLength(13);
     // Three faces of 4: one block moved for each new picture (4 + 1 + 1 drags).
@@ -322,8 +324,8 @@ describe('Phase 23b: Shape Island', () => {
       expect(at(id).spec).not.toHaveProperty('symmetry');
     }
     expect(BOSS_ENTRANCE.has(nodeId('ch5-n8'))).toBe(false);
-    // (Compare Island's eight, Phase 23c, left out.)
-    const all = CHAPTERS.filter((c) => c.id !== 'ch4').flatMap((c) => c.nodes);
+    // (Compare Island's ten, Phase 23d, left out.)
+    const all = CHAPTERS.filter((c) => c.id !== 'ch6').flatMap((c) => c.nodes);
     expect(all).toHaveLength(46);
     expect(all.filter((n) => n.spec.kind === 'quantity_shape')).toHaveLength(21);
     // Every mat is six columns or fewer.
@@ -381,131 +383,113 @@ describe('Phase 23b: Shape Island', () => {
   });
 });
 
-describe('Phase 23c: Compare Island', () => {
-  const at = (id: string) => ch(4).nodes.find((n) => n.id === id)!;
+describe('Phase 23d: Compare Island, two numbers and a sign', () => {
+  const stops = () => ch(6).nodes;
+  const sides = (spec: QuestionSpec) => (spec.kind === 'sign' ? spec.rounds.map(roundOf) : []);
+  const answers = (spec: QuestionSpec) => sides(spec).map((r) => r.answer);
+  const runOf3 = (list: ReadonlyArray<string>) => list.some((s, i) => i >= 2 && s === list[i - 1] && s === list[i - 2]);
 
-  test('eight stops after Take-away Island, on the way: build, pick, one more three times, the line-up; numbers up to 6', () => {
-    expect(CHAPTERS[CHAPTERS.length - 1]!.id).toBe('ch4');
-    expect(SIDE_ISLANDS.has(chapterId('ch4'))).toBe(false);
-    expect(ch(4).title).toBe('chapter.ch4.title');
-    expect(ch(4).nodes.filter((n) => n.role === 'boss').map((n) => n.id)).toEqual(['ch4-n4', 'ch4-n8']);
-    expect(ch(4).nodes.map((n) => n.spec)).toEqual([
-      { kind: 'compare', given: 3, relation: 'same', singles: 5 },
-      { kind: 'compare', given: 2, relation: 'more', singles: 4 },
-      { kind: 'compare', given: 4, relation: 'fewer', partners: [2, 5, 4] },
-      { kind: 'compare', given: 3, relation: 'one_more', steps: 3, singles: 6 },
-      { kind: 'compare', given: 4, relation: 'same', partners: [4, 2, 5] },
-      { kind: 'compare', given: 3, relation: 'more', partners: [1, 5, 2] },
-      { kind: 'compare', given: 5, relation: 'one_fewer', singles: 6 },
-      { kind: 'order', sizes: [1, 3, 4] },
-    ]);
-    // No stop builds "fewer": the first block would do (design §3.2).
-    expect(ch(4).nodes.some((n) => n.spec.kind === 'compare' && n.spec.relation === 'fewer' && n.spec.singles !== undefined)).toBe(false);
-    // The rail is not material: nothing starts on the mat, the cloud shows its number.
-    for (const n of ch(4).nodes) {
-      const p = materializeFor(n.id);
-      expect(p.initial.bench.size).toBe(0);
-      expect(p.display.target).toBe(n.spec.kind === 'compare' ? n.spec.given : null);
-    }
-    expect(BOSS_ENTRANCE.has(nodeId('ch4-n4'))).toBe(false);
-    expect(BOSS_ENTRANCE.has(nodeId('ch4-n8'))).toBe(false);
+  test('ten stops after Take-away Island, on the way, bosses at 4 and 10; ch4 is retired and never reused', () => {
+    expect(CHAPTERS[CHAPTERS.length - 1]!.id).toBe('ch6');
+    expect(CHAPTERS.some((c) => c.id === 'ch4')).toBe(false);
+    expect(SIDE_ISLANDS.has(chapterId('ch6'))).toBe(false);
+    expect(ch(6).title).toBe('chapter.ch6.title');
+    expect(stops().map((n) => n.id)).toEqual(['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10'].map((n) => `ch6-${n}`));
+    expect(stops().filter((n) => n.role === 'boss').map((n) => n.id)).toEqual(['ch6-n4', 'ch6-n10']);
+    expect(stops().every((n) => n.spec.kind === 'sign')).toBe(true);
+    expect(RETIRED_STOPS[12]).toEqual(['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8'].map((n) => `ch4-${n}`));
+    expect(BOSS_ENTRANCE.has(nodeId('ch6-n4')) || BOSS_ENTRANCE.has(nodeId('ch6-n10'))).toBe(false);
   });
 
-  test('the tasks: build lines and pick lines with the rail\'s number; the reference answers take 3, 3, 1, 6, 1, 1, 4 and 3 drags', () => {
-    expect(ch(4).nodes.map((n) => [materializeFor(n.id).prompt, materializeFor(n.id).solution.length])).toEqual([
-      ['prompt.compare.same', 3],
-      ['prompt.compare.more', 3],
-      ['prompt.compare.pick.fewer', 1],
-      ['prompt.compare.one_more', 6],
-      ['prompt.compare.pick.same', 1],
-      ['prompt.compare.pick.more', 1],
-      ['prompt.compare.one_fewer', 4],
-      ['prompt.order', 3],
+  test('the rounds (PRD §4, and Ted\'s two-digit stops 8 – 10): three a stop, four and five for the bosses', () => {
+    const show = (side: ReturnType<typeof roundOf>['left']) => (side.parts !== null ? `${side.parts.join('+')}${side.beside ? '|' : ''}` : side.layout === 'tower' ? `${side.n}` : `${side.n}${side.layout[0]}`);
+    expect(stops().map((n) => sides(n.spec).map((r) => `${show(r.left)} ${r.answer} ${show(r.right)}`))).toEqual([
+      ['4 > 1', '1 < 3', '5 > 2'],
+      ['2 = 2', '1 < 4', '3 = 3'],
+      ['4 < 5', '3 > 2', '5 = 5'],
+      ['6 > 2', '3 < 4', '5 = 5', '6 > 5'],
+      ['3 < 4s', '4r = 4', '5r > 3'],
+      ['2+1 = 3', '2+2 > 3', '1+3 < 5'],
+      ['7 < 9', '8 > 6', '9 = 9'],
+      ['10 > 9', '10+2| > 10', '10+1| < 10+3|'],
+      ['6+6| > 10', '7+7| = 10+4|', '10+3| < 5+5+5|'],
+      ['6 < 9', '4s > 3', '2+3 = 5', '10 < 4+4+4|', '7+7| > 10+3|'],
     ]);
-    // Every drag of a single block goes right under the rail, from the left of the top row.
-    for (const id of ['ch4-n1', 'ch4-n2', 'ch4-n4', 'ch4-n7']) {
-      materializeFor(id).solution.forEach((cmd, i) => expect(cmd).toMatchObject({ type: 'take', to: { x: i, y: 0 } }));
-    }
+    expect(stops().map((n) => (n.spec.kind === 'sign' ? n.spec.signs ?? '><=' : null))).toEqual([['>', '<'], ...Array(9).fill('><=')]);
   });
 
-  test('pick stops: exactly one partner alone is right; n6\'s 1 and 2 together are the same as 3, and 2 + 5 is more', () => {
-    for (const id of ['ch4-n3', 'ch4-n5', 'ch4-n6']) {
-      const p = materializeFor(id);
-      const q = p.question;
-      const spec = at(id).spec;
-      if (q.kind !== 'compare' || spec.kind !== 'compare') {
-        throw new Error('compare expected');
+  test('every stop is fair (PRD §4 checks): two relations or more, never one sign three rounds running, no pair twice, every answer in the tray', () => {
+    for (const n of stops()) {
+      const a = answers(n.spec);
+      expect(`${n.id} ${new Set(a).size >= 2}`).toBe(`${n.id} true`);
+      expect(`${n.id} ${runOf3(a)}`).toBe(`${n.id} false`);
+      const pairs = sides(n.spec).map((r) => JSON.stringify([r.left, r.right]));
+      expect(`${n.id} ${new Set(pairs).size}`).toBe(`${n.id} ${pairs.length}`);
+      const signs = n.spec.kind === 'sign' ? n.spec.signs ?? ['>', '<', '='] : [];
+      expect(a.every((x) => signs.includes(x))).toBe(true);
+    }
+    // A boss is never lopsided: always putting the same sign wins two rounds at most.
+    for (const n of stops().filter((s) => s.role === 'boss')) {
+      for (const sign of ['>', '<', '=']) {
+        expect(`${n.id} ${sign} ${answers(n.spec).filter((x) => x === sign).length <= 2}`).toBe(`${n.id} ${sign} true`);
       }
-      const right = [...p.initial.groups.values()].filter((g) => {
-        const r = apply(p.initial, { type: 'takeGroup', groupId: g.id, origin: { x: 0, y: 0 } });
-        return r.ok && judge(r.value, q).matched;
+    }
+  });
+
+  test('the curve: up to 5 first, 6 at the mini boss, 6 – 9 at 7, two-digit numbers only from stop 8; layouts that mislead at 5, 9 and the boss', () => {
+    const biggest = stops().map((n) => Math.max(...sides(n.spec).flatMap((r) => [r.left.n, r.right.n])));
+    expect(biggest).toEqual([5, 4, 5, 6, 5, 5, 9, 13, 15, 14]);
+    // The taller side is the fewer at least once where the layouts change.
+    const misleads = (id: string) =>
+      sides(at6(id).spec).some((r) => {
+        const [hl, hr] = [sideShape(r.left).rows, sideShape(r.right).rows];
+        return (hl > hr && r.left.n < r.right.n) || (hr > hl && r.right.n < r.left.n);
       });
-      expect(`${id} ${right.map((g) => g.unitIds.length)}`).toBe(`${id} ${{ 'ch4-n3': 2, 'ch4-n5': 4, 'ch4-n6': 5 }[id]}`);
+    expect(['ch6-n5', 'ch6-n9', 'ch6-n10'].map(misleads)).toEqual([true, true, true]);
+    // Nothing stands taller than SIGN_MAX_ROWS.
+    for (const n of stops()) {
+      for (const r of sides(n.spec)) {
+        expect(Math.max(sideShape(r.left).rows, sideShape(r.right).rows)).toBeLessThanOrEqual(SIGN_MAX_ROWS);
+      }
     }
-    const six = materializeFor('ch4-n6');
-    const bySize = (n: number) => [...six.initial.groups.values()].find((g) => g.unitIds.length === n)!.id;
-    // One row each, so 2 + 5 fits the 6-column mat.
-    const put = (sizes: ReadonlyArray<number>) =>
-      sizes.reduce((s, n, i) => {
-        const r = apply(s, { type: 'takeGroup', groupId: bySize(n), origin: { x: 0, y: i } });
-        if (!r.ok) {
-          throw new Error(r.reason);
+  });
+
+  test('the material is the last round\'s two sides already on the mat: nothing to do there, always right, and it reads back as the round', () => {
+    for (const n of stops()) {
+      for (const attemptVariant of [0, 1, 2, 3]) {
+        const p = materialize({ ...ref('ch6', n.id), attemptVariant });
+        const last = p.sign!.rounds[p.sign!.rounds.length - 1]!;
+        expect(p.prompt).toBe('prompt.sign');
+        expect(p.display.target).toBeNull();
+        expect(p.solution).toEqual([]);
+        expect(p.initial.bench.size).toBe(p.initial.units.size);
+        expect(judge(p.initial, p.question).matched).toBe(true);
+        expect(picturedSides(p.initial)).toEqual({ left: last.left.n, right: last.right.n, gap: sideShape(last.left).cols });
+        expect(p.initial.bounds).toEqual(benchFor(ch(6), n));
+      }
+    }
+    // Partners are partners in their own colours; a plain side is one partner.
+    const twelve = materialize({ ...ref('ch6', 'ch6-n9'), attemptVariant: 0 });
+    expect([...twelve.initial.groups.values()].map((g) => g.unitIds.length)).toEqual([10, 3, 5, 5, 5]);
+  });
+
+  test('"play again" asks the same rounds in another order, never one sign three times running; the first visit keeps the catalog\'s order', () => {
+    for (const n of stops()) {
+      const plain = sides(n.spec).map((r) => `${r.left.n}${r.answer}${r.right.n}`);
+      let previous = '';
+      for (let attemptVariant = 0; attemptVariant < 6; attemptVariant += 1) {
+        const p = materialize({ ...ref('ch6', n.id), attemptVariant });
+        const order = p.sign!.rounds.map((r) => `${r.left.n}${r.answer}${r.right.n}`);
+        expect([...order].sort()).toEqual([...plain].sort());
+        expect(runOf3(p.sign!.rounds.map((r) => r.answer))).toBe(false);
+        if (attemptVariant === 0) {
+          expect(order).toEqual(plain);
+        } else if (new Set(plain).size > 1) {
+          expect(`${n.id} v${attemptVariant} ${order.join() !== previous}`).toBe(`${n.id} v${attemptVariant} true`);
         }
-        return r.value;
-      }, six.initial);
-    expect(judge(put([1, 2]), six.question)).toMatchObject({ matched: false, benchCount: 3 });
-    expect(judge(put([1, 2]), { kind: 'compare', given: 3, relation: 'same' }).matched).toBe(true);
-    expect(judge(put([2, 5]), six.question)).toMatchObject({ matched: true, benchCount: 7 });
-  });
-
-  test('n4: one more three times, the rail growing 3, 4, 5; the reference passes each step on the way', () => {
-    const p = materializeFor('ch4-n4');
-    expect(p.steps).toEqual([3, 4, 5].map((given) => ({ kind: 'compare', given, relation: 'one_more' })));
-    let state = p.initial;
-    const passed: number[] = [];
-    let step = 0;
-    for (const cmd of p.solution) {
-      const r = apply(state, cmd);
-      if (!r.ok) {
-        throw new Error(r.reason);
-      }
-      state = r.value;
-      if (judge(state, p.steps![step]!).matched) {
-        passed.push(state.bench.size);
-        step = Math.min(step + 1, 2);
+        previous = order.join();
       }
     }
-    expect(passed).toEqual([4, 5, 6]);
-  });
-
-  test('n8: 1, 3 and 4 dealt shuffled; smallest first side by side is right, the other way round is not', () => {
-    const orders = [0, 1, 2, 3].map((v) => {
-      const dealt = materialize({ ...ref('ch4', 'ch4-n8'), attemptVariant: v });
-      return dealt.display.partnerIds.map((id) => dealt.initial.groups.get(id)!.unitIds.length).join();
-    });
-    // Not lined up already in the tray every time, and never the same twice running.
-    expect(orders.some((o) => o !== '1,3,4')).toBe(true);
-    orders.slice(1).forEach((o, i) => expect(o).not.toBe(orders[i]));
-    const p = materializeFor('ch4-n8');
-    const final = p.solution.reduce((s, cmd) => {
-      const r = apply(s, cmd);
-      if (!r.ok) {
-        throw new Error(r.reason);
-      }
-      return r.value;
-    }, p.initial);
-    expect(judge(final, p.question).matched).toBe(true);
-    const size = (id: string) => p.initial.groups.get(id as never)!.unitIds.length;
-    expect(p.solution.map((c) => (c.type === 'takeGroup' ? size(c.groupId) : 0))).toEqual([1, 3, 4]);
-    const backwards = [4, 3, 1].reduce((s, n, i) => {
-      const id = [...p.initial.groups.values()].find((g) => g.unitIds.length === n)!.id;
-      const r = apply(s, { type: 'takeGroup', groupId: id, origin: { x: [0, 4, 7][i]!, y: 0 } });
-      if (!r.ok) {
-        throw new Error(r.reason);
-      }
-      return r.value;
-    }, p.initial);
-    expect(judge(backwards, p.question)).toMatchObject({ matched: false, reason: 'order-mismatch' });
   });
 });
 
