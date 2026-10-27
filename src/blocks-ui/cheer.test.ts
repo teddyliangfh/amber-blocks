@@ -13,14 +13,14 @@ describe('cheer moves (2026-10-15 review J)', () => {
     expect(cheerFor(8, { boss: true })).toBe('wave');
     expect(cheerFor(17, { boss: true })).toBe('tall-wave');
     expect(cheerFor(17)).toBe('hop');
-    expect(cheerFor(3, { boss: true, shape: { w: 2, h: 2 } })).toBe('stack');
+    expect(cheerFor(3, { boss: true, shape: { w: 2, h: 3 } })).toBe('stack');
   });
 
   test('Phase 22: the countdown boss launches what is left; a countdown that is no boss, or a boss that is no countdown, does not', () => {
     expect(cheerFor(1, { boss: true, countdown: true })).toBe('launch');
     expect(cheerFor(1, { boss: false, countdown: true })).toBe('spin');
     expect(cheerFor(1, { boss: true })).toBe('spin');
-    expect(cheerFor(5, { boss: true, countdown: false })).toBe('wave');
+    expect(cheerFor(6, { boss: true, countdown: false })).toBe('stack');
   });
 
   test('Phase 23b: Shape Island pictures move as what they are; the boat boss waves, the rocket launches', () => {
@@ -36,5 +36,18 @@ describe('cheer moves (2026-10-15 review J)', () => {
     // No picture, or one with no move of its own: the number's move.
     expect(cheerFor(6, { picture: null })).toBe('stack');
     expect(cheerFor(6, { picture: 'kite' })).toBe('stack');
+  });
+
+  test('Phase 24 (review §4.3): the 3 corner boss spins; the two-part bosses (free 5, 7 two ways, 5 split two ways) take turns; others as before', () => {
+    expect(cheerFor(3, { boss: true, shape: { w: 2, h: 2 } })).toBe('spin');
+    expect(cheerFor(3, { boss: false, shape: { w: 2, h: 2 } })).toBe('stack');
+    expect(cheerFor(5, { boss: true })).toBe('turns');
+    expect(cheerFor(7, { boss: true })).toBe('turns');
+    expect(cheerFor(5, { boss: true, countdown: false })).toBe('turns');
+    expect(cheerFor(5)).toBe('wave');
+    expect(cheerFor(7)).toBe('spin');
+    // The boat (5) and the countdown (to 1) keep their own.
+    expect(cheerFor(5, { picture: 'boat', boss: true })).toBe('wave');
+    expect(cheerFor(1, { boss: true, countdown: true })).toBe('launch');
   });
 });

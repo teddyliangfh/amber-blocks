@@ -36,6 +36,10 @@ export interface DraggableOptions {
   readonly onActive?: (active: boolean) => void;
   // Drops in from above when it first appears (ms after the stop opens), or not at all.
   readonly enterDelay?: number;
+  // Where it comes in from (Phase 24): 'above', dropping into place; 'side',
+  // sliding in from off the left (Take-away Island's bosses: the row is on the
+  // mat from the start, so it arrives instead).
+  readonly enterFrom?: 'above' | 'side';
 }
 
 // A finger was involved: springs carry velocity through an interruption.
@@ -125,13 +129,18 @@ export function useDraggable(options: DraggableOptions) {
   }, [options.rest.x, options.rest.y, reduced, tx, ty, sx, sy, landed]);
 
   // Arriving at a stop, everything drops into place one after another.
-  const { enterDelay } = options;
+  const { enterDelay, enterFrom = 'above' } = options;
   useEffect(() => {
     if (enterDelay === undefined || reduced) {
       return;
     }
-    ty.set(-options.cellSize * 0.6);
-    ty.set(withDelay(enterDelay, withSpring(0, LAND)));
+    if (enterFrom === 'side') {
+      tx.set(-options.rest.x - options.cellSize * 3);
+      tx.set(withDelay(enterDelay, withSpring(0, LAND)));
+    } else {
+      ty.set(-options.cellSize * 0.6);
+      ty.set(withDelay(enterDelay, withSpring(0, LAND)));
+    }
     sy.set(withDelay(enterDelay + 120, withSequence(withTiming(0.88, { duration: 70 }), withSpring(1, BOUNCE))));
     sx.set(withDelay(enterDelay + 120, withSequence(withTiming(1.1, { duration: 70 }), withSpring(1, BOUNCE))));
     // Once, on mount: later moves are the layout effect's job.

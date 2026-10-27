@@ -2131,3 +2131,51 @@ brief 第 4 节列出、本轮按要求没做的：三个伙伴合体、凑到 1
 - `archive-v10-phase23b-{ch1,ch2}-half.json` 现在没有测试读（v11 种子由它们生成，文件留着）。
 - 随机题不出比较题（PRD §10）。
 - 设计稿页面的合体演示与两处格子数没跟着走查后的改动更新。
+
+# Phase 24：地图五岛身份、Boss 地标 / 门 / 旗、全部 Boss 登场（2026-10-27，D-137 – D-141，不升内容版本）
+
+依据第八轮评审 [docs/map-boss-ux-review-2026-10-27.md](../docs/map-boss-ux-review-2026-10-27.md) §4.1 – §4.3（第一档）。Ted 2026-10-27 在主会话拍板：地图方向 **A**（单卷轴 + 每岛身份）、§4.1 五岛默认表**照用**、小 Boss 门后站点在 pale 基础上**再降一档**。只改 `src/screens`、`src/blocks-ui`、`src/audio-i18n`；`src/content` / `src/core` 一字未动，`CONTENT_VERSION` 仍是 12，判题不变。
+
+## 24-1 每岛一套外观（§4.1，D-137）
+
+- [x] 新文件 `src/screens/map-looks.ts`：`MAP_LOOKS` 按 chapter id 给每岛 `ground / groundDeep / sign（牌子图：block / shadow / pair / house / scales）/ decor（beach / meadow / dock / camp / steps）/ trail { style: stones / slabs / planks / prints / steps, phase, amplitude } / landmark（mountain / launchpad / bridge / tent / scales）`；默认值就是评审表；`lookOf()` 未列岛回落到数字岛；`trailX` 搬过来并带相位 / 幅度（相位用脚本搜出：375 / 390 / 430 三种宽度下五岛前四站两两 ≥ 26 px，M-2）。`ASLEEP_OPACITY = 0.92`、`GATED_OPACITY = 0.84`、`bossesOf()`（岛尾 Boss + 每个小 Boss）也在这里，纯函数，logic 项目可测。
+- [x] `MapScreen.tsx`：`Island` 地面色 / 深色、`Sign`（图 + 名字 + 一站一点，完成实心，不写分数；岛全通两侧挂小彩旗）、`Decor` 五套（棕榈 / 贝壳 / 草；树苗 / 蘑菇；灯柱 / 木桩；帐篷 / 小床；高矮树 / 台阶）、`Trail` 五种（木板：已完成站之后的实心，未完成淡；脚印左右交替；台阶一级比一级高）、`TRAIL_TOP` 76 → 84（牌子多了一行点）。
+- [x] 底栏：`BottomShade`（8 条天空色条从透明到 0.95，110 px + 安全区），按钮组 `pointerEvents="box-none"`（E-5 / M-7）。
+- [x] 对比度（`src/screens/map-looks.test.ts`，与 `palette.test.ts` 同一套量法）：五块地面上睡着的站点 数字 ≥ 3:1、外框 ≥ 2.5:1（0.92）；门后再降一档（0.84）数字 ≥ 2.8、外框 ≥ 2.3。**评审原话的两个门槛（pale 身体对地面 ≥ 1.5、牌子绿对地面 ≥ 3）在现状沙地上也不成立**（pale 1.06 – 1.30、`leafDeep` 2.75），测试把牌子绿不到 3 的四个岛（ch1 / ch5 / ch2 / ch3）列成已知项，改不改调色盘交 Ted。
+
+## 24-2 Boss 地标、门、旗、回地图仪式（§4.2，D-138）
+
+- [x] `BossLandmark` 层画在所有站点之下：岛尾 Boss 后面 150 × 124 的地标（两峰山 / 发射台 / 桥头 / 帐篷 / 天平塔，`groundDeep` 色 + 白色点缀），Boss 脚下 `groundDeep` 底座，旁边旗杆。
+- [x] `Gate`：每个非岛尾 Boss 之后一道门（数字岛两道：★3、★8），两柱一杆带白帽 / 白条；小 Boss 没完成横杆放平、门后未开的站 `GATED_OPACITY`；完成后横杆转到 −78°（`withSpring`，减少动效直接到位）。解锁规则没动。
+- [x] `Flag`：岛尾 Boss 完成后旗升到杆顶常驻，牌子两侧两面小彩旗常驻；奖杯照旧。
+- [x] 仪式：`ADVANCE.bossBeatMs = 500`，`advance.from` 是 Boss 时落地后门 / 旗才升起，自动进站多等这一拍；落地前门 / 旗保持关 / 降（`pending`）。
+- [x] 测试：`MapScreen.test.web.tsx` "Phase 24" 三例（五岛各自的地面色 / 牌子图 / 装饰 / 路 / 地标 / 底座 / 旗；门的开关与门后透明度；旗与彩旗、从 Boss 回来多一拍、小 Boss 的门落地才开）。
+
+## 24-3 全部十个 Boss 的登场与过关（§4.3，D-139 – D-141）
+
+- [x] `src/screens/BossOpening.tsx`：`BOSS_OPENING: 'all' | 'join-only' = 'all'`；`bossOpeningOf()` 按题型：造型 / 握把 Boss（ch1-n4、n8、n12，ch5-n4、n8）`'outline'`（`ShadowOutline` 画答案的大虚线 + 睡脸，`OPENING_HOLD_MS` 650 停在台中，再 500 ms 缩小 75% 飞向云朵并淡出；只登场不留填空，`openingCells` 用图样居中、17 用 `bossOutlineCells` 一排）；合体岛两站仍是 `BOSS_ENTRANCE` 的 `'entrance'`；拿走岛 ch3-n4、n8 `'slide'`（`Stage` 新 prop `arrival='slide'` → `use-draggable` `enterFrom: 'side'`，台上那一排从左侧滑入）；比一比 ch6-n4、n10 `'sign'`。`'join-only'` = Phase 24 之前的样子。
+- [x] ★：云朵弹入后 `STAR_POP_AT_MS` 300 `usePop(1.5)` 一下（`LevelPlay` 与 `SignPlay`，`Animated.Text` testID `boss-star-N`）。
+- [x] 进站音 `sfx.ts` `'boss-arrive'`：fanfare 动机 do mi so + 长 do 带泛音，0.58 s；`LevelScreen.tsx` 两处 `play('arrive')` 与 `SignPlay` 按 `boss` 选。
+- [x] 过关动作 `cheer.ts`：★3 转角（boss + 2 × 2）→ `'spin'`；和 5（ch2-n4）、7 两种（ch2-n8）、5 两种拆法（ch3-n4）→ 新动作 `'turns'`（`juice.ts`：每一份 / 每一种拆法依次抬起点头，`TURN_MS` 480；`Stage` 按 `apart` 的组给每份一个轮次，没有组就按台上每块）。船 Boss 仍 `wave`，倒数仍 `launch`。
+- [x] 测试：`LevelScreen.sound.test.web.tsx` "Phase 24" 四例（boss-arrive 只在 Boss 站、再玩一次也响、★ pop；轮廓 3 / 17 / 5 格且 1.15 s 后消失、合体岛不叠加、普通站没有；拿走岛两站 `arrival='slide'`；比一比 Boss）；`cheer.test.ts`、`sfx.test.ts` 补例；旧例按新行为改了 5 处（`arrive` → `boss-arrive`、`wave` → `turns`、3 角 `stack` 改用 2 × 3 例）。
+
+## 24-4 门禁与走查
+
+- [x] `pnpm lint` 0 问题；`pnpm typecheck` 通过（工作树里要有 gitignore 的 `expo-env.d.ts`，从主目录拷了一份）；`pnpm test:gate` 65 套 1567 例全绿（+15 例）；`pnpm build:web` 导出成功。
+- [x] Playwright 375 × 812，v11 全通种子临时拷进 `public/` 再写 localStorage（走查后删除）：五岛一眼能分开（`p24-01` – `p24-05`）；比一比岛 ★6>2 后关着的门（`p24-06`）、数字岛 17 后的两峰山 + 升起的旗（`p24-07`）、造型岛火箭后的发射台（`p24-08`）、开着的门（`p24-09`）、数字岛 ★3 未完成时关着的门（`p24-13`）；三种登场：★3 轮廓停在台中（`p24-10`）与缩小中（`p24-10b`）、拿走岛 5 那一排（`p24-11`）、比一比 ★ 弹起（`p24-12`）；仪式：从 ★3 回来落地门开（`p24-14`）、从 17 回来旗升起（`p24-15`）。控制台 0 error（1 条 Reanimated `useNativeDriver` 旧警告）。
+- [ ] 真机：横杆 / 旗的弹簧、`'turns'` 的节奏、拿走岛滑入的速度只在 jsdom 和桌面 Chrome 里看过。
+
+## 需要 Ted 决定（都是一行常量）
+
+1. `MAP_LOOKS` 每行（`map-looks.ts`）：地面色 / 牌子图 / 装饰 / 路 / 地标；`ch3` 的地标可换 `'tent'`。
+2. `GATED_OPACITY = 0.84`（0.92 → 0.84 算"一档"；再低数字对身体 < 2.8:1）。
+3. 牌子绿 `THEME.leafDeep` 对四个岛的地面 2.1 – 2.9:1，要不要改牌子或地面（`map-looks.test.ts` `SIGN_GREEN_BELOW_3`）。
+4. `BOSS_OPENING = 'all'`（`'join-only'` 回到旧样子）；`OPENING_HOLD_MS` 650 / `OPENING_SHRINK_MS` 500 / `STAR_POP_AT_MS` 300。
+5. `ADVANCE.bossBeatMs = 500`；`TURN_MS = 480`。
+6. 门后站点是否也该把 `✓` / 数字换成更淡（现在只降透明度）。
+
+## 已知遗留 / 没做
+
+- 合体岛"每过一站多一块板"做的是最小版（已完成站之后三块板实心，未完成淡），不是逐站加板。
+- 拿走岛登场"睡脸眨一下"没做（滑入已有）。
+- 第二档（§4.4 – §4.6：目录两处、过海与开岛、Boss 图标画答案）未动。

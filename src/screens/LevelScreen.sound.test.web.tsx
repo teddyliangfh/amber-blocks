@@ -15,6 +15,7 @@ import type { GroupId } from '../core';
 import { STORAGE_KEY, createInitialState, deserialize, memoryStorage, reduce, serialize } from '../progress';
 import type { ProgressState, ProgressStorage } from '../progress';
 import { CORRECTION_QUIET_MS } from './correction-voice';
+import { BOSS_OPENING, OPENING_MS, STAR_POP_AT_MS } from './BossOpening';
 import { CLOUD_NUDGE_MAX, CLOUD_NUDGE_MS, LevelScreen, NUDGE_AFTER_MS, SOLVE_SETTLE_MS } from './LevelScreen';
 import { ParentScreen } from './ParentScreen';
 import { ProgressProvider } from './progress-store';
@@ -196,11 +197,11 @@ describe('LevelScreen sounds (D-036: sounds first, speech when asked)', () => {
     await command({ type: 'takeGroup', groupId: partnerOf('ch2-n8', 3), origin: { x: 0, y: 0 } });
     await command({ type: 'takeGroup', groupId: partnerOf('ch2-n8', 4), origin: { x: 3, y: 0 } });
     // One way made: the success sound, the card says "another way", nothing spoken.
-    expect(mockSounds).toEqual(['arrive', 'look', 'success']);
+    expect(mockSounds).toEqual(['boss-arrive', 'look', 'success']);
     expect(text('feedback-title')).toBe('换一种拼法！');
     // Sending the first way back is no mistake: no "hmm".
     await command({ type: 'returnGroup', groupId: partnerOf('ch2-n8', 3) });
-    expect(mockSounds).toEqual(['arrive', 'look', 'success']);
+    expect(mockSounds).toEqual(['boss-arrive', 'look', 'success']);
     expect(mockSaid).toEqual([]);
     // The help ladder (Phase 20 Q3): the card's line first, then what to send back.
     await press('answer-feedback');
@@ -490,7 +491,7 @@ describe('Phase 22: Take-away Island sounds', () => {
     for (const u of [five[4], five[3], five[2]]) {
       await command({ type: 'return', unitId: u! });
     }
-    expect(mockSounds).toEqual(['arrive', 'look', 'count:4', 'count:3', 'count:2']);
+    expect(mockSounds).toEqual(['boss-arrive', 'look', 'count:4', 'count:3', 'count:2']);
     await command({ type: 'return', unitId: five[1]! });
     expect(mockSounds.slice(5)).toEqual(['fanfare']);
     await beat();
@@ -600,7 +601,7 @@ describe('Phase 23d: Compare Island sounds', () => {
     jest.useFakeTimers({ advanceTimers: 1 });
     try {
       await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch6-n4')) }), 'ch6-n4');
-      expect(mockSounds).toEqual(['arrive', 'look']);
+      expect(mockSounds).toEqual(['boss-arrive', 'look']);
       await tap('<');
       expect(mockSounds.slice(2)).toEqual(['pickup', 'adjust']);
       await after(WRONG_BACK_MS);
@@ -623,5 +624,106 @@ describe('Phase 23d: Compare Island sounds', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe('Phase 24: every boss makes an entrance (2026-10-27 review §4.3)', () => {
+  const wait = async (ms: number) => {
+    act(() => jest.advanceTimersByTime(ms));
+    await settle();
+  };
+  const star = () => container.querySelector('[data-testid^="boss-star-"]')?.getAttribute('data-testid') ?? null;
+  const opening = () => container.querySelector('[data-testid="boss-opening"]');
+
+  test('a boss opens with its own sound, a plain stop with the plain one; the star pops a beat after the cloud', async () => {
+    expect(BOSS_OPENING).toBe('all');
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n4')) }), 'ch1-n3');
+    expect(mockSounds).toEqual(['arrive', 'look']);
+    expect(star()).toBeNull();
+    act(() => root.unmount());
+    root = createRoot(container);
+    mockSounds.length = 0;
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n4')) }), 'ch1-n4');
+    expect(mockSounds).toEqual(['boss-arrive', 'look']);
+    expect(star()).toBe('boss-star-0');
+    await wait(STAR_POP_AT_MS);
+    expect(star()).toBe('boss-star-1');
+    // Play again is an opening too: the sound and the star again.
+    for (const cmd of puzzleFor('ch1-n4').solution) {
+      await command(cmd);
+    }
+    await beat();
+    mockSounds.length = 0;
+    await press('again');
+    expect(mockSounds).toEqual(['boss-arrive', 'look']);
+    await wait(STAR_POP_AT_MS);
+    expect(star()).toBe('boss-star-2');
+  });
+
+  test('a shape or handle boss: the answer\'s outline holds in the middle of the mat, then is gone; nothing stays to fill; a finished boss shows none', async () => {
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n4')) }), 'ch1-n4');
+    expect(opening()).not.toBeNull();
+    expect(container.querySelectorAll('[data-testid="opening-cell"]')).toHaveLength(3);
+    expect(container.querySelector('[data-testid="opening-face"]')).not.toBeNull();
+    expect(mockStage.current!.outline).toBeUndefined();
+    expect(mockStage.current!.arrival).toBe('drop');
+    await wait(OPENING_MS);
+    expect(opening()).toBeNull();
+    act(() => root.unmount());
+    root = createRoot(container);
+    // The 17 (no picture): a boss row of 17 cells.
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n12')) }), 'ch1-n12');
+    expect(container.querySelectorAll('[data-testid="opening-cell"]')).toHaveLength(17);
+    act(() => root.unmount());
+    root = createRoot(container);
+    // Shape Island's boat boss (its first three stops done): its five cells, big; the shadow policy as before.
+    let shapes = unlockedTo('ch2-n1');
+    for (const id of ['ch5-n1', 'ch5-n2', 'ch5-n3']) {
+      const e = reduce(shapes, { type: 'enter', nodeId: nodeId(id) });
+      const c = e.ok ? reduce(e.value, { type: 'complete', nodeId: nodeId(id), verdict: { matched: true, benchCount: 1, reason: 'matched' } }) : e;
+      shapes = c.ok ? c.value : shapes;
+    }
+    await open(memoryStorage({ [STORAGE_KEY]: serialize({ ...shapes, current: null }) }), 'ch5-n4');
+    expect(star()).toBe('boss-star-0');
+    expect(container.querySelectorAll('[data-testid="opening-cell"]')).toHaveLength(5);
+    act(() => root.unmount());
+    root = createRoot(container);
+    // Join Island keeps its lit row (BOSS_ENTRANCE), no big outline on top of it.
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch2-n4')) }), 'ch2-n4');
+    expect(opening()).toBeNull();
+    expect(mockStage.current!.outline).toEqual({ n: 5, lit: 0, made: [] });
+    act(() => root.unmount());
+    root = createRoot(container);
+    // A plain stop: nothing.
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch1-n4')) }), 'ch1-n3');
+    expect(opening()).toBeNull();
+  });
+
+  test('Take-away Island\'s bosses: the row on the mat slides in; a plain take-away stop drops in as always', async () => {
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch3-n4')) }), 'ch3-n4');
+    expect(mockStage.current!.arrival).toBe('slide');
+    expect(opening()).toBeNull();
+    act(() => root.unmount());
+    root = createRoot(container);
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch3-n8')) }), 'ch3-n8');
+    expect(mockStage.current!.arrival).toBe('slide');
+    act(() => root.unmount());
+    root = createRoot(container);
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch3-n3')) }), 'ch3-n3');
+    expect(mockStage.current!.arrival).toBe('drop');
+  });
+
+  test('Compare Island\'s boss: its own sound and the star\'s pop; a plain compare stop neither', async () => {
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch6-n4')) }), 'ch6-n4');
+    expect(mockSounds).toEqual(['boss-arrive', 'look']);
+    expect(star()).toBe('boss-star-0');
+    await wait(STAR_POP_AT_MS);
+    expect(star()).toBe('boss-star-1');
+    act(() => root.unmount());
+    root = createRoot(container);
+    mockSounds.length = 0;
+    await open(memoryStorage({ [STORAGE_KEY]: serialize(unlockedTo('ch6-n2')) }), 'ch6-n2');
+    expect(mockSounds).toEqual(['arrive', 'look']);
+    expect(star()).toBeNull();
   });
 });

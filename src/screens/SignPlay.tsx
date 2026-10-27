@@ -14,6 +14,7 @@ import type { BenchState, Sign } from '../core';
 import type { AnswerFeedback as Feedback, Line } from './hints';
 import { AmberGuide } from './AmberGuide';
 import { AnswerFeedback } from './AnswerFeedback';
+import { STAR_POP_AT_MS } from './BossOpening';
 import { SkyCloud, TargetCloud } from './Cloud';
 import { Icon } from './icons';
 import type { IconName } from './icons';
@@ -117,6 +118,16 @@ export function SignPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; read
   const entrance = usePop(looks, 1.4, 0.6);
   const [cloudPops, setCloudPops] = useState(0);
   const cloudPop = usePop(cloudPops);
+  // The boss's star pops a beat after the cloud comes in (Phase 24, review §4.3).
+  const [starPops, setStarPops] = useState(0);
+  const starPop = usePop(starPops, 1.5);
+  useEffect(() => {
+    if (!host.boss || looks === 0) {
+      return;
+    }
+    const t = setTimeout(() => setStarPops((n) => n + 1), STAR_POP_AT_MS);
+    return () => clearTimeout(t);
+  }, [host.boss, looks]);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const later = useCallback((ms: number, fn: () => void) => {
     timers.current.push(setTimeout(fn, ms));
@@ -131,7 +142,7 @@ export function SignPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; read
     if (host.finished) {
       return;
     }
-    play('arrive');
+    play(host.boss ? 'boss-arrive' : 'arrive');
     play('look');
     if (AUTO_SPEECH.prompt) {
       say(lang, copyKey('prompt.sign'), {});
@@ -411,7 +422,11 @@ export function SignPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; read
           </TargetCloud>
         </Pressable>
       </Animated.View>
-      {host.boss ? <Text pointerEvents="none" style={[styles.bossStar, small ? styles.bossStarCompact : null]}>★</Text> : null}
+      {host.boss ? (
+        <Animated.Text pointerEvents="none" style={[styles.bossStar, small ? styles.bossStarCompact : null, starPop]} testID={`boss-star-${starPops}`}>
+          ★
+        </Animated.Text>
+      ) : null}
     </Animated.View>
   );
   const again = {

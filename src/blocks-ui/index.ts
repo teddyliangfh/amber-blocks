@@ -3,7 +3,7 @@ export type { CloudSize } from './chrome';
 export { Spotlight } from './Spotlight';
 export { BUBBLE_MS, Stage } from './Stage';
 export type { StageProps } from './Stage';
-export { computeGeometry, showcaseGeometry } from './layout';
+export { cellToPx, computeGeometry, showcaseGeometry } from './layout';
 export type { StageGeometry } from './layout';
 export { trayObjects } from './tray';
 export type { TrayObject } from './tray';
@@ -13,6 +13,7 @@ export { useBob, useBreathe, useLean, useNod, usePop, usePulse, useWobble } from
 export type { CheerMove } from './cheer';
 export { BOSS_PICTURE_CHEER, cheerFor } from './cheer';
 export { SHADOW_SNAP, ShadowOutline, shadowHead } from './ShadowOutline';
+export { bossOutlineCells } from './BossOutline';
 export { Confetti } from './Confetti';
 export { Buddy } from './Block';
 export { WorkPicture } from './WorkPicture';

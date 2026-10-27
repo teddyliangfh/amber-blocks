@@ -10,6 +10,7 @@ import { CHAPTERS, chapterId, findChapter, materialize, nodeId } from '../conten
 import { STORAGE_KEY, createInitialState, memoryStorage, reduce, serialize } from '../progress';
 import type { ProgressState } from '../progress';
 import { ADVANCE, MAP_SHAPE_LABEL, MAP_SIGN_LABEL, MapScreen, SKIP_AFTER_MS, advanceOf, labelOf, mapPictureOf } from './MapScreen';
+import { ASLEEP_OPACITY, GATED_OPACITY, lookOf } from './map-looks';
 import v6AllFinished from '../progress/__fixtures__/archive-v6-phase20-all-finished.json';
 import v7AllFinished from '../progress/__fixtures__/archive-v7-phase21-all-finished.json';
 import { ProgressProvider } from './progress-store';
@@ -413,6 +414,108 @@ describe('free play entry (2026-10-15 review O)', () => {
       const sandbox = container.querySelector('[data-testid="sandbox"]') as HTMLElement;
       expect(play.parentElement).toBe(sandbox.parentElement);
       expect(sandbox.nextElementSibling).toBe(play);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe('Phase 24: every island its own look (2026-10-27 review §4.1–4.2)', () => {
+  const byId = (id: string) => container.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
+  const within = (root: HTMLElement | null, sel: string) => [...(root?.querySelectorAll(sel) ?? [])] as HTMLElement[];
+  const rgb = (hex: string) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
+
+  test('each island is painted from its row: ground, sign picture, scenery kit, trail and landmark; the sign counts stops as dots, no score', async () => {
+    jest.useFakeTimers();
+    try {
+      await open(finishedUpTo('ch1-n3'), {});
+      const expected = {
+        ch1: { glyph: 'block', decor: 'beach', trail: 'stones', landmark: 'mountain' },
+        ch5: { glyph: 'shadow', decor: 'meadow', trail: 'slabs', landmark: 'launchpad' },
+        ch2: { glyph: 'pair', decor: 'dock', trail: 'planks', landmark: 'bridge' },
+        ch3: { glyph: 'house', decor: 'camp', trail: 'prints', landmark: 'launchpad' },
+        ch6: { glyph: 'scales', decor: 'steps', trail: 'steps', landmark: 'scales' },
+      } as const;
+      for (const [id, want] of Object.entries(expected)) {
+        const island = byId(`island-${id}`);
+        expect(island).not.toBeNull();
+        const ground = island!.firstElementChild as HTMLElement;
+        expect(`${id} ${ground.style.backgroundColor}`).toBe(`${id} ${rgb(lookOf(chapterId(id)).ground)}`);
+        expect(within(island, `[data-testid="sign-glyph-${want.glyph}"]`)).toHaveLength(1);
+        expect(within(island, `[data-testid="decor-${want.decor}"]`).length).toBeGreaterThan(0);
+        expect(within(island, '[data-testid^="decor-"]').every((e) => e.getAttribute('data-testid') === `decor-${want.decor}`)).toBe(true);
+        expect(within(island, '[data-testid^="trail-"]').every((e) => e.getAttribute('data-testid') === `trail-${want.trail}`)).toBe(true);
+        expect(within(island, '[data-testid^="landmark-"]').map((e) => e.getAttribute('data-testid'))).toEqual([`landmark-${want.landmark}`]);
+        expect(within(island, '[data-testid="boss-pedestal"]')).toHaveLength(1);
+        expect(within(island, '[data-testid^="flag-"]')).toHaveLength(1);
+      }
+      // The sign: one dot a stop, the done ones filled; the old "3/17" is gone.
+      const sign = byId('sign-ch1');
+      expect(within(sign, '[data-testid="sign-dot-done"]')).toHaveLength(2);
+      expect(within(sign, '[data-testid="sign-dot-todo"]')).toHaveLength(15);
+      expect(sign!.textContent).toBe('数字岛');
+      expect(container.textContent).not.toContain('3/17');
+      expect(within(sign, '[data-testid="sign-bunting"]')).toHaveLength(0);
+      // Planks on the boardwalk; stepping stones only on Number Island's sand.
+      expect(within(byId('island-ch2'), '[data-testid="trail-planks"]').length).toBe(12);
+      expect(within(byId('island-ch1'), '[data-testid="trail-stones"]').length).toBe(16);
+      expect(byId('bottom-shade')).not.toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('the gate after a little boss: closed with the stops behind it paler still, until the boss is done; Number Island has two', async () => {
+    jest.useFakeTimers();
+    try {
+      await open(finishedUpTo('ch1-n4'), {});
+      const gates = within(byId('island-ch1'), '[data-testid^="gate-"]').map((e) => e.getAttribute('data-testid'));
+      expect(gates).toEqual(['gate-closed', 'gate-closed']);
+      expect(within(byId('island-ch5'), '[data-testid^="gate-"]').map((e) => e.getAttribute('data-testid'))).toEqual(['gate-closed']);
+      // ch1-n4 is awake (not gated); ch1-n5 on, asleep behind the closed gate.
+      expect(byId('stop-ch1-n4')!.style.opacity).toBe('1');
+      expect(byId('stop-ch1-n5')!.style.opacity).toBe(String(GATED_OPACITY));
+      expect(byId('stop-ch1-n12')!.style.opacity).toBe(String(GATED_OPACITY));
+      act(() => root.unmount());
+      root = createRoot(container);
+      // The 3 corner done: its gate open, ch1-n5 awake, ch1-n6 asleep at the plain shade, the 8 brick's gate still closed.
+      await open(finishedUpTo('ch1-n5'), {});
+      expect(within(byId('island-ch1'), '[data-testid^="gate-"]').map((e) => e.getAttribute('data-testid'))).toEqual(['gate-open', 'gate-closed']);
+      expect(byId('stop-ch1-n6')!.style.opacity).toBe(String(ASLEEP_OPACITY));
+      expect(byId('stop-ch1-n9')!.style.opacity).toBe(String(GATED_OPACITY));
+      expect(within(byId('island-ch1'), '[data-testid="flag-down"]')).toHaveLength(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('the island\'s flag goes up and the sign gets its flags once the last boss is done; the ceremony from a boss waits the extra beat', async () => {
+    jest.useFakeTimers();
+    try {
+      await open(finishedUpTo('ch2-n1'), {});
+      expect(within(byId('island-ch1'), '[data-testid="flag-up"]')).toHaveLength(1);
+      expect(within(byId('sign-ch1'), '[data-testid="sign-bunting"]')).toHaveLength(2);
+      expect(within(byId('island-ch1'), '[data-testid^="gate-"]').map((e) => e.getAttribute('data-testid'))).toEqual(['gate-open', 'gate-open']);
+      expect(within(byId('island-ch2'), '[data-testid="flag-down"]')).toHaveLength(1);
+      act(() => root.unmount());
+      root = createRoot(container);
+      // Coming from the 17: the flag is still down when the map opens, up once the marker lands, and the next stop opens a beat later than usual.
+      await open(finishedUpTo('ch2-n1'), { from: 'ch1-n12', to: 'ch2-n1' });
+      expect(within(byId('island-ch1'), '[data-testid="flag-down"]')).toHaveLength(1);
+      const landAt = ADVANCE.startMs + ADVANCE.hops * ADVANCE.hopMs;
+      act(() => jest.advanceTimersByTime(landAt));
+      expect(within(byId('island-ch1'), '[data-testid="flag-up"]')).toHaveLength(1);
+      act(() => jest.advanceTimersByTime(ADVANCE.enterMs));
+      expect(mockRouter.replace).not.toHaveBeenCalled();
+      act(() => jest.advanceTimersByTime(ADVANCE.bossBeatMs));
+      expect(mockRouter.replace).toHaveBeenCalledWith({ pathname: '/play/[nodeId]', params: { nodeId: 'ch2-n1' } });
+      act(() => root.unmount());
+      root = createRoot(container);
+      // Coming from a little boss: its gate opens as the marker lands.
+      await open(finishedUpTo('ch1-n5'), { from: 'ch1-n4', to: 'ch1-n5' });
+      expect(within(byId('island-ch1'), '[data-testid^="gate-"]').map((e) => e.getAttribute('data-testid'))).toEqual(['gate-closed', 'gate-closed']);
+      act(() => jest.advanceTimersByTime(landAt));
+      expect(within(byId('island-ch1'), '[data-testid^="gate-"]').map((e) => e.getAttribute('data-testid'))).toEqual(['gate-open', 'gate-closed']);
     } finally {
       jest.useRealTimers();
     }

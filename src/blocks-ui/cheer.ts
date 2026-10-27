@@ -2,8 +2,11 @@
 // has its own move, so the twelfth solve is not the first one again. Bosses
 // transform: the 8 brick becomes a little car that drives off and comes back,
 // 17's big partner stands up and waves, and the countdown's last 1 is a rocket
-// that launches and lands again (Phase 22). Pure: the stage plays the move.
-export type CheerMove = 'hop' | 'spin' | 'pair' | 'stack' | 'wiggle' | 'wave' | 'stand' | 'car' | 'tall-wave' | 'launch';
+// that launches and lands again (Phase 22). Phase 24 (2026-10-27 review
+// §4.3): the 3 corner turns right round, and the bosses made of two parts or
+// two ways (the free 5, 7 two ways, 5 split two ways) take turns ('turns':
+// one part, then the other) instead of waving together. Pure: the stage plays the move.
+export type CheerMove = 'hop' | 'spin' | 'pair' | 'stack' | 'wiggle' | 'wave' | 'stand' | 'car' | 'tall-wave' | 'launch' | 'turns';
 
 const BY_NUMBER: Readonly<Record<number, CheerMove>> = {
   1: 'spin',
@@ -58,6 +61,13 @@ export function cheerFor(
   }
   if (boss && target === 17) {
     return 'tall-wave';
+  }
+  // Phase 24: the 3 corner (a 2 × 2 with a bite) spins; the two-part bosses take turns.
+  if (boss && target === 3 && shape !== null && shape.w === 2 && shape.h === 2) {
+    return 'spin';
+  }
+  if (boss && (target === 5 || target === 7)) {
+    return 'turns';
   }
   return BY_NUMBER[target] ?? 'hop';
 }

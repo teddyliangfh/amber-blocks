@@ -17,6 +17,7 @@ import { asksForHelp, biggestFirst, cardFor, feedbackFor, guidanceFor, helpAt, m
 import type { AskedHelp, Line } from './hints';
 import { AmberGuide } from './AmberGuide';
 import { AnswerFeedback } from './AnswerFeedback';
+import { BossOpening, OPENING_MS, OPENING_STILL_MS, STAR_POP_AT_MS, bossOpeningOf, openingCells } from './BossOpening';
 import { SkyCloud, TargetCloud } from './Cloud';
 import { Icon } from './icons';
 import type { IconName } from './icons';
@@ -229,6 +230,28 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
     cloudNudges.current = 0;
     play('look');
   }, []);
+  // A boss's entrance (Phase 24, review §4.3, BossOpening): its star pops a
+  // beat after the cloud comes in; a boss whose entrance is its outline shows
+  // it on the mat for OPENING_MS from each opening that is not already right.
+  const opening = bossOpeningOf(puzzle, host);
+  const [starPops, setStarPops] = useState(0);
+  const starPop = usePop(starPops, 1.5);
+  const [openingShown, setOpeningShown] = useState(false);
+  useEffect(() => {
+    if (looks === 0 || !boss) {
+      return;
+    }
+    const star = setTimeout(() => setStarPops((n) => n + 1), STAR_POP_AT_MS);
+    if (opening !== 'outline' || (sessionRef.current?.verdict.matched ?? false)) {
+      return () => clearTimeout(star);
+    }
+    setOpeningShown(true);
+    const gone = setTimeout(() => setOpeningShown(false), reduced ? OPENING_STILL_MS : OPENING_MS);
+    return () => {
+      clearTimeout(star);
+      clearTimeout(gone);
+    };
+  }, [looks, boss, opening, reduced]);
 
   useEffect(() => {
     if (sessionRef.current?.whole === puzzle) {
@@ -242,7 +265,8 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
     // Saved work that is already right shows as right, without a second
     // celebration (the host keeps it: a stop's album picture).
     onOpen(s);
-    play('arrive');
+    // A boss opens with its own sound (Phase 24, review §4.3).
+    play(boss ? 'boss-arrive' : 'arrive');
     lookHere();
     if (AUTO_SPEECH.prompt) {
       say(lang, puzzle.prompt, promptParams(puzzle));
@@ -583,12 +607,12 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
     dropSettle();
     clearHelp();
     corrections.answer(null);
-    play('arrive');
+    play(boss ? 'boss-arrive' : 'arrive');
     lookHere();
     if (AUTO_SPEECH.prompt) {
       say(lang, puzzle.prompt, promptParams(puzzle));
     }
-  }, [onReplay, puzzle, lang, corrections, dropSettle, clearHelp, lookHere]);
+  }, [onReplay, puzzle, lang, corrections, dropSettle, clearHelp, lookHere, boss]);
 
   // The help button and the feedback card ask for help. Help that has
   // something to correct climbs a rung each time it is asked on the same answer
@@ -802,7 +826,11 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
           </Pressable>
         </Animated.View>
       </Animated.View>
-      {isBoss ? <Text pointerEvents="none" style={[styles.bossStar, small ? styles.bossStarCompact : null]}>★</Text> : null}
+      {isBoss ? (
+        <Animated.Text pointerEvents="none" style={[styles.bossStar, small ? styles.bossStarCompact : null, starPop]} testID={`boss-star-${starPops}`}>
+          ★
+        </Animated.Text>
+      ) : null}
     </Animated.View>
   );
   // A COUNT_TO_PASS stop solved for the first time: the way on appears once
@@ -879,7 +907,12 @@ export function LevelPlay({ puzzle, lang, host }: { readonly puzzle: Puzzle; rea
           outline={host.entrance && !solved ? { n: targetNumber, lit: matOf(session).bench.size, made: asideCells(session) } : undefined}
           shadow={shadow === null ? undefined : { n: targetNumber, cells: shadow.cells, lit: shadow.lit, glow: guide?.focus.cells ?? [] }}
           wink={counting.complete ? counts : 0}
+          // Take-away Island's bosses: the row on the mat slides in (Phase 24).
+          arrival={opening === 'slide' ? 'slide' : 'drop'}
         />
+      ) : null}
+      {geometry !== null && stageSize !== null && openingShown && !solved ? (
+        <BossOpening geometry={geometry} cells={openingCells(geometry, targetNumber, template?.cells ?? null)} colors={targetColors} towards={{ x: stageSize.width / 2, y: -40 }} />
       ) : null}
       {geometry !== null ? (
         <Confetti

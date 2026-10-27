@@ -1441,7 +1441,8 @@ describe('Phase 22: Take-away Island on the level screen', () => {
     expect(title()).toBe('拼对啦！');
     await beat();
     expect(nextText()).toBe('下一站');
-    expect(mockStage.current!.cheer).toBe('wave');
+    // Phase 24: the two ways take turns (cheer.ts 'turns'), no longer one wave.
+    expect(mockStage.current!.cheer).toBe('turns');
     await flushSaves();
   });
 

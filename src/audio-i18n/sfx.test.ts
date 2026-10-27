@@ -1,7 +1,7 @@
 import { COMPARE_STEP, JOIN_STEP, LOOK_AT, countPitch, createAudioSfx, createSilentSfx, notesFor } from './sfx';
 import type { SfxName } from './sfx';
 
-const NAMES: ReadonlyArray<SfxName> = ['pickup', 'drop', 'return', 'blocked', 'count', 'counted', 'adjust', 'success', 'fanfare', 'arrive', 'tap', 'join', 'launch', 'look', 'compare'];
+const NAMES: ReadonlyArray<SfxName> = ['pickup', 'drop', 'return', 'blocked', 'count', 'counted', 'adjust', 'success', 'fanfare', 'arrive', 'tap', 'join', 'launch', 'look', 'compare', 'boss-arrive'];
 
 function fakeContext(state = 'suspended') {
   const started: { f: number; at: number }[] = [];
@@ -173,4 +173,18 @@ test('Phase 23c: a compare is the child\'s note then the rail\'s, a beat apart: 
   const same = notesFor('compare', 3, [3]);
   expect(same[0]!.f).toBe(same[1]!.f);
   expect(notesFor('compare', 4, [1, 3]).map((n) => n.f)).toEqual([1, 3, 4].map(countPitch));
+});
+
+test('Phase 24: a boss\'s arrival is the fanfare\'s motif, three notes up and a long one, within 0.6 s and higher than the plain arrive', () => {
+  const notes = notesFor('boss-arrive');
+  const [a, b, c, d] = notes;
+  expect(a!.f).toBeLessThan(b!.f);
+  expect(b!.f).toBeLessThan(c!.f);
+  expect(c!.f).toBeLessThan(d!.f);
+  expect(d!.dur).toBeGreaterThanOrEqual(0.25);
+  expect(Math.max(...notes.map((n) => n.at + n.dur))).toBeLessThanOrEqual(0.66);
+  // The same first three notes as the boss's fanfare, in the same order.
+  expect(notesFor('fanfare').slice(0, 4).map((n) => n.f)).toEqual([523.25, 523.25, 659.25, 783.99]);
+  expect([a!.f, b!.f, c!.f]).toEqual([523.25, 659.25, 783.99]);
+  expect(Math.max(...notesFor('arrive').map((n) => n.f))).toBeLessThan(d!.f);
 });

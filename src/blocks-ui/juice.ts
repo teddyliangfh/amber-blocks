@@ -15,6 +15,8 @@ export const CAR_MS = 1650;
 // launch takes, crouch to landing (Phase 22).
 export const LAUNCH_HEIGHT = 900;
 export const LAUNCH_MS = 1700;
+// Between the turns of a 'turns' cheer (Phase 24): each part gets its own beat.
+export const TURN_MS = 480;
 
 const LAND = { damping: 10, stiffness: 260, mass: 0.5 } as const;
 const SETTLE = { damping: 9, stiffness: 240 } as const;
@@ -96,6 +98,14 @@ export function useCheer(move: CheerMove, tick: number, index: number) {
         sy.set(withSequence(withTiming(0.78, { duration: 180 }), withTiming(1.3, { duration: 160, easing: EASE_OUT }), withDelay(900, withSpring(1, SETTLE))));
         sx.set(withSequence(withTiming(1.16, { duration: 180 }), withTiming(0.84, { duration: 160, easing: EASE_OUT }), withDelay(900, withSpring(1, SETTLE))));
         y.set(withSequence(withDelay(180, withTiming(-LAUNCH_HEIGHT, { duration: 480, easing: Easing.in(Easing.quad) })), withDelay(320, withTiming(0, { duration: LAUNCH_MS - 980, easing: EASE_OUT }))));
+        break;
+      }
+      case 'turns': {
+        // Phase 24: the parts of a two-part boss (the stage numbers each part,
+        // or each way, in turn) take turns: one lifts and nods, then the next.
+        const d = i * TURN_MS;
+        y.set(withDelay(d, withSequence(withTiming(-22, { duration: 170, easing: EASE_OUT }), withSpring(0, LAND))));
+        r.set(withDelay(d + 60, withSequence(withTiming(-9, { duration: 110 }), withTiming(9, { duration: 140 }), withSpring(0, SETTLE))));
         break;
       }
       case 'hop': {

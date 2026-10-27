@@ -96,6 +96,10 @@ export interface StageProps {
   // Numbers that pop up above a block for a moment (free play: a group of blocks
   // just changed size). `tick` makes each one new.
   readonly bubbles?: ReadonlyArray<{ readonly at: Cell; readonly n: number; readonly tick: number }>;
+  // How the pieces on the mat come in at the opening (Phase 24): 'drop', from
+  // above, as always; 'slide', from off the left (a boss whose row waits on the
+  // mat from the start: Take-away Island's).
+  readonly arrival?: 'drop' | 'slide';
 }
 
 // A seam between two joining pieces, lit for a moment (merge.ts MERGE_SEAM_MS).
@@ -185,7 +189,7 @@ function headOf(cells: ReadonlyArray<Cell>): Cell {
   return cells.reduce((best, c) => (c.y < best.y || (c.y === best.y && c.x < best.x) ? c : best));
 }
 
-export function Stage({ state, geometry, trayObjects, enabled, countOrder, matched, mood: moodOf, celebrateTick, onCommand, onPreview, onTapUnit, onTapTray, onDragActive, onFeel, spotlight = [], demo = 0, demoPiece, demoTo: demoCell, demoBack = false, wink = 0, trayHidden = false, cheer = 'hop', merge = false, apart, onJoin, bubbles = [], outline, shadow }: StageProps) {
+export function Stage({ state, geometry, trayObjects, enabled, countOrder, matched, mood: moodOf, celebrateTick, onCommand, onPreview, onTapUnit, onTapTray, onDragActive, onFeel, spotlight = [], demo = 0, demoPiece, demoTo: demoCell, demoBack = false, wink = 0, trayHidden = false, cheer = 'hop', merge = false, apart, onJoin, bubbles = [], outline, shadow, arrival = 'drop' }: StageProps) {
   const [preview, setPreview] = useState<Preview | null>(null);
   // The last thing tapped in the tray, and its hop. Ticks count down from -1
   // so they never match a solve's (useCheer plays each tick once).
@@ -206,6 +210,14 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
     return () => clearTimeout(t);
   }, []);
   const enter = (i: number) => (arriving ? 80 + Math.min(i, 14) * 35 : undefined);
+  // Pieces on the mat slide in from the side when the stop opens that way.
+  const enterFrom = arrival === 'slide' ? ('side' as const) : ('above' as const);
+  // A 'turns' cheer (Phase 24): each way made (`apart`) is one turn; without
+  // ways, each piece on the mat is a turn, in hop order.
+  const turnOf = (ids: ReadonlyArray<UnitId>, order: number): number => {
+    const way = apart?.findIndex((g) => ids.some((u) => g.includes(u))) ?? -1;
+    return way >= 0 ? way : order;
+  };
   const onActive = useCallback(
     (active: boolean) => {
       if (active) {
@@ -588,7 +600,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
           celebrateTick={look?.hold === true ? 0 : celebrateTick}
           cheer={cheer === 'tall-wave' && !joined ? 'hop' : cheer}
           wink={look?.wink ?? (countOrder.has(unitId) ? wink : 0)}
-          index={look?.index ?? order}
+          index={cheer === 'turns' ? turnOf([unitId], look?.index ?? order) : (look?.index ?? order)}
           badge={look?.badge ?? null}
           plateAround={look?.plateAround}
           look={look?.look ?? 0}
@@ -600,6 +612,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
             cellSize: cell,
             enabled,
             enterDelay: enter(order),
+            enterFrom,
             onDrop: (t) => dropUnit(unitId, rest, true, t),
             onMove: (t) => previewUnit(unitId, rest, true, t),
             onCancel: clearPreview,
@@ -659,7 +672,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
           mood={mood}
           celebrateTick={look?.hold === true ? 0 : celebrateTick}
           cheer={cheer === 'tall-wave' && groupSize(group) < 10 && !joined ? 'hop' : cheer}
-          index={look?.index ?? order}
+          index={cheer === 'turns' ? turnOf(group.unitIds, look?.index ?? order) : (look?.index ?? order)}
           faceAt={look?.faceCell === undefined ? undefined : look.faceCell === null ? -1 : cells.findIndex((x) => x.x === look.faceCell!.x && x.y === look.faceCell!.y)}
           badge={look?.badge}
           plateAround={look?.plateAround}
@@ -672,6 +685,7 @@ export function Stage({ state, geometry, trayObjects, enabled, countOrder, match
             cellSize: cell,
             enabled,
             enterDelay: enter(order),
+            enterFrom,
             onDrop: (t) => dropPartner(group, rest, true, t),
             onMove: (t) => previewPartner(group, rest, true, t),
             onCancel: clearPreview,

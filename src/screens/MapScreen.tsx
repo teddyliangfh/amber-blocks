@@ -12,6 +12,8 @@ import { chapterCompletion, defaultCurrent, mapOrder, statusOf } from '../progre
 import type { NodeStatus, ProgressState } from '../progress';
 import { SkyCloud } from './Cloud';
 import { Icon } from './icons';
+import { ASLEEP_OPACITY, GATED_OPACITY, bossesOf, lookOf, trailX } from './map-looks';
+import type { DecorKit, IslandLook, Landmark, SignGlyph, TrailStyle } from './map-looks';
 import { useProgress } from './progress-store';
 import { signLabel } from './sign-hints';
 import { play } from './sound';
@@ -27,7 +29,10 @@ const TEXT = {
 // with the arrive sound, and a moment later the stop opens by itself; a tap
 // anywhere goes straight in. The map never opens on its own after a solve,
 // and nothing on the mat is cleared by a timer (PRD §2).
-export const ADVANCE = { startMs: 250, hopMs: 150, hops: 4, enterMs: 900 } as const;
+// `bossBeatMs` (Phase 24, review §4.2): coming from a boss, the landing gets
+// one more beat before the stop opens, while the gate's bar or the island's
+// flag goes up.
+export const ADVANCE = { startMs: 250, hopMs: 150, hops: 4, enterMs: 900, bossBeatMs: 500 } as const;
 // "Tap anywhere to go straight in" waits this long after the map opens: a
 // child's second tap on "next" otherwise lands on the fresh map and skips the
 // whole hop (2026-10-16 review D-1: 91ms after the first tap).
@@ -57,7 +62,7 @@ const BOSS = 84;
 const STEP = 96;
 const SHOAL = 8;
 // The trail starts below the island's sign, with room for the marker over the first stop.
-const TRAIL_TOP = 76;
+const TRAIL_TOP = 84;
 
 // How a Shape Island stop shows itself on the map (PRD §4.2.2, §8 #13):
 // 'picture', its picture drawn small (the last one of a stop in steps), so a
@@ -126,17 +131,11 @@ export function labelOf(node: NodeSpec): { label: string; number: number } {
   }
 }
 
-// A winding trail: stops swing left and right down the island.
-function trailX(index: number, width: number, size: number): number {
-  const amplitude = Math.max(0, width / 2 - size / 2 - 10);
-  return width / 2 + amplitude * Math.sin(index * 1.05 + 0.4) - size / 2;
-}
-
 // Where stop i of a chapter sits on its island's trail: top-left and size.
 function stopAt(chapter: Chapter, i: number, trailWidth: number): { readonly x: number; readonly y: number; readonly size: number } {
   const node = chapter.nodes[i]!;
   const size = node.role === 'boss' ? BOSS : STOP;
-  return { x: trailX(i, trailWidth, size), y: i * STEP + (node.role === 'boss' ? -8 : 0), size };
+  return { x: trailX(i, trailWidth, size, lookOf(chapter.id).trail), y: i * STEP + (node.role === 'boss' ? -8 : 0), size };
 }
 
 // The marker's resting place over a stop (as Marker draws it).
@@ -191,6 +190,7 @@ function StopDot({
   onPress,
   dozing = false,
   woken = 0,
+  gated = false,
 }: {
   readonly node: NodeSpec;
   readonly status: NodeStatus;
@@ -201,6 +201,8 @@ function StopDot({
   // The next stop, still asleep until the marker arrives; then it wakes (woken > 0) with a pop.
   readonly dozing?: boolean;
   readonly woken?: number;
+  // Asleep behind a closed gate (Phase 24): paler still.
+  readonly gated?: boolean;
 }) {
   const reduced = useReducedMotion();
   const wiggle = useSharedValue(0);
@@ -244,7 +246,7 @@ function StopDot({
               // Asleep: the pale body, outlined in the colour's own edge (2026-10-16
               // review F-2: the fill as outline was 1.2–2.3:1 on the pale body).
               borderColor: colors.edge,
-              opacity: locked ? 0.92 : 1,
+              opacity: locked ? (gated ? GATED_OPACITY : ASLEEP_OPACITY) : 1,
               transform: [{ translateY: pressed && !locked ? 3 : 0 }, { scale: current ? 1.06 : 1 }],
               boxShadow: `inset 0 -6px 0 rgba(0,0,0,${locked ? 0.06 : 0.14}), inset 0 4px 0 rgba(255,255,255,0.4), 0 ${pressed && !locked ? 2 : 5}px 0 rgba(27,42,58,0.18)`,
             },
@@ -296,7 +298,10 @@ function Trophy({ label, onPress }: { readonly label: string; readonly onPress: 
   );
 }
 
-// Scenery on the island's edge, opposite the trail so it never sits under a stop.
+// ---------------------------------------------------------------------------
+// Scenery (Phase 24, map-looks.ts): each island's kit, on the island's edge
+// opposite the trail so it never sits under a stop. All of it takes no touch.
+
 function Palm({ x, y, flip }: { readonly x: number; readonly y: number; readonly flip: boolean }) {
   return (
     <View pointerEvents="none" style={{ position: 'absolute', left: x, top: y, width: 54, height: 70, transform: [{ scaleX: flip ? -1 : 1 }] }}>
@@ -328,22 +333,371 @@ function Tuft({ x, y }: { readonly x: number; readonly y: number }) {
   );
 }
 
+// Shape Island's own pictures, small: a mushroom with spots and a sapling.
+function Mushroom({ x, y, small = false }: { readonly x: number; readonly y: number; readonly small?: boolean }) {
+  const k = small ? 0.7 : 1;
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: x, top: y, width: 40 * k, height: 40 * k, alignItems: 'center' }}>
+      <View style={{ width: 40 * k, height: 22 * k, borderTopLeftRadius: 20 * k, borderTopRightRadius: 20 * k, borderBottomLeftRadius: 5 * k, borderBottomRightRadius: 5 * k, backgroundColor: THEME.shell, boxShadow: '0 2px 0 #E08F80' }}>
+        <View style={{ position: 'absolute', left: 8 * k, top: 7 * k, width: 7 * k, height: 7 * k, borderRadius: 4 * k, backgroundColor: THEME.white }} />
+        <View style={{ position: 'absolute', left: 24 * k, top: 4 * k, width: 6 * k, height: 6 * k, borderRadius: 3 * k, backgroundColor: THEME.white }} />
+      </View>
+      <View style={{ width: 14 * k, height: 16 * k, borderBottomLeftRadius: 5 * k, borderBottomRightRadius: 5 * k, backgroundColor: '#FFF6E4', borderWidth: 1.5, borderTopWidth: 0, borderColor: '#E3C98B' }} />
+    </View>
+  );
+}
+
+function Sapling({ x, y, tall = false }: { readonly x: number; readonly y: number; readonly tall?: boolean }) {
+  const h = tall ? 72 : 46;
+  const crown = tall ? 38 : 28;
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: x, top: y, width: crown + 4, height: h, alignItems: 'center' }}>
+      <View style={{ width: crown, height: crown, borderRadius: crown / 2, backgroundColor: THEME.palm, borderWidth: 2, borderColor: THEME.palmDeep }} />
+      <View style={{ width: 8, height: h - crown + 4, marginTop: -4, borderRadius: 3, backgroundColor: THEME.trunk }} />
+    </View>
+  );
+}
+
+// Join Island's boardwalk: a post, and a post with a lamp.
+function Post({ x, y, lamp = false }: { readonly x: number; readonly y: number; readonly lamp?: boolean }) {
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: x, top: y, width: 22, height: lamp ? 56 : 30, alignItems: 'center' }}>
+      {lamp ? <View style={{ width: 18, height: 18, borderRadius: 6, backgroundColor: '#FFF1C2', borderWidth: 2.5, borderColor: THEME.woodDeep }} /> : null}
+      <View style={{ width: 12, height: lamp ? 36 : 26, borderRadius: 3, backgroundColor: THEME.trunk, borderWidth: 2, borderColor: THEME.woodDeep, marginTop: lamp ? -2 : 0 }} />
+      <View style={{ position: 'absolute', top: lamp ? 16 : 0, width: 12, height: 5, borderRadius: 2, backgroundColor: '#D7A86E' }} />
+    </View>
+  );
+}
+
+// Take-away Island's camp: a tent and a little bed (the tray is home).
+function Tent({ x, y }: { readonly x: number; readonly y: number }) {
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: x, top: y, width: 56, height: 44, alignItems: 'center', justifyContent: 'flex-end' }}>
+      <View style={{ width: 0, height: 0, borderLeftWidth: 28, borderRightWidth: 28, borderBottomWidth: 40, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: THEME.shell }} />
+      <View style={{ position: 'absolute', bottom: 0, width: 0, height: 0, borderLeftWidth: 9, borderRightWidth: 9, borderBottomWidth: 18, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#D9B07A' }} />
+    </View>
+  );
+}
+
+function Bed({ x, y }: { readonly x: number; readonly y: number }) {
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: x, top: y, width: 40, height: 22 }}>
+      <View style={{ position: 'absolute', left: 0, bottom: 0, width: 40, height: 14, borderRadius: 5, backgroundColor: THEME.white, borderWidth: 2, borderColor: '#D9B07A' }} />
+      <View style={{ position: 'absolute', left: 4, top: 0, width: 12, height: 10, borderRadius: 4, backgroundColor: '#FFF6E4', borderWidth: 2, borderColor: '#D9B07A' }} />
+      <View style={{ position: 'absolute', left: 16, bottom: 4, width: 20, height: 8, borderRadius: 3, backgroundColor: THEME.shell }} />
+    </View>
+  );
+}
+
+// Compare Island: three little steps that climb.
+function Stair({ x, y }: { readonly x: number; readonly y: number }) {
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: x, top: y, flexDirection: 'row', alignItems: 'flex-end', gap: 1 }}>
+      {[8, 14, 20].map((h) => (
+        <View key={h} style={{ width: 10, height: h, borderRadius: 2, backgroundColor: THEME.white, borderWidth: 1.5, borderColor: '#BFDCEA' }} />
+      ))}
+    </View>
+  );
+}
+
+// Scenery every third stop, on the far side from the trail: a big piece, a
+// small piece, then a tuft or the like, in the island's kit.
+function Decor({ kit, slot, x, y, left }: { readonly kit: DecorKit; readonly slot: 'big' | 'small' | 'tuft'; readonly x: number; readonly y: number; readonly left: boolean }) {
+  const inner = (() => {
+    switch (kit) {
+      case 'beach':
+        return slot === 'big' ? <Palm x={x} y={y - 6} flip={!left} /> : slot === 'small' ? <Shell x={left ? 6 : x + 10} y={y + 30} /> : <Tuft x={left ? 10 : x + 20} y={y + 40} />;
+      case 'meadow':
+        return slot === 'big' ? <Sapling x={x + 6} y={y - 2} /> : slot === 'small' ? <Mushroom x={left ? 6 : x + 10} y={y + 14} /> : <Mushroom x={left ? 10 : x + 20} y={y + 30} small />;
+      case 'dock':
+        return slot === 'big' ? <Post x={x + 14} y={y} lamp /> : slot === 'small' ? <Post x={left ? 8 : x + 18} y={y + 24} /> : <Tuft x={left ? 10 : x + 20} y={y + 40} />;
+      case 'camp':
+        return slot === 'big' ? <Tent x={x} y={y + 8} /> : slot === 'small' ? <Bed x={left ? 6 : x + 8} y={y + 24} /> : <Tuft x={left ? 10 : x + 20} y={y + 40} />;
+      case 'steps':
+        return slot === 'big' ? (
+          <View pointerEvents="none" style={{ position: 'absolute', left: x, top: y - 12, width: 54, height: 72, flexDirection: 'row', alignItems: 'flex-end', gap: 2 }}>
+            <Sapling x={0} y={0} tall />
+            <Sapling x={38} y={26} />
+          </View>
+        ) : slot === 'small' ? (
+          <Stair x={left ? 8 : x + 12} y={y + 20} />
+        ) : (
+          <Tuft x={left ? 10 : x + 20} y={y + 40} />
+        );
+    }
+  })();
+  return <View pointerEvents="none" testID={`decor-${kit}`}>{inner}</View>;
+}
+
+// The trail between two stops: three marks on the line between them, in the
+// island's style. Planks fill in as stops are done (the smallest "mend the
+// bridge": a plank after a done stop is solid, after one still to do, faint).
+function Trail({ style, from, to, done, deep }: { readonly style: TrailStyle; readonly from: { readonly x: number; readonly y: number }; readonly to: { readonly x: number; readonly y: number }; readonly done: boolean; readonly deep: string }) {
+  const angle = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI;
+  return (
+    <View pointerEvents="none" testID={`trail-${style}`}>
+      {[0.3, 0.5, 0.7].map((t, k) => {
+        const x = from.x + (to.x - from.x) * t;
+        const y = from.y + (to.y - from.y) * t;
+        switch (style) {
+          case 'stones':
+            return <View key={t} style={[styles.stone, { left: x - 7, top: y - 4.5, backgroundColor: deep }]} />;
+          case 'slabs':
+            return <View key={t} style={[styles.slab, { left: x - 9, top: y - 5.5, backgroundColor: deep }]} />;
+          case 'planks':
+            return <View key={t} style={[styles.plank, { left: x - 13, top: y - 3.5, backgroundColor: deep, opacity: done ? 0.95 : 0.4, transform: [{ rotate: `${angle + 90}deg` }] }]} />;
+          case 'prints':
+            // Left foot, right foot, left foot, each a little off the line.
+            return (
+              <View key={t} style={{ position: 'absolute', left: x - 4, top: y - 6, transform: [{ rotate: `${angle + 90}deg` }, { translateX: k % 2 === 0 ? -6 : 6 }] }}>
+                <View style={[styles.print, { backgroundColor: deep }]} />
+                <View style={[styles.toe, { backgroundColor: deep }]} />
+              </View>
+            );
+          case 'steps':
+            return <View key={t} style={[styles.stepMark, { left: x - 9, top: y - 3 - k * 3, height: 7 + k * 3, backgroundColor: deep }]} />;
+        }
+      })}
+    </View>
+  );
+}
+
+// The little picture on an island's sign: what the island teaches.
+function SignPicture({ glyph }: { readonly glyph: SignGlyph }) {
+  const size = 22;
+  switch (glyph) {
+    case 'block': {
+      const c = colorsFor('n1');
+      return (
+        <View testID="sign-glyph-block" style={{ width: size, height: size, borderRadius: 6, backgroundColor: c.fill, borderWidth: 2, borderColor: c.edge, alignItems: 'center', justifyContent: 'center' }}>
+          <Face size={14} mood="calm" blush={c.blush} />
+        </View>
+      );
+    }
+    case 'shadow':
+      // A mushroom's silhouette in ink: a shadow to fill.
+      return (
+        <View testID="sign-glyph-shadow" style={{ width: size, height: size, alignItems: 'center', justifyContent: 'flex-end' }}>
+          <View style={{ width: 22, height: 12, borderTopLeftRadius: 11, borderTopRightRadius: 11, borderBottomLeftRadius: 3, borderBottomRightRadius: 3, backgroundColor: THEME.ink, opacity: 0.75 }} />
+          <View style={{ width: 8, height: 8, borderBottomLeftRadius: 3, borderBottomRightRadius: 3, backgroundColor: THEME.ink, opacity: 0.75 }} />
+        </View>
+      );
+    case 'pair': {
+      const a = colorsFor('n2');
+      const b = colorsFor('n3');
+      return (
+        <View testID="sign-glyph-pair" style={{ flexDirection: 'row', width: size + 4, height: size }}>
+          <View style={{ width: 13, height: size, borderTopLeftRadius: 6, borderBottomLeftRadius: 6, backgroundColor: a.fill, borderWidth: 2, borderRightWidth: 1, borderColor: a.edge }} />
+          <View style={{ width: 13, height: size, borderTopRightRadius: 6, borderBottomRightRadius: 6, backgroundColor: b.fill, borderWidth: 2, borderLeftWidth: 1, borderColor: b.edge }} />
+        </View>
+      );
+    }
+    case 'house':
+      return (
+        <View testID="sign-glyph-house" style={{ width: size + 2, height: size, alignItems: 'center' }}>
+          <View style={{ width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderBottomWidth: 10, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#B63724' }} />
+          <View style={{ width: 18, height: 12, backgroundColor: THEME.white, borderWidth: 2, borderTopWidth: 0, borderColor: '#B63724', alignItems: 'center', justifyContent: 'flex-end' }}>
+            <View style={{ width: 5, height: 7, backgroundColor: '#B63724', borderTopLeftRadius: 2, borderTopRightRadius: 2 }} />
+          </View>
+        </View>
+      );
+    case 'scales':
+      return (
+        <View testID="sign-glyph-scales" style={{ width: size + 6, height: size, alignItems: 'center' }}>
+          <View style={{ width: 26, height: 3, borderRadius: 1.5, backgroundColor: THEME.ink, marginTop: 3 }} />
+          <View style={{ width: 3, height: 15, backgroundColor: THEME.ink }} />
+          <View style={{ position: 'absolute', left: 0, top: 7, width: 10, height: 6, borderBottomLeftRadius: 5, borderBottomRightRadius: 5, backgroundColor: THEME.ink }} />
+          <View style={{ position: 'absolute', right: 0, top: 10, width: 10, height: 6, borderBottomLeftRadius: 5, borderBottomRightRadius: 5, backgroundColor: THEME.ink }} />
+          <View style={{ width: 12, height: 3, borderRadius: 1.5, backgroundColor: THEME.ink }} />
+        </View>
+      );
+  }
+}
+
+// The scenery behind an island's last boss, on the pedestal at the island's
+// foot (review §4.2): a two-peaked mountain, a launch pad, a bridgehead, a
+// tent or the scales tower, all in the island's deep ground colour.
+function LandmarkView({ kind, deep, width, height }: { readonly kind: Landmark; readonly deep: string; readonly width: number; readonly height: number }) {
+  const inner = (() => {
+    switch (kind) {
+      case 'mountain':
+        return (
+          <>
+            <View style={{ position: 'absolute', left: width * 0.42, bottom: 0, width: 0, height: 0, borderLeftWidth: width * 0.28, borderRightWidth: width * 0.28, borderBottomWidth: height * 0.72, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: deep, opacity: 0.85 }} />
+            <View style={{ position: 'absolute', left: 0, bottom: 0, width: 0, height: 0, borderLeftWidth: width * 0.34, borderRightWidth: width * 0.34, borderBottomWidth: height, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: deep }} />
+            <View style={{ position: 'absolute', left: width * 0.34 - 9, top: 0, width: 0, height: 0, borderLeftWidth: 9, borderRightWidth: 9, borderBottomWidth: 16, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: THEME.white, opacity: 0.9 }} />
+          </>
+        );
+      case 'launchpad':
+        return (
+          <>
+            <View style={{ position: 'absolute', left: width * 0.12, bottom: 0, width: width * 0.76, height: 14, borderRadius: 5, backgroundColor: deep }} />
+            <View style={{ position: 'absolute', left: width * 0.18, bottom: 10, width: 12, height: height - 10, borderRadius: 3, backgroundColor: deep }} />
+            {[0.3, 0.55, 0.8].map((t) => (
+              <View key={t} style={{ position: 'absolute', left: width * 0.18 + 10, bottom: 10 + (height - 10) * t, width: width * 0.3, height: 5, borderRadius: 2, backgroundColor: deep, opacity: 0.8 }} />
+            ))}
+            <View style={{ position: 'absolute', left: width * 0.18 - 4, top: 0, width: 20, height: 8, borderRadius: 4, backgroundColor: THEME.white, opacity: 0.9 }} />
+          </>
+        );
+      case 'bridge':
+        return (
+          <>
+            <View style={{ position: 'absolute', left: width * 0.1, top: height * 0.2, width: width * 0.8, height: height * 0.8, borderTopLeftRadius: width * 0.4, borderTopRightRadius: width * 0.4, borderWidth: 12, borderBottomWidth: 0, borderColor: deep }} />
+            <View style={{ position: 'absolute', left: width * 0.1 - 4, bottom: 0, width: 16, height: height * 0.55, borderRadius: 4, backgroundColor: deep }} />
+            <View style={{ position: 'absolute', right: width * 0.1 - 4, bottom: 0, width: 16, height: height * 0.55, borderRadius: 4, backgroundColor: deep }} />
+            <View style={{ position: 'absolute', left: width * 0.5 - 8, top: height * 0.06, width: 16, height: 8, borderRadius: 4, backgroundColor: THEME.white, opacity: 0.9 }} />
+          </>
+        );
+      case 'tent':
+        return (
+          <>
+            <View style={{ position: 'absolute', left: width * 0.1, bottom: 0, width: 0, height: 0, borderLeftWidth: width * 0.4, borderRightWidth: width * 0.4, borderBottomWidth: height, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: deep }} />
+            <View style={{ position: 'absolute', left: width * 0.5 - 12, bottom: 0, width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderBottomWidth: height * 0.42, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: THEME.white, opacity: 0.85 }} />
+          </>
+        );
+      case 'scales':
+        return (
+          <>
+            <View style={{ position: 'absolute', left: width * 0.5 - 7, bottom: 0, width: 14, height: height, borderRadius: 4, backgroundColor: deep }} />
+            <View style={{ position: 'absolute', left: width * 0.08, top: 8, width: width * 0.84, height: 8, borderRadius: 4, backgroundColor: deep }} />
+            <View style={{ position: 'absolute', left: width * 0.08 - 2, top: 14, width: 4, height: 24, backgroundColor: deep, opacity: 0.8 }} />
+            <View style={{ position: 'absolute', right: width * 0.08 - 2, top: 14, width: 4, height: 34, backgroundColor: deep, opacity: 0.8 }} />
+            <View style={{ position: 'absolute', left: 0, top: 36, width: width * 0.3, height: 12, borderBottomLeftRadius: 10, borderBottomRightRadius: 10, backgroundColor: THEME.white, borderWidth: 2, borderColor: deep }} />
+            <View style={{ position: 'absolute', right: 0, top: 46, width: width * 0.3, height: 12, borderBottomLeftRadius: 10, borderBottomRightRadius: 10, backgroundColor: THEME.white, borderWidth: 2, borderColor: deep }} />
+          </>
+        );
+    }
+  })();
+  return (
+    <View pointerEvents="none" testID={`landmark-${kind}`} style={{ position: 'absolute', width, height }}>
+      {inner}
+    </View>
+  );
+}
+
+// The island's foot, drawn under every stop: the landmark behind the last
+// boss (tall enough to show above it), the pedestal it stands on and the
+// flag beside it.
+const LANDMARK_W = 150;
+const LANDMARK_H = 124;
+function BossLandmark({ look, stop, trailWidth, flagUp, celebrate }: { readonly look: IslandLook; readonly stop: { readonly x: number; readonly y: number; readonly size: number }; readonly trailWidth: number; readonly flagUp: boolean; readonly celebrate: boolean }) {
+  const cx = stop.x + stop.size / 2;
+  const landmarkX = Math.max(-10, Math.min(trailWidth - LANDMARK_W + 10, cx - LANDMARK_W / 2));
+  const poleRight = cx < trailWidth / 2;
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <View style={{ position: 'absolute', left: landmarkX, top: stop.y + stop.size - LANDMARK_H - 4, width: LANDMARK_W, height: LANDMARK_H }}>
+        <LandmarkView kind={look.landmark} deep={look.groundDeep} width={LANDMARK_W} height={LANDMARK_H} />
+      </View>
+      <View style={[styles.pedestal, { left: stop.x - 12, top: stop.y + stop.size - 18, width: stop.size + 24, backgroundColor: look.groundDeep }]} testID="boss-pedestal" />
+      <Flag x={poleRight ? stop.x + stop.size + 6 : stop.x - 30} y={stop.y - 34} height={stop.size + 44} up={flagUp} celebrate={celebrate} />
+    </View>
+  );
+}
+
+// The flag on the pole beside the landmark: down until the island's last boss
+// is done, then up for good. `celebrate` runs it up (the ceremony after that
+// boss, a beat after the marker lands); reduced motion puts it there.
+function Flag({ x, y, height, up, celebrate }: { readonly x: number; readonly y: number; readonly height: number; readonly up: boolean; readonly celebrate: boolean }) {
+  const reduced = useReducedMotion();
+  const climb = height - 22;
+  // 0: at the foot of the pole; 1: at the top.
+  const v = useSharedValue(up && !celebrate ? 1 : 0);
+  useEffect(() => {
+    if (up) {
+      v.set(reduced ? withTiming(1, { duration: 0 }) : withSpring(1, { damping: 12, stiffness: 90 }));
+    }
+  }, [up, v, reduced]);
+  const flag = useAnimatedStyle(() => ({ transform: [{ translateY: -climb * v.get() }] }));
+  return (
+    <View pointerEvents="none" testID={`flag-${up ? 'up' : 'down'}`} style={{ position: 'absolute', left: x, top: y, width: 26, height }}>
+      <View style={[styles.pole, { height }]} />
+      <Animated.View style={[styles.flagCloth, { top: height - 22 }, flag]} />
+    </View>
+  );
+}
+
+// The gate on the trail after an island's little boss (review §4.2): two
+// posts and a bar, in the island's deep colour. The bar lies across the way
+// until that boss is done, then stands up; the stops behind it sleep paler
+// (GATED_OPACITY) while it is closed. The unlock rule is as it was (stops open
+// in order); the gate only draws it. `celebrate`: the ceremony after that boss.
+function Gate({ x, y, deep, open, celebrate }: { readonly x: number; readonly y: number; readonly deep: string; readonly open: boolean; readonly celebrate: boolean }) {
+  const reduced = useReducedMotion();
+  const v = useSharedValue(open && !celebrate ? 1 : 0);
+  useEffect(() => {
+    if (open) {
+      v.set(reduced ? withTiming(1, { duration: 0 }) : withSpring(1, { damping: 11, stiffness: 100 }));
+    }
+  }, [open, v, reduced]);
+  const bar = useAnimatedStyle(() => ({ transform: [{ rotate: `${-78 * v.get()}deg` }] }));
+  return (
+    <View pointerEvents="none" testID={`gate-${open ? 'open' : 'closed'}`} style={{ position: 'absolute', left: x - 40, top: y - 30, width: 80, height: 52 }}>
+      <View style={[styles.gatePost, { left: 0, backgroundColor: deep }]}>
+        <View style={styles.gateCap} />
+      </View>
+      <View style={[styles.gatePost, { right: 0, backgroundColor: deep }]}>
+        <View style={styles.gateCap} />
+      </View>
+      <Animated.View style={[styles.gateBar, { backgroundColor: deep }, bar]}>
+        <View style={styles.gateStripe} />
+      </Animated.View>
+    </View>
+  );
+}
+
+// An island's sign: its picture, its name and one dot per stop, the done ones
+// filled (review M-6: the score stays in the parents' area). Once the island
+// is done, two little flags hang on its sides for good.
+function Sign({ look, title, done, total, testID }: { readonly look: IslandLook; readonly title: string; readonly done: number; readonly total: number; readonly testID: string }) {
+  const finished = done >= total;
+  return (
+    <View style={styles.signRow} testID={testID}>
+      {finished ? <View style={[styles.signFlag, { borderTopColor: colorsFor('n1').fill }]} testID="sign-bunting" /> : null}
+      <View style={styles.sign}>
+        <View style={styles.signTop}>
+          <SignPicture glyph={look.sign} />
+          <Text style={styles.signText}>{title}</Text>
+        </View>
+        <View style={styles.signDots} accessibilityLabel={`${done}/${total}`}>
+          {Array.from({ length: total }, (_, i) => (
+            <View key={i} style={[styles.signDot, i < done ? styles.signDotDone : null]} testID={i < done ? 'sign-dot-done' : 'sign-dot-todo'} />
+          ))}
+        </View>
+      </View>
+      {finished ? <View style={[styles.signFlag, { borderTopColor: colorsFor('n5').fill }]} testID="sign-bunting" /> : null}
+    </View>
+  );
+}
+
 function Island({ chapter, width, children, done, total, title, onTop }: { readonly chapter: Chapter; readonly width: number; readonly children: React.ReactNode; readonly done: number; readonly total: number; readonly title: string; readonly onTop: (y: number) => void }) {
+  const look = lookOf(chapter.id);
   const height = chapter.nodes.length * STEP + 20 + TRAIL_TOP - 36;
   return (
-    <View style={styles.shoal} onLayout={(e) => onTop(e.nativeEvent.layout.y + SHOAL)}>
-      <View style={[styles.island, { height }]}>
-        <View style={styles.sign}>
-          <Text style={styles.signText}>{title}</Text>
-          <Text style={styles.signCount}>
-            {done}/{total}
-          </Text>
-        </View>
+    <View style={styles.shoal} onLayout={(e) => onTop(e.nativeEvent.layout.y + SHOAL)} testID={`island-${chapter.id}`}>
+      <View style={[styles.island, { height, backgroundColor: look.ground, boxShadow: `inset 0 -10px 0 ${look.groundDeep}` }]}>
+        <Sign look={look} title={title} done={done} total={total} testID={`sign-${chapter.id}`} />
         <View style={{ position: 'absolute', left: 0, top: TRAIL_TOP, width, height: height - TRAIL_TOP }}>{children}</View>
       </View>
     </View>
   );
 }
+
+// The bottom bar's underlay: the sky fading in under the buttons, so the last
+// stops of an island do not run straight under them (2026-10-16 review E-5,
+// 2026-10-27 M-7). Strips of the sky, each a little more solid.
+const SKY_RGB = '207,233,247';
+function BottomShade({ height }: { readonly height: number }) {
+  const strips = 8;
+  return (
+    <View pointerEvents="none" style={[styles.bottomShade, { height }]} testID="bottom-shade">
+      {Array.from({ length: strips }, (_, i) => (
+        <View key={i} style={{ flex: 1, backgroundColor: `rgba(${SKY_RGB},${((i + 1) / strips) * 0.95})` }} />
+      ))}
+    </View>
+  );
+}
+const BOTTOM_SHADE = 110;
 
 export function MapScreen() {
   const router = useRouter();
@@ -375,6 +729,9 @@ export function MapScreen() {
       goNext();
     }
   }, [goNext]);
+  // Coming from a boss (Phase 24): the landing gets one more beat for the
+  // gate's bar or the island's flag to go up before the next stop opens.
+  const fromBoss = advance !== null && CHAPTERS.some((c) => c.nodes.some((n) => n.id === advance.from && n.role === 'boss'));
   useEffect(() => {
     if (advance === null) {
       return;
@@ -386,12 +743,12 @@ export function MapScreen() {
       setLanded(true);
       play('tap');
     }, landAt);
-    const enter = setTimeout(goNext, landAt + ADVANCE.enterMs);
+    const enter = setTimeout(goNext, landAt + (fromBoss ? ADVANCE.bossBeatMs : 0) + ADVANCE.enterMs);
     return () => {
       clearTimeout(land);
       clearTimeout(enter);
     };
-  }, [advance, goNext]);
+  }, [advance, goNext, fromBoss]);
   const [width, setWidth] = useState(0);
   const [viewport, setViewport] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => {
@@ -471,6 +828,15 @@ export function MapScreen() {
         </View>
         {CHAPTERS.map((chapter) => {
           const { done, total } = chapterCompletion(state, chapter.id);
+          const look = lookOf(chapter.id);
+          const { tail, gates } = bossesOf(chapter);
+          const tailId = chapter.nodes[tail]!.id;
+          // The ceremony for a boss just done (advance.from): its gate or flag
+          // waits closed / down until the marker lands, then goes up.
+          const pending = (id: NodeId) => advance !== null && advance.from === id && !landed;
+          const celebrating = (id: NodeId) => advance !== null && advance.from === id && landed;
+          const gateOpen = (g: number) => statusOf(state, chapter.nodes[g]!.id) === 'completed' && !pending(chapter.nodes[g]!.id);
+          const flagUp = statusOf(state, tailId) === 'completed' && !pending(tailId);
           return (
             <Island
               key={chapter.id}
@@ -480,37 +846,34 @@ export function MapScreen() {
               total={total}
               title={format(chapter.title, lang)}
               onTop={(y) => setIslandTops((tops) => (tops[chapter.id] === y ? tops : { ...tops, [chapter.id]: y }))}>
+              {width > 0 ? <BossLandmark look={look} stop={stopAt(chapter, tail, trailWidth)} trailWidth={trailWidth} flagUp={flagUp} celebrate={celebrating(tailId)} /> : null}
               {width > 0
                 ? chapter.nodes.map((node, i) => {
-                    const size = node.role === 'boss' ? BOSS : STOP;
-                    const x = trailX(i, trailWidth, size);
-                    const y = i * STEP + (node.role === 'boss' ? -8 : 0);
+                    const { x, y, size } = stopAt(chapter, i, trailWidth);
                     const next = chapter.nodes[i + 1];
-                    const nx = next === undefined ? null : trailX(i + 1, trailWidth, next.role === 'boss' ? BOSS : STOP) + (next.role === 'boss' ? BOSS : STOP) / 2;
-                    const ny = next === undefined ? null : (i + 1) * STEP + (next.role === 'boss' ? -8 : 0) + (next.role === 'boss' ? BOSS : STOP) / 2;
+                    const nextAt = next === undefined ? null : stopAt(chapter, i + 1, trailWidth);
                     const cx = x + size / 2;
                     const cy = y + size / 2;
+                    const status = statusOf(state, node.id);
                     // Scenery every third stop, on the far side from the trail.
                     const left = cx > trailWidth / 2;
                     const decorX = left ? 0 : trailWidth - 54;
-                    const decor = i % 3 === 1 ? (i % 2 === 1 ? <Palm x={decorX} y={y - 6} flip={!left} /> : <Shell x={left ? 6 : trailWidth - 44} y={y + 30} />) : i % 3 === 2 && chapter.nodes.length > 4 ? <Tuft x={left ? 10 : trailWidth - 34} y={y + 40} /> : null;
+                    const slot = i % 3 === 1 ? (i % 2 === 1 ? 'big' : 'small') : i % 3 === 2 && chapter.nodes.length > 4 ? 'tuft' : null;
                     return (
                       <View key={node.id}>
-                        {decor}
-                        {nx !== null && ny !== null
-                          ? [0.3, 0.5, 0.7].map((t) => (
-                              <View key={t} style={[styles.stone, { left: cx + (nx - cx) * t - 7, top: cy + (ny - cy) * t - 4.5 }]} />
-                            ))
-                          : null}
+                        {slot !== null ? <Decor kit={look.decor} slot={slot} x={decorX} y={y} left={left} /> : null}
+                        {nextAt !== null ? <Trail style={look.trail.style} from={{ x: cx, y: cy }} to={{ x: nextAt.x + nextAt.size / 2, y: nextAt.y + nextAt.size / 2 }} done={status === 'completed'} deep={look.groundDeep} /> : null}
+                        {gates.includes(i) && nextAt !== null ? <Gate x={(cx + nextAt.x + nextAt.size / 2) / 2} y={(cy + nextAt.y + nextAt.size / 2) / 2} deep={look.groundDeep} open={gateOpen(i)} celebrate={celebrating(node.id)} /> : null}
                         <StopDot
                           node={node}
-                          status={statusOf(state, node.id)}
+                          status={status}
                           current={advance === null && node.id === current}
                           x={x}
                           y={y}
                           onPress={() => router.push({ pathname: '/play/[nodeId]', params: { nodeId: node.id } })}
-                          dozing={advance !== null && node.id === advance.to && !landed && statusOf(state, node.id) === 'available'}
+                          dozing={advance !== null && node.id === advance.to && !landed && status === 'available'}
                           woken={advance !== null && node.id === advance.to && landed ? 1 : 0}
+                          gated={gates.some((g) => g < i && !gateOpen(g))}
                         />
                       </View>
                     );
@@ -527,15 +890,16 @@ export function MapScreen() {
         // On the way on, any tap goes straight to the next stop.
         <Pressable style={StyleSheet.absoluteFill} onPress={onSkip} accessibilityRole="button" accessibilityLabel={text.next} testID="advance-skip" />
       ) : null}
+      <BottomShade height={insets.bottom + BOTTOM_SHADE} />
       <View style={[styles.bottomBar, { bottom: insets.bottom + 16 }]} pointerEvents={advance === null ? 'box-none' : 'none'}>
-        <View style={styles.leftButtons}>
+        <View style={styles.leftButtons} pointerEvents="box-none">
           {/* Quieter on the gear itself (`muted`), so its hint bubble stays solid (as in the level menu, D-073). */}
           <ParentGate muted accessibilityLabel={text.parent} accessibilityHint={text.hold} hintAlign="start" testID="parent" onOpen={() => router.push('/parent')} />
           {/* The album, the child's own (2026-10-15 review Q): a plain tap, there once
               something is in it. Beside the gear, away from play and clear of the cup. */}
           {state.album.size > 0 ? <RoundButton label={<Icon name="album" size={32} />} size={58} accessibilityLabel={text.album} testID="album" onPress={() => router.push('/album')} /> : null}
         </View>
-        <View style={styles.rightButtons}>
+        <View style={styles.rightButtons} pointerEvents="box-none">
           {/* Free play (2026-10-15 review O): always there, a plain tap, nothing to
               finish first. Beside play, the other way to play; clear of the cup. */}
           <RoundButton label={<Icon name="sandbox" size={34} />} size={58} accessibilityLabel={text.sandbox} testID="sandbox" onPress={() => router.push('/sandbox')} />
@@ -553,11 +917,22 @@ const styles = StyleSheet.create({
   title: { fontSize: 32, fontFamily: FONT.display, color: THEME.ink, textAlign: 'center' },
   // The sea is shallow right around the island.
   shoal: { backgroundColor: THEME.shoal, borderRadius: 52, padding: SHOAL, marginBottom: 22 },
-  island: { backgroundColor: THEME.sand, borderRadius: 44, paddingHorizontal: 16, overflow: 'visible', boxShadow: `inset 0 -10px 0 ${THEME.sandDeep}` },
-  sign: { alignSelf: 'center', marginTop: -2, backgroundColor: THEME.leaf, borderWidth: 3, borderColor: THEME.leafDeep, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 7, flexDirection: 'row', gap: 10, alignItems: 'center', boxShadow: `0 4px 0 ${THEME.leafDeep}` },
+  island: { borderRadius: 44, paddingHorizontal: 16, overflow: 'visible' },
+  signRow: { alignSelf: 'center', flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: -2 },
+  sign: { backgroundColor: THEME.leaf, borderWidth: 3, borderColor: THEME.leafDeep, borderRadius: 24, paddingHorizontal: 16, paddingTop: 5, paddingBottom: 7, alignItems: 'center', gap: 3, boxShadow: `0 4px 0 ${THEME.leafDeep}` },
+  signTop: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   signText: { fontSize: 19, fontFamily: FONT.display, fontWeight: '800', color: THEME.ink },
-  signCount: { fontSize: 15, fontFamily: FONT.display, color: THEME.ink },
-  stone: { position: 'absolute', width: 14, height: 9, borderRadius: 4.5, backgroundColor: THEME.sandDeep, opacity: 0.75 },
+  signDots: { flexDirection: 'row', gap: 2.5, alignItems: 'center' },
+  signDot: { width: 6, height: 6, borderRadius: 3, borderWidth: 1.5, borderColor: THEME.leafDeep, backgroundColor: 'transparent' },
+  signDotDone: { backgroundColor: THEME.ink, borderColor: THEME.ink },
+  // Two little flags beside a finished island's sign.
+  signFlag: { width: 0, height: 0, marginTop: 6, borderLeftWidth: 8, borderRightWidth: 8, borderTopWidth: 15, borderLeftColor: 'transparent', borderRightColor: 'transparent' },
+  stone: { position: 'absolute', width: 14, height: 9, borderRadius: 4.5, opacity: 0.75 },
+  slab: { position: 'absolute', width: 18, height: 11, borderRadius: 3, opacity: 0.7 },
+  plank: { position: 'absolute', width: 26, height: 7, borderRadius: 2 },
+  print: { width: 7, height: 10, borderRadius: 3.5, opacity: 0.7 },
+  toe: { position: 'absolute', top: -4, left: 1.5, width: 4, height: 4, borderRadius: 2, opacity: 0.7 },
+  stepMark: { position: 'absolute', width: 18, borderRadius: 2, opacity: 0.75 },
   stop: { alignItems: 'center', overflow: 'hidden' },
   stopLabel: { position: 'absolute', fontFamily: FONT.display, textAlign: 'center' },
   miniCell: { position: 'absolute', backgroundColor: THEME.white, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
@@ -573,6 +948,15 @@ const styles = StyleSheet.create({
   coconut: { position: 'absolute', left: 26, top: 20, width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#8A5A33' },
   shell: { width: 20, height: 13, borderTopLeftRadius: 10, borderTopRightRadius: 10, borderBottomLeftRadius: 3, borderBottomRightRadius: 3, backgroundColor: THEME.shell, boxShadow: '0 2px 0 #E08F80' },
   blade: { width: 6, borderRadius: 3, backgroundColor: '#7CC765', transformOrigin: '50% 100%' },
+  // The last boss's pedestal at the island's foot, the flag's pole and cloth, the gate.
+  pedestal: { position: 'absolute', height: 24, borderRadius: 10, opacity: 0.9 },
+  pole: { position: 'absolute', left: 10, top: 0, width: 5, borderRadius: 2.5, backgroundColor: THEME.woodDeep },
+  flagCloth: { position: 'absolute', left: 14, width: 0, height: 0, borderTopWidth: 9, borderBottomWidth: 9, borderLeftWidth: 18, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: THEME.amber },
+  gatePost: { position: 'absolute', top: 6, width: 12, height: 46, borderRadius: 4, borderWidth: 2, borderColor: 'rgba(43,54,69,0.25)', alignItems: 'center' },
+  gateCap: { marginTop: -5, width: 16, height: 7, borderRadius: 3.5, backgroundColor: THEME.white, opacity: 0.9 },
+  gateBar: { position: 'absolute', left: 5, top: 22, width: 70, height: 11, borderRadius: 5.5, borderWidth: 2, borderColor: 'rgba(43,54,69,0.25)', transformOrigin: '5px 50%', justifyContent: 'center' },
+  gateStripe: { marginLeft: 12, width: 44, height: 3, borderRadius: 1.5, backgroundColor: THEME.white, opacity: 0.8 },
+  bottomShade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   bottomBar: { position: 'absolute', left: 20, right: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   // The parents' corner stays quiet next to the big play button.
   leftButtons: { flexDirection: 'row', alignItems: 'center', gap: 16 },

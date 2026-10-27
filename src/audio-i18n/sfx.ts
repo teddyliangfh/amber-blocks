@@ -22,6 +22,9 @@ export type SfxName =
   | 'success'
   // A boss stop is right.
   | 'fanfare'
+  // A boss stop opens (Phase 24): the fanfare's three rising notes and a long
+  // one, 0.6 s, instead of the plain arrive.
+  | 'boss-arrive'
   // A stop opens.
   | 'arrive'
   // A button press.
@@ -159,6 +162,15 @@ export function notesFor(name: SfxName, step = 1, parts: ReadonlyArray<number> =
         { f: 1046.5, at: SOLVE_AFTER + 0.66, dur: 0.5, type: 'triangle', gain: 0.55 },
         { f: 1568, at: SOLVE_AFTER + 0.7, dur: 0.4, type: 'sine', gain: 0.12 },
         { f: 2093, at: SOLVE_AFTER + 0.82, dur: 0.35, type: 'sine', gain: 0.1 },
+      ];
+    case 'boss-arrive':
+      // The fanfare's motif, do mi so, then a long high do with its shimmer.
+      return [
+        { f: 523.25, at: 0, dur: 0.1, type: 'triangle', gain: 0.42 },
+        { f: 659.25, at: 0.11, dur: 0.1, type: 'triangle', gain: 0.42 },
+        { f: 783.99, at: 0.22, dur: 0.1, type: 'triangle', gain: 0.45 },
+        { f: 1046.5, at: 0.33, dur: 0.3, type: 'triangle', gain: 0.5 },
+        { f: 2093, at: 0.36, dur: 0.22, type: 'sine', gain: 0.1 },
       ];
     case 'arrive':
       return [
